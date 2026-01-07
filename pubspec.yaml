@@ -56,7 +56,18 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.13.1 # [New] 아이콘 생성기
-
+  flutter_native_splash: ^2.3.1
+  
+flutter_native_splash:
+  color: "#FFFFFF"            # 배경색 (흰색은 #FFFFFF, 검정은 #000000)
+  image: "assets/icon.png"    # 가운데 띄울 이미지 경로
+  branding: "assets/icon.png" # (선택) 로고 아래에 브랜드 이미지 추가하고 싶을 때
+  color_dark: "#000000"       # (선택) 다크모드일 때 배경색
+  image_dark: "assets/icon.png" # (선택) 다크모드일 때 이미지
+  
+  android_12:                 # 안드로이드 12 이상을 위한 설정
+    image: "assets/icon.png"
+    color: "#FFFFFF"
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
