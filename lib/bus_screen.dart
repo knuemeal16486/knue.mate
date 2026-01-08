@@ -761,7 +761,7 @@ class _BusAppScreenState extends State<BusAppScreen>
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    "탑승 정류장 선택",
+                    "교통상황에 따라 5~10분 정도 차이가 날 수 있습니다.",
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,

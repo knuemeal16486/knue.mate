@@ -81,6 +81,8 @@ class _MealMainScreenState extends State<MealMainScreen> {
 // =============================================================================
 // 2. 오늘 식단 페이지
 // =============================================================================
+// 2. 오늘 식단 페이지
+// =============================================================================
 class TodayMealPage extends StatefulWidget {
   const TodayMealPage({super.key});
   @override
@@ -91,6 +93,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
   DateTime _date = DateTime.now();
   MealType _selected = MealType.lunch;
   MealSource _source = defaultSourceNotifier.value;
+  // ... (기존 변수 동일)
   bool _loading = false;
   String? _error;
   bool _alarmOn = false;
@@ -109,6 +112,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
     fetchMeals();
   }
 
+  // ... (_loadAlarmState, _updateSelectionByTime, fetchMeals, _applyMealsFromBackend 등 기존 로직 동일)
   Future<void> _loadAlarmState() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
@@ -175,7 +179,8 @@ class _TodayMealPageState extends State<TodayMealPage> {
   }
 
   Future<void> _handleAlarmToggle() async {
-    if (!Platform.isAndroid && !Platform.isIOS) {
+      // ... (기존 알림 로직 동일)
+      if (!Platform.isAndroid && !Platform.isIOS) {
       showToast(context, "모바일에서만 가능합니다.");
       return;
     }
@@ -252,6 +257,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
                 key: ValueKey("$_date-$_selected-$_source"),
                 status: statusFor(_selected, DateTime.now(), _date),
                 type: _selected,
+                source: _source, // [수정] source 전달
                 items: _meals[_selected.stdKey] ?? [],
                 isToday: isToday,
                 onShare: () => shareMenu(
@@ -297,6 +303,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
     _fetchForSelectedDate();
   }
 
+  // ... (_fetchForSelectedDate 등 기존 로직 동일)
   Future<void> _fetchForSelectedDate() async {
     setState(() {
       _loading = true;
@@ -325,12 +332,12 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
   }
 
   void _changeMonth(int delta) => setState(
-    () => _focusedMonth = DateTime(
-      _focusedMonth.year,
-      _focusedMonth.month + delta,
-      1,
-    ),
-  );
+        () => _focusedMonth = DateTime(
+          _focusedMonth.year,
+          _focusedMonth.month + delta,
+          1,
+        ),
+      );
 
   void _onDateSelected(DateTime date) {
     setState(() {
@@ -359,15 +366,21 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                 color: Colors.white,
               ),
             ),
-
-            // [복구됨] 식당 전환 버튼
             actions: [
               GestureDetector(
                 onTap: () {
                   final nextSource = _source == MealSource.a
                       ? MealSource.b
                       : MealSource.a;
-                  setState(() => _source = nextSource);
+                  setState(() {
+                    _source = nextSource;
+                    // 학생회관 선택 시 날짜 유효성 재검증을 위해 오늘 날짜로 리셋하거나 로직 추가 가능
+                    // 여기서는 편의상 오늘 날짜로 이동시킴 (주말이면 월요일 등으로 조정 필요하나 단순화)
+                    if (nextSource == MealSource.b) {
+                        _selectedDate = DateTime.now();
+                        _focusedMonth = DateTime.now();
+                    }
+                  });
                   _fetchForSelectedDate();
                 },
                 child: Container(
@@ -442,69 +455,32 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      // [유지됨] 요일 표시
+                      // 요일 표시 (생략 없이 유지)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: const [
-                          Text(
-                            "일",
-                            style: TextStyle(
-                              color: Colors.redAccent,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            "월",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            "화",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            "수",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            "목",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            "금",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            "토",
-                            style: TextStyle(
-                              color: Colors.blueAccent,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          Text("일", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                          Text("월", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                          Text("화", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                          Text("수", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                          Text("목", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                          Text("금", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                          Text("토", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 12),
+                      
+                      // [수정] CalendarGrid에 source 전달하여 날짜 제한 로직 적용
                       _CalendarGrid(
                         focusedMonth: _focusedMonth,
                         selectedDate: _selectedDate,
                         onDateSelected: _onDateSelected,
                         primaryColor: primaryColor,
+                        source: _source, // 추가
                       ),
+
                       const SizedBox(height: 20),
+                      // 범례 표시
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -525,6 +501,14 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                           ),
                         ],
                       ),
+                      if (_source == MealSource.b) // 안내 메시지 추가
+                         Padding(
+                           padding: const EdgeInsets.only(top: 10),
+                           child: Text(
+                             "* 학생회관 식당은 이번 주(월~금) 식단만 제공합니다.",
+                             style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                           ),
+                         ),
                     ],
                   ),
                 ),
@@ -551,6 +535,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                       _selectedDate,
                     ),
                     type: _selectedType,
+                    source: _source, // [수정] source 전달
                     items: _meals[_selectedType.stdKey] ?? [],
                     isToday: DateUtils.isSameDay(_selectedDate, DateTime.now()),
                     onShare: () => shareMenu(
@@ -568,7 +553,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
       },
     );
   }
-
+  // ... (_buildLegendItem 동일)
   Widget _buildLegendItem(
     BuildContext context, {
     required bool isToday,
@@ -1487,6 +1472,7 @@ class _Header extends StatelessWidget {
 class _MealDetailCard extends StatefulWidget {
   final ServeStatus status;
   final MealType type;
+  final MealSource source; // [추가] 식당 정보
   final List<String> items;
   final bool isToday;
   final VoidCallback onShare;
@@ -1494,6 +1480,7 @@ class _MealDetailCard extends StatefulWidget {
     super.key,
     required this.status,
     required this.type,
+    required this.source, // [추가]
     required this.items,
     required this.isToday,
     required this.onShare,
@@ -1503,6 +1490,7 @@ class _MealDetailCard extends StatefulWidget {
 }
 
 class _MealDetailCardState extends State<_MealDetailCard> {
+  // ... (칼로리 로직 동일)
   String? _caloriesInfo;
   bool _isCalorieLoading = false;
   Future<void> _fetchCalories() async {
@@ -1524,53 +1512,88 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     }
   }
 
+  // [수정] 운영 시간 텍스트 반환 로직
+  String _getTimeRangeText() {
+    if (widget.source == MealSource.b) {
+      // 학생회관 식당
+      switch (widget.type) {
+        case MealType.breakfast:
+          return "미운영"; // 아침 운영 안함
+        case MealType.lunch:
+          return "11:00 ~ 14:00"; // 점심 시간 변경
+        case MealType.dinner:
+          return "17:00 ~ 18:30"; // 저녁 시간 변경
+      }
+    }
+    // 기숙사 식당 등 기본값
+    return widget.type.timeRange; 
+  }
+
   @override
   Widget build(BuildContext context) {
+    // [수정] 학생회관 아침이거나 데이터가 비어있으면 메뉴 없음 처리
+    bool isStudentHallBreakfast = (widget.source == MealSource.b && widget.type == MealType.breakfast);
+    bool isStudentHallWeekend = (widget.source == MealSource.b && (DateTime.now().weekday >= 6) && widget.isToday); // 오늘이 주말인 경우만 체크 (단순화)
+    
+    // 참고: isToday는 UI 렌더링용이므로 실제 날짜 체크는 상위에서 넘어온 status나 items로 대체되기도 함.
+    // 여기서는 단순히 items가 비었거나 특정 조건일 때 unavailable 처리
+    
+    final bool unavailable =
+        widget.items.isEmpty ||
+        widget.items.first.contains("없음") ||
+        widget.items.first.contains("미운영") ||
+        isStudentHallBreakfast; // 학생회관 아침은 무조건 운영 안함 표시
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).primaryColor;
-
     final aiTextColor = isDark ? Colors.purpleAccent : Colors.deepPurple;
     final aiIconColor = isDark ? Colors.purpleAccent : Colors.purple;
 
     final boxBorder = isDark
         ? (widget.isToday
-              ? Border.all(color: primary.withOpacity(0.5), width: 2)
-              : Border.all(color: Colors.transparent))
+            ? Border.all(color: primary.withOpacity(0.5), width: 2)
+            : Border.all(color: Colors.transparent))
         : Border.all(
             color: widget.isToday
                 ? primary.withOpacity(0.5)
                 : Colors.grey.shade300,
             width: widget.isToday ? 2 : 1,
           );
+    
+    // 상태값 설정
     Color statusColor = const Color(0xFF2E7D32);
     String statusText = "운영 중";
     IconData statusIcon = Icons.soup_kitchen;
-    switch (widget.status) {
-      case ServeStatus.open:
-        statusColor = const Color(0xFF2E7D32);
-        statusText = "식당 운영 중";
-        break;
-      case ServeStatus.waiting:
-        statusColor = const Color(0xFF1976D2);
-        statusText = "식사 준비 중";
-        statusIcon = Icons.access_time;
-        break;
-      case ServeStatus.closed:
-        statusColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
-        statusText = "운영 종료";
-        statusIcon = Icons.block;
-        break;
-      case ServeStatus.notToday:
+
+    if (isStudentHallBreakfast) {
         statusColor = isDark ? Colors.grey.shade600 : Colors.grey.shade500;
-        statusText = "식당 운영시간 아님";
-        statusIcon = Icons.calendar_today_rounded;
-        break;
+        statusText = "운영 안함";
+        statusIcon = Icons.block;
+    } else {
+        switch (widget.status) {
+          case ServeStatus.open:
+            statusColor = const Color(0xFF2E7D32);
+            statusText = "식당 운영 중";
+            break;
+          case ServeStatus.waiting:
+            statusColor = const Color(0xFF1976D2);
+            statusText = "식사 준비 중";
+            statusIcon = Icons.access_time;
+            break;
+          case ServeStatus.closed:
+            statusColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
+            statusText = "운영 종료";
+            statusIcon = Icons.block;
+            break;
+          case ServeStatus.notToday:
+            statusColor = isDark ? Colors.grey.shade600 : Colors.grey.shade500;
+            statusText = "식당 운영시간 아님";
+            statusIcon = Icons.calendar_today_rounded;
+            break;
+        }
     }
+    
     final timeLeft = _getTimeLeft();
-    final bool unavailable =
-        widget.items.isEmpty ||
-        widget.items.first.contains("없음") ||
-        widget.items.first.contains("미운영");
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -1633,7 +1656,8 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                   ),
                 ),
                 if (widget.status == ServeStatus.open &&
-                    timeLeft.isNotEmpty) ...[
+                    timeLeft.isNotEmpty &&
+                    !isStudentHallBreakfast) ...[
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1676,7 +1700,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                     ),
                   ),
                 Text(
-                  widget.type.timeRange,
+                  _getTimeRangeText(), // [수정] 운영 시간 텍스트 함수 호출
                   style: const TextStyle(
                     color: Colors.grey,
                     fontWeight: FontWeight.bold,
@@ -1695,7 +1719,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                         Icon(Icons.no_meals, size: 40, color: Colors.grey),
                         SizedBox(height: 10),
                         Text(
-                          "메뉴 정보가 없습니다.",
+                          "운영하지 않거나 메뉴 정보가 없습니다.",
                           style: TextStyle(
                             color: Colors.grey,
                             fontWeight: FontWeight.bold,
@@ -1821,19 +1845,27 @@ class _MealDetailCardState extends State<_MealDetailCard> {
 
   String _getTimeLeft() {
     if (!widget.isToday) return "";
+    // [수정] 학생회관인 경우 커스텀 시간대 사용
+    String range = _getTimeRangeText(); 
+    if (range == "미운영") return "";
+    
     final now = DateTime.now();
-    final times = widget.type.timeRange.split("~")[1].trim().split(":");
-    final end = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      int.parse(times[0]),
-      int.parse(times[1]),
-    );
-    if (now.isAfter(end)) return "마감됨";
-    final diff = end.difference(now);
-    if (diff.inMinutes < 60) return "마감 ${diff.inMinutes}분 전";
-    return "마감 ${diff.inHours}시간 전";
+    try {
+        final times = range.split("~")[1].trim().split(":");
+        final end = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          int.parse(times[0]),
+          int.parse(times[1]),
+        );
+        if (now.isAfter(end)) return "마감됨";
+        final diff = end.difference(now);
+        if (diff.inMinutes < 60) return "마감 ${diff.inMinutes}분 전";
+        return "마감 ${diff.inHours}시간 전";
+    } catch(e) {
+        return "";
+    }
   }
 }
 
@@ -2034,12 +2066,16 @@ class _CalendarGrid extends StatelessWidget {
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateSelected;
   final Color primaryColor;
+  final MealSource source; // [추가]
+
   const _CalendarGrid({
     required this.focusedMonth,
     required this.selectedDate,
     required this.onDateSelected,
     required this.primaryColor,
+    required this.source, // [추가]
   });
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -2053,6 +2089,13 @@ class _CalendarGrid extends StatelessWidget {
       1,
     ).weekday;
     final offset = firstDayWeekday % 7;
+
+    // [로직 추가] 학생회관일 경우 이번주 월~금만 활성화
+    DateTime now = DateTime.now();
+    // 오늘 날짜 기준 월요일 계산 (월요일=1, 일요일=7)
+    DateTime thisWeekMonday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+    DateTime thisWeekFriday = thisWeekMonday.add(const Duration(days: 4));
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -2064,17 +2107,40 @@ class _CalendarGrid extends StatelessWidget {
         if (index < offset) return const SizedBox();
         final day = index - offset + 1;
         final date = DateTime(focusedMonth.year, focusedMonth.month, day);
+        
+        // 날짜 유효성 검사
+        bool isEnabled = true;
+        if (source == MealSource.b) {
+            // 주말 체크
+            if (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday) {
+                isEnabled = false;
+            }
+            // 이번 주 범위 체크 (월~금)
+            // 시간 정보를 제거하고 날짜만 비교
+            DateTime target = DateTime(date.year, date.month, date.day);
+            if (target.isBefore(thisWeekMonday) || target.isAfter(thisWeekFriday)) {
+                isEnabled = false;
+            }
+        }
+
         final isSel = DateUtils.isSameDay(date, selectedDate);
         final isToday = DateUtils.isSameDay(date, DateTime.now());
-        Color textColor = isSel
-            ? Colors.white
-            : (date.weekday == DateTime.sunday
-                  ? Colors.redAccent
-                  : (date.weekday == DateTime.saturday
-                        ? Colors.blueAccent
-                        : (isDark ? Colors.white : Colors.black87)));
+        
+        Color textColor;
+        if (!isEnabled) {
+            textColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
+        } else if (isSel) {
+            textColor = Colors.white;
+        } else if (date.weekday == DateTime.sunday) {
+            textColor = Colors.redAccent;
+        } else if (date.weekday == DateTime.saturday) {
+            textColor = Colors.blueAccent;
+        } else {
+            textColor = isDark ? Colors.white : Colors.black87;
+        }
+
         return GestureDetector(
-          onTap: () => onDateSelected(date),
+          onTap: isEnabled ? () => onDateSelected(date) : null,
           child: Container(
             margin: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -2092,6 +2158,7 @@ class _CalendarGrid extends StatelessWidget {
                 fontWeight: (isSel || isToday)
                     ? FontWeight.bold
                     : FontWeight.normal,
+                decoration: !isEnabled ? TextDecoration.lineThrough : null, // 비활성 날짜 취소선 (선택사항)
               ),
             ),
           ),
