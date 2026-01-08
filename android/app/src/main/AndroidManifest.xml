@@ -9,13 +9,20 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.UPDATE_APPWIDGET" />
 
     <application
         android:label="KNUE 청람밥상"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
-        <receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
-            android:exported="true">
+        android:icon="@mipmap/launcher_icon"
+        android:allowBackup="true">
+        
+        <!-- Boot Receiver for Notifications -->
+        <receiver 
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
@@ -24,6 +31,7 @@
             </intent-filter>
         </receiver>
 
+        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -42,18 +50,27 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
-            <receiver android:name=".MealWidgetProvider" android:exported="true">
+        
+        <!-- Widget Provider -->
+        <receiver 
+            android:name=".MealWidgetProvider"
+            android:exported="true"
+            android:label="KNUE 식단 위젯">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="es.antonborri.home_widget.UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
         </receiver>
+        
+        <!-- Meta-data for Flutter -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
     </application>
+    
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>

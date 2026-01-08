@@ -1,37 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_container"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFFFFF"
-    android:padding="16dp">
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@drawable/widget_background">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+    <!-- 제목 (식당 + 시간) -->
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="기숙사 식당 - 오늘 점심"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
-        <TextView
-            android:id="@+id/widget_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="KNUE 식단"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:textColor="#000000" />
+    <!-- 메뉴 내용 -->
+    <TextView
+        android:id="@+id/widget_menu"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="· 쌀밥\n· 돈육김치찌개\n· 계란말이\n· 깍두기"
+        android:textSize="12sp"
+        android:maxLines="5"
+        android:ellipsize="end" />
 
-        <TextView
-            android:id="@+id/widget_menu"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginTop="8dp"
-            android:text="데이터를 불러오는 중..."
-            android:textSize="13sp"
-            android:textColor="#333333"
-            android:gravity="top|start"
-            android:ellipsize="end"
-            android:maxLines="6"
-            android:lineSpacingExtra="3dp"/>
-
-    </LinearLayout>
-</RelativeLayout>
+</LinearLayout>

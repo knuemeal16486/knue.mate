@@ -942,7 +942,7 @@ class _BusAppScreenState extends State<BusAppScreen>
                     ),
                     const SizedBox(width: 4),
                     const Text(
-                      "교원대 정문은 약 2분 후 도착합니다.",
+                      "교원대 정문은 약 1분 후 도착합니다.",
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
