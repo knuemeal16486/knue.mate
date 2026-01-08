@@ -373,6 +373,7 @@ class _BusAppScreenState extends State<BusAppScreen>
 
   String _getTerminusName() {
     if (_selectedBus == "518") return "보건의료행정타운 출발";
+    if (_selectedBus == "502") return "청주역 출발"; // 추가
     return "동부종점 출발";
   }
 
@@ -469,6 +470,12 @@ class _BusAppScreenState extends State<BusAppScreen>
                 onPressed: _refreshData,
                 icon: const Icon(Icons.refresh),
                 tooltip: "새로고침",
+              ),
+              // 추가: 예상 도착 시간 정보 버튼
+              IconButton(
+                onPressed: () => _showArrivalInfoDialog(context),
+                icon: const Icon(Icons.info_outline),
+                tooltip: "도착 시간 정보",
               ),
             ],
             bottom: TabBar(
@@ -582,10 +589,116 @@ class _BusAppScreenState extends State<BusAppScreen>
                       ),
                     ),
                   ),
+
+                // 추가: 도착 시간 안내
+                _buildArrivalInfoSection(isDark),
               ],
             ),
           );
         },
+      ),
+    );
+  }
+
+  // 도착 시간 안내 섹션 (추가된 기능)
+  Widget _buildArrivalInfoSection(bool isDark) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.blue[800]! : Colors.blue[200]!,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                color: isDark ? Colors.blue[300] : Colors.blue[700],
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                "도착 시간 정보",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.blue[300] : Colors.blue[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "• 예상 도착 시간은 교통상황, 시간대, 날씨 등을 고려하여 계산됩니다.\n"
+            "• 실제 도착 시간과 차이가 있을 수 있습니다.\n"
+            "• 출퇴근 시간(7-9시, 17-19시)에는 지연이 발생할 수 있습니다.",
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white70 : Colors.blueGrey[700],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 도착 시간 정보 다이얼로그 (추가된 기능)
+  void _showArrivalInfoDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("도착 시간 계산 방법"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "예상 도착 시간은 다음 요소를 고려하여 계산됩니다:",
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            _buildInfoItem("정거장 당 기본 시간", "2.5-3분 (노선별 상이)"),
+            _buildInfoItem("시간대별 교통", "출퇴근시간 +50%"),
+            _buildInfoItem("주말 영향", "주말 +20%"),
+            _buildInfoItem("계절/날씨", "겨울/장마 +10-15%"),
+            _buildInfoItem("추가 지연", "정거장 당 +30초"),
+            const SizedBox(height: 12),
+            const Text(
+              "이 정보는 참고용이며 실제 도착 시간과 다를 수 있습니다.",
+              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("확인"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoItem(String title, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("• ", style: TextStyle(fontSize: 12)),
+          Expanded(
+            child: Text(
+              "$title: ",
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
+        ],
       ),
     );
   }

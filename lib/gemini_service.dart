@@ -1,48 +1,127 @@
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // [수정] 이 줄이 있어야 dotenv 에러가 사라집니다.
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class GeminiService {
-  // .env에서 키를 가져옴
-  static String get apiKey => dotenv.env['GEMINI_API_KEY'] ?? "";
+  // .env에서 키를 안전하게 가져오기
+  static String get apiKey {
+    final key = dotenv.env['GEMINI_API_KEY'];
+    if (key == null || key.isEmpty) {
+      print("⚠️ GEMINI_API_KEY가 .env 파일에 설정되지 않았습니다.");
+      return "";
+    }
+    return key;
+  }
 
   // 모델 초기화
-  static GenerativeModel get _model =>
-      GenerativeModel(model: 'gemini-2.5-flash', apiKey: apiKey);
+  static GenerativeModel get _model => GenerativeModel(
+    model: 'gemini-2.0-flash', // 최신 안정 버전 사용
+    apiKey: apiKey,
+  );
 
-  // [기능 1] 메뉴 리스트로 칼로리 예상하기
+  // 캐시를 위한 메모리 저장소
+  static final Map<String, String> _cache = {};
+  static final Map<String, DateTime> _cacheTimestamps = {};
+
+  // 메뉴 리스트로 칼로리 예상하기
   static Future<String> estimateCalories(List<String> menuItems) async {
-    if (apiKey.isEmpty) return "API키 없음";
+    if (apiKey.isEmpty) return "API 키 필요";
     if (menuItems.isEmpty) return "";
-
+    
     // "없음"이나 빈 항목 제거
-    final menuString = menuItems.where((i) => !i.contains("없음")).join(", ");
-    if (menuString.isEmpty) return "";
-
-    final prompt =
-        """
-    너는 대학교 학생 식당의 '전문 영양사'다.
-    사용자가 급식 메뉴 리스트를 주면, **20대 성인여성 1인분 배식량**을 기준으로 총 섭취 칼로리(kcal)를 추산해라.
-    양은 흔히 단체식당에서 쓰는 철체 식판을 기준으로 한다. 
+    final validItems = menuItems.where((item) {
+      return item.trim().isNotEmpty && 
+             !item.contains("없음") && 
+             !item.contains("미운영");
+    }).toList();
     
-    메뉴: $menuString
+    if (validItems.isEmpty) return "";
 
-    [절대 규칙]
-    1. **무조건 답을 내라**: 처음 보거나 생소한 메뉴명이 있어도 절대 '모른다'거나 '정보 부족'이라고 하지 마라. 이름이 가장 비슷한 일반적인 음식으로 가정하고 칼로리를 계산해라.
-    2. **단위**: 모든 계산은 10단위로 반올림해라. (예: 723 -> 720)
-    3. **출력 형식**: 설명, 인사말, 기호 없이 오직 **"최소값~최대값kcal"** 형태의 문자열 하나만 출력해라. (범위는 ±30kcal 정도로 잡아라)
-    4. 식단표 최상단의 메뉴가 주 식사이고, 나머지는 반찬으로, 양은 각각 100그램 정도이다.
+    // 캐시 키 생성
+    final cacheKey = validItems.join('|');
     
-    [출력 예시]
-    850~950kcal
-    """;
+    // 캐시 확인 (1시간 유효)
+    if (_cache.containsKey(cacheKey)) {
+      final timestamp = _cacheTimestamps[cacheKey];
+      if (timestamp != null && 
+          DateTime.now().difference(timestamp).inHours < 1) {
+        return _cache[cacheKey]!;
+      }
+    }
+
+    final prompt = _buildPrompt(validItems);
 
     try {
       final content = [Content.text(prompt)];
       final response = await _model.generateContent(content);
-      return response.text?.trim() ?? "측정불가";
+      final result = _normalizeCalorieResponse(response.text?.trim() ?? "");
+      
+      // 캐시에 저장
+      _cache[cacheKey] = result;
+      _cacheTimestamps[cacheKey] = DateTime.now();
+      
+      return result;
     } catch (e) {
-      print("Gemini Error: $e");
+      print("Gemini API 오류: $e");
       return "측정불가";
     }
+  }
+
+  static String _buildPrompt(List<String> menuItems) {
+    final menuString = menuItems.join(", ");
+    
+    return """
+    너는 대학교 학생 식당의 전문 영양사입니다.
+    아래 메뉴를 보고 20대 성인여성 1인분 기준으로 총 섭취 칼로리(kcal)를 추산해주세요.
+    
+    메뉴: $menuString
+    
+    [중요 규칙]
+    1. 모든 메뉴를 포함해서 계산하세요.
+    2. 모르는 메뉴명이 있어도 비슷한 일반 음식으로 가정하고 계산하세요.
+    3. 결과는 최소값과 최대값 범위로 표시하세요 (예: 650~750kcal).
+    4. 설명이나 추가 텍스트 없이 숫자 범위만 출력하세요.
+    5. 단위는 항상 "kcal"를 붙이세요.
+    
+    [출력 예시]
+    720~850kcal
+    """;
+  }
+
+  static String _normalizeCalorieResponse(String rawResponse) {
+    if (rawResponse.isEmpty) return "측정불가";
+    
+    // 숫자와 kcal 패턴 찾기
+    final regex = RegExp(r'(\d+)[~\-](\d+)\s*kcal', caseSensitive: false);
+    final match = regex.firstMatch(rawResponse);
+    
+    if (match != null) {
+      final min = match.group(1);
+      final max = match.group(2);
+      if (min != null && max != null) {
+        return "${min}~${max}kcal";
+      }
+    }
+    
+    // 단일 숫자 찾기
+    final singleRegex = RegExp(r'(\d+)\s*kcal', caseSensitive: false);
+    final singleMatch = singleRegex.firstMatch(rawResponse);
+    
+    if (singleMatch != null) {
+      final value = singleMatch.group(1);
+      if (value != null) {
+        final numValue = int.tryParse(value) ?? 0;
+        final min = numValue - 50;
+        final max = numValue + 50;
+        return "${min}~${max}kcal";
+      }
+    }
+    
+    return "측정불가";
+  }
+
+  // 캐시 초기화 (선택적)
+  static void clearCache() {
+    _cache.clear();
+    _cacheTimestamps.clear();
   }
 }

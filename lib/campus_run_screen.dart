@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'constants.dart';
@@ -16,7 +17,8 @@ class CampusRunScreen extends StatefulWidget {
   State<CampusRunScreen> createState() => _CampusRunScreenState();
 }
 
-class _CampusRunScreenState extends State<CampusRunScreen> {
+class _CampusRunScreenState extends State<CampusRunScreen>
+    with SingleTickerProviderStateMixin {
   final List<Classroom> _allClassrooms = [
     Classroom("다정관", 36.613286, 127.359914),
     Classroom("다감관", 36.614016, 127.359718),
@@ -70,9 +72,22 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
   double _requiredSpeedKmh = 0.0;
   final double _walkingSpeedMs = 1.11;
 
+  late AnimationController _animationController;
+  late Animation<double> _pulseAnimation;
+
   @override
   void initState() {
     super.initState();
+
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -90,6 +105,7 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
   void dispose() {
     _positionStream?.cancel();
     _timer?.cancel();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -98,7 +114,6 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
     return hsv.withSaturation(1.0).withValue(1.0).toColor();
   }
 
-  // [수정됨] 중복된 검색창을 제거하고 _ClassroomList 내부 검색창만 사용
   void _showClassroomSelector(Color neonColor) {
     if (_isRunning) return;
 
@@ -123,7 +138,6 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
           child: Column(
             children: [
               const SizedBox(height: 12),
-              // 핸들바
               Container(
                 width: 40,
                 height: 4,
@@ -133,9 +147,6 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-
-              // 타이틀 (여기서는 검색창이 바로 나오도록 타이틀을 생략하거나 작게 처리해도 됨)
-              // 여기서는 깔끔하게 타이틀을 없애고 바로 리스트(검색창 포함)를 보여줍니다.
               Expanded(
                 child: _ClassroomList(
                   allClassrooms: _allClassrooms,
@@ -236,13 +247,14 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
     );
   }
 
-  void _toggleTracking() async {
+  Future<void> _toggleTracking() async {
     if (_targetClassroom == null) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("먼저 목표 강의실을 선택해주세요!")));
       return;
     }
+
     if (_isRunning) {
       _positionStream?.cancel();
       setState(() {
@@ -255,8 +267,18 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return;
+        if (permission == LocationPermission.denied) {
+          showToast(context, "위치 권한이 필요합니다.");
+          return;
+        }
       }
+
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        showToast(context, "위치 서비스를 활성화해주세요.");
+        return;
+      }
+
       setState(() {
         _isRunning = true;
         _statusMessage = "GPS 신호 수신 중...";
@@ -265,16 +287,28 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
         _requiredSpeedKmh = 0.0;
         _recentSpeeds.clear();
       });
+
       const LocationSettings locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 0,
       );
+
       _positionStream =
           Geolocator.getPositionStream(
             locationSettings: locationSettings,
-          ).listen((Position position) {
-            _updateMetrics(position);
-          });
+          ).listen(
+            (Position position) {
+              _updateMetrics(position);
+            },
+            onError: (error) {
+              print("위치 오류: $error");
+              if (mounted) {
+                setState(() {
+                  _statusMessage = "위치 정보를 가져올 수 없습니다";
+                });
+              }
+            },
+          );
     }
   }
 
@@ -282,9 +316,9 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
     if (_runStartTime == null || _targetDurationSeconds == null) return;
     final remainTime = _targetDurationSeconds! - _elapsedDuration.inSeconds;
     setState(() {
-      if (remainTime <= 0)
+      if (remainTime <= 0) {
         _requiredSpeedKmh = 999.0;
-      else {
+      } else {
         double reqSpeedMs = _distanceRemaining / remainTime;
         _requiredSpeedKmh = reqSpeedMs * 3.6;
       }
@@ -293,26 +327,34 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
 
   void _updateMetrics(Position position) {
     if (_targetClassroom == null) return;
+
     double straightDist = Geolocator.distanceBetween(
       position.latitude,
       position.longitude,
       _targetClassroom!.lat,
       _targetClassroom!.lng,
     );
+
     double factor = straightDist < 30 ? 1.1 : _pathFactor;
     double realDist = straightDist * factor;
+
     double rawSpeed = position.speed < 0 ? 0 : position.speed;
     _recentSpeeds.add(rawSpeed);
     if (_recentSpeeds.length > 5) _recentSpeeds.removeAt(0);
-    double avgSpeedMs =
-        _recentSpeeds.reduce((a, b) => a + b) / _recentSpeeds.length;
+
+    double avgSpeedMs = _recentSpeeds.isNotEmpty
+        ? _recentSpeeds.reduce((a, b) => a + b) / _recentSpeeds.length
+        : 0.0;
+
     double calcSpeed = avgSpeedMs < 0.5 ? _walkingSpeedMs : avgSpeedMs;
     int seconds = (realDist / calcSpeed).ceil();
+
     if (mounted) {
       setState(() {
         _distanceRemaining = realDist;
         _currentSpeedKmh = avgSpeedMs * 3.6;
         _estimatedSeconds = seconds;
+
         if (straightDist < 20) {
           _statusMessage = "도착했습니다! 🏁";
           _isRunning = false;
@@ -349,8 +391,10 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
 
   String _formatTimeHHMMSS(DateTime dt) =>
       "${dt.hour.toString().padLeft(2, '0')}시 ${dt.minute.toString().padLeft(2, '0')}분 ${dt.second.toString().padLeft(2, '0')}초";
+
   String _formatTimeHHMM(DateTime dt) =>
       "${dt.hour.toString().padLeft(2, '0')}시 ${dt.minute.toString().padLeft(2, '0')}분";
+
   String _formatDurationMMSS(Duration d) =>
       "${d.inMinutes.toString().padLeft(2, '0')}분 ${(d.inSeconds % 60).toString().padLeft(2, '0')}초";
 
@@ -363,8 +407,8 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
         const bgDark = Color(0xFF121212);
         const textWhite = Colors.white;
 
-        // 목표가 선택되었는지 여부
         final bool isTargetSelected = _targetClassroom != null;
+        final isArrived = _distanceRemaining < 20 && _distanceRemaining > 0;
 
         return Scaffold(
           backgroundColor: bgDark,
@@ -409,13 +453,12 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                // 1. 강의실 선택 (선택되면 작아지는 슬림 UI)
+                // 강의실 선택
                 GestureDetector(
                   onTap: () => _showClassroomSelector(neonColor),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     width: double.infinity,
-                    // 선택 시 패딩 축소
                     padding: EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: isTargetSelected ? 12 : 18,
@@ -538,15 +581,25 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
                   style: TextStyle(color: Colors.grey[400], fontSize: 14),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  _formatDuration(_estimatedSeconds),
-                  style: const TextStyle(
-                    color: textWhite,
-                    fontSize: 64,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -2.0,
-                    fontFamily: 'Roboto',
-                  ),
+                AnimatedBuilder(
+                  animation: isArrived
+                      ? _pulseAnimation
+                      : AlwaysStoppedAnimation(1.0),
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: isArrived ? _pulseAnimation.value : 1.0,
+                      child: Text(
+                        _formatDuration(_estimatedSeconds),
+                        style: const TextStyle(
+                          color: textWhite,
+                          fontSize: 64,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -2.0,
+                          fontFamily: 'Roboto',
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 Text(
                   _statusMessage,
@@ -610,27 +663,32 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
                   ),
                 ],
                 const SizedBox(height: 30),
-                GestureDetector(
-                  onTap: _toggleTracking,
-                  child: Container(
-                    width: 90,
-                    height: 90,
-                    decoration: BoxDecoration(
-                      color: _isRunning ? Colors.redAccent : neonColor,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (_isRunning ? Colors.redAccent : neonColor)
-                              .withOpacity(0.4),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      _isRunning ? Icons.stop : Icons.play_arrow,
-                      size: 45,
-                      color: _isRunning ? Colors.white : Colors.black,
+                ScaleTransition(
+                  scale: _isRunning
+                      ? _pulseAnimation
+                      : AlwaysStoppedAnimation(1.0),
+                  child: GestureDetector(
+                    onTap: _toggleTracking,
+                    child: Container(
+                      width: 90,
+                      height: 90,
+                      decoration: BoxDecoration(
+                        color: _isRunning ? Colors.redAccent : neonColor,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: (_isRunning ? Colors.redAccent : neonColor)
+                                .withOpacity(0.4),
+                            blurRadius: 20,
+                            spreadRadius: 5,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        _isRunning ? Icons.stop : Icons.play_arrow,
+                        size: 45,
+                        color: _isRunning ? Colors.white : Colors.black,
+                      ),
                     ),
                   ),
                 ),
@@ -702,7 +760,7 @@ class _CampusRunScreenState extends State<CampusRunScreen> {
   }
 }
 
-// [검색 기능이 포함된 리스트 위젯]
+// 검색 기능이 포함된 리스트 위젯
 class _ClassroomList extends StatefulWidget {
   final List<Classroom> allClassrooms;
   final Set<String> favoriteNames;
@@ -734,12 +792,10 @@ class _ClassroomListState extends State<_ClassroomList> {
 
   @override
   Widget build(BuildContext context) {
-    // 검색어 필터링
     List<Classroom> filteredList = widget.allClassrooms.where((room) {
-      return room.name.contains(_query);
+      return room.name.toLowerCase().contains(_query.toLowerCase());
     }).toList();
 
-    // 정렬 (즐겨찾기 우선 -> 가나다순)
     filteredList.sort((a, b) {
       bool isFavA = widget.favoriteNames.contains(a.name);
       bool isFavB = widget.favoriteNames.contains(b.name);
@@ -750,7 +806,6 @@ class _ClassroomListState extends State<_ClassroomList> {
 
     return Column(
       children: [
-        // 검색창
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: TextField(
@@ -779,8 +834,6 @@ class _ClassroomListState extends State<_ClassroomList> {
           ),
         ),
         const SizedBox(height: 10),
-
-        // 리스트
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -811,7 +864,7 @@ class _ClassroomListState extends State<_ClassroomList> {
                     ),
                     onPressed: () {
                       widget.onToggleFavorite(room.name);
-                      setState(() {}); // 아이콘 갱신
+                      setState(() {});
                     },
                   ),
                 ),

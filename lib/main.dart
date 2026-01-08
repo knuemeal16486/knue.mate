@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // [수정] import 추가
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'constants.dart';
-import 'meal_screen.dart';
-import 'alarm_service.dart'; // [수정] 알람 초기화를 위해 필요 (없다면 constants.dart의 NotificationService 사용)
+import 'meal_screen.dart'; // MealMainScreen 사용
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // .env 파일 로드 (예외 처리 추가)
+
+  // .env 파일 로드
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
@@ -16,7 +15,10 @@ void main() async {
   }
 
   await initializeDateFormatting();
-  
+
+  // 설정 로드
+  await PreferencesService.loadSettings();
+
   // 알람 초기화
   await NotificationService().init();
 
@@ -71,7 +73,7 @@ class MyApp extends StatelessWidget {
                 ),
               ),
               themeMode: mode,
-              home: const MealMainScreen(),
+              home: const MealMainScreen(), // 식단 페이지를 홈으로 설정
             );
           },
         );

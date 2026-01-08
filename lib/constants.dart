@@ -1,3 +1,4 @@
+import 'dart:async'; // TimeoutException을 위해 추가
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -145,7 +146,6 @@ String _weekdayToDayParam(DateTime d) {
 }
 
 Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
-  // [수정] Gemini 파싱을 안 쓰기로 했으므로, JSON API를 호출해야 합니다.
   late Uri uri;
   if (source == MealSource.a) {
     uri = Uri.parse(
@@ -158,18 +158,24 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
   try {
     final response = await http.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode == 200) {
-      // [수정] Gemini 파싱 없이 바로 JSON 디코딩
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
 
       // 오늘 날짜인 경우 위젯 업데이트
       if (isSameDate(date, DateTime.now()) && source == widgetSource.value) {
-        _updateWidgetWithData(decoded, source).catchError((e) {});
+        _updateWidgetWithData(decoded, source).catchError((e) {
+          print("위젯 업데이트 실패: $e");
+        });
       }
       return decoded;
     }
+  } on TimeoutException catch (e) {
+    print("API 타임아웃: $e");
+  } on SocketException catch (e) {
+    print("네트워크 오류: $e");
   } catch (e) {
     print("Fetch Error: $e");
   }
+  
   // 에러 시 빈 식단 반환
   return {
     "meals": {"breakfast": [], "lunch": [], "dinner": []},
@@ -218,7 +224,9 @@ Future<void> _updateWidgetWithData(
       widgetTransparency.value,
     );
     await HomeWidget.updateWidget(name: 'MealWidgetProvider');
-  } catch (_) {}
+  } catch (e) {
+    print("위젯 업데이트 오류: $e");
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -289,7 +297,7 @@ class PreferencesService {
 }
 
 // -----------------------------------------------------------------------------
-// [5] 알림 서비스 (스케줄링 포함)
+// [5] 알림 서비스 (스케줄링 포함) - 수정된 버전
 // -----------------------------------------------------------------------------
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -332,7 +340,7 @@ class NotificationService {
   Future<void> cancelAll() async =>
       await flutterLocalNotificationsPlugin.cancelAll();
 
-  // [중요] named parameter로 정의
+  // 알람 스케줄링
   Future<void> scheduleAlarm({
     required int id,
     required String title,
@@ -355,7 +363,6 @@ class NotificationService {
             'meal_alarm_channel',
             '식단 알림',
             importance: Importance.max,
-            priority: Priority.high,
           ),
           iOS: DarwinNotificationDetails(),
         ),
