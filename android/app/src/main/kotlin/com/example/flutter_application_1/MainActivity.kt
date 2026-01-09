@@ -1,4 +1,4 @@
-package com.example.flutter_application_1 // 본인의 패키지명
+package com.knue.knuemate // 본인의 패키지명
 
 import io.flutter.embedding.android.FlutterActivity
 

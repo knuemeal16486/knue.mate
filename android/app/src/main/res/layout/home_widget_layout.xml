@@ -7,25 +7,33 @@
     android:padding="16dp"
     android:background="@drawable/widget_background">
 
-    <!-- 제목 (식당 + 시간) -->
     <TextView
         android:id="@+id/widget_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="기숙사 식당 - 오늘 점심"
+        android:text="기숙사 식당"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="오늘 점심"
         android:textSize="14sp"
         android:textStyle="bold"
         android:maxLines="1"
         android:ellipsize="end" />
 
-    <!-- 메뉴 내용 -->
     <TextView
         android:id="@+id/widget_menu"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="· 쌀밥\n· 돈육김치찌개\n· 계란말이\n· 깍두기"
-        android:textSize="12sp"
-        android:maxLines="5"
+        android:textSize="13sp"
+        android:maxLines="10"
         android:ellipsize="end" />
 
 </LinearLayout>

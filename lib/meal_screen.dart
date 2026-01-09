@@ -174,6 +174,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
     fetchMeals();
   }
 
+  // [수정됨] 알림 토글 함수: 아침/점심/저녁 시작 및 마감 10분 전 알림 설정
   Future<void> _handleAlarmToggle() async {
     if (!Platform.isAndroid && !Platform.isIOS) {
       showToast(context, "모바일에서만 가능합니다.");
@@ -187,22 +188,78 @@ class _TodayMealPageState extends State<TodayMealPage> {
     if (newState) {
       await NotificationService().requestPermissions();
       final now = DateTime.now();
-      await NotificationService().scheduleAlarm(
-        id: 1,
-        title: "점심 시간! 🍚",
-        body: "맛있는 점심 드시고 힘내세요!",
-        scheduledTime: DateTime(now.year, now.month, now.day, 11, 30),
+
+      // 알림 등록 헬퍼 함수
+      Future<void> schedule(
+        int id,
+        int h,
+        int m,
+        String title,
+        String body,
+      ) async {
+        await NotificationService().scheduleAlarm(
+          id: id,
+          title: title,
+          body: body,
+          scheduledTime: DateTime(now.year, now.month, now.day, h, m),
+        );
+      }
+
+      // 1. 아침 시작 (07:30)
+      await schedule(
+        1,
+        7,
+        30,
+        "좋은 아침이에요! ☀️",
+        "아침 식사가 준비됐어요. 든든하게 먹고 하루를 시작해요!",
       );
-      await NotificationService().scheduleAlarm(
-        id: 2,
-        title: "저녁 시간! 🍖",
-        body: "오늘 하루도 고생하셨습니다.",
-        scheduledTime: DateTime(now.year, now.month, now.day, 17, 30),
+      // 2. 아침 마감 10분 전 (08:50)
+      await schedule(
+        2,
+        8,
+        50,
+        "아침 식사 마감 10분 전 ⏰",
+        "곧 배식구가 닫혀요! 아직 식사 전이라면 서두르세요.",
       );
-      showToast(context, "매일 11:30, 17:30 알림 설정됨");
+
+      // 3. 점심 시작 (11:30)
+      await schedule(
+        3,
+        11,
+        30,
+        "점심 시간이에요! 🍽️",
+        "오전 수업 고생 많으셨어요. 맛있는 밥 먹고 에너지 충전해요!",
+      );
+      // 4. 점심 마감 10분 전 (13:20)
+      await schedule(
+        4,
+        13,
+        20,
+        "점심 마감 10분 전 🏃‍♂️",
+        "식당 문 닫기 직전이에요! 놓치지 않게 달려가세요.",
+      );
+
+      // 5. 저녁 시작 (17:30)
+      await schedule(
+        5,
+        17,
+        30,
+        "저녁 드실 시간입니다 🌙",
+        "오늘 하루도 수고했어요. 따뜻한 저녁 드시러 오세요!",
+      );
+      // 6. 저녁 마감 10분 전 (18:50)
+      await schedule(
+        6,
+        18,
+        50,
+        "저녁 마감 10분 전 ⚠️",
+        "오늘의 마지막 식사가 곧 종료돼요. 아직 못 드셨나요?",
+      );
+
+      showToast(context, "식사 시작 및 마감 임박 알림이 설정되었습니다.");
     } else {
       await NotificationService().cancelAll();
-      showToast(context, "알림 해제됨");
+      showToast(context, "알림이 해제되었습니다.");
     }
   }
 
@@ -720,10 +777,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                     child: Container(
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: mode == ThemeMode.light ? Colors.grey.withOpacity(0.2) : null,
+                                        color: mode == ThemeMode.light
+                                            ? Colors.grey.withOpacity(0.2)
+                                            : null,
                                         borderRadius: BorderRadius.circular(10),
                                       ),
-                                      child: Column(children: [const Icon(Icons.light_mode), const Text("라이트")]),
+                                      child: Column(
+                                        children: [
+                                          const Icon(Icons.light_mode),
+                                          const Text("라이트"),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -738,17 +802,25 @@ class _SettingsPageState extends State<SettingsPage> {
                                     child: Container(
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: mode == ThemeMode.dark ? Colors.grey.withOpacity(0.2) : null,
+                                        color: mode == ThemeMode.dark
+                                            ? Colors.grey.withOpacity(0.2)
+                                            : null,
                                         borderRadius: BorderRadius.circular(10),
                                       ),
-                                      child: Column(children: [const Icon(Icons.dark_mode), const Text("다크")]),
+                                      child: Column(
+                                        children: [
+                                          const Icon(Icons.dark_mode),
+                                          const Text("다크"),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                                 Expanded(
                                   child: GestureDetector(
                                     onTap: () {
-                                      themeModeNotifier.value = ThemeMode.system;
+                                      themeModeNotifier.value =
+                                          ThemeMode.system;
                                       PreferencesService.saveThemeMode(
                                         ThemeMode.system,
                                       );
@@ -756,10 +828,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                     child: Container(
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: mode == ThemeMode.system ? Colors.grey.withOpacity(0.2) : null,
+                                        color: mode == ThemeMode.system
+                                            ? Colors.grey.withOpacity(0.2)
+                                            : null,
                                         borderRadius: BorderRadius.circular(10),
                                       ),
-                                      child: Column(children: [const Icon(Icons.settings_brightness), const Text("시스템")]),
+                                      child: Column(
+                                        children: [
+                                          const Icon(Icons.settings_brightness),
+                                          const Text("시스템"),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -793,7 +872,12 @@ class _SettingsPageState extends State<SettingsPage> {
                                       decoration: BoxDecoration(
                                         color: c,
                                         shape: BoxShape.circle,
-                                        border: c.value == currentColor.value ? Border.all(width: 3, color: Colors.white) : null,
+                                        border: c.value == currentColor.value
+                                            ? Border.all(
+                                                width: 3,
+                                                color: Colors.white,
+                                              )
+                                            : null,
                                       ),
                                     ),
                                   ),
@@ -960,16 +1044,24 @@ class _SettingsPageState extends State<SettingsPage> {
                                           );
                                         },
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                          ),
                                           decoration: BoxDecoration(
                                             color: src == MealSource.a
                                                 ? Theme.of(context).primaryColor
                                                 : Colors.transparent,
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                             border: Border.all(
                                               color: src == MealSource.a
-                                                  ? Theme.of(context).primaryColor
-                                                  : Colors.grey.withOpacity(0.5),
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).primaryColor
+                                                  : Colors.grey.withOpacity(
+                                                      0.5,
+                                                    ),
                                             ),
                                           ),
                                           alignment: Alignment.center,
@@ -977,7 +1069,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                             "기숙사",
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
-                                              color: src == MealSource.a ? Colors.white : Colors.grey,
+                                              color: src == MealSource.a
+                                                  ? Colors.white
+                                                  : Colors.grey,
                                             ),
                                           ),
                                         ),
@@ -995,16 +1089,24 @@ class _SettingsPageState extends State<SettingsPage> {
                                           );
                                         },
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                          ),
                                           decoration: BoxDecoration(
                                             color: src == MealSource.b
                                                 ? Theme.of(context).primaryColor
                                                 : Colors.transparent,
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                             border: Border.all(
                                               color: src == MealSource.b
-                                                  ? Theme.of(context).primaryColor
-                                                  : Colors.grey.withOpacity(0.5),
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).primaryColor
+                                                  : Colors.grey.withOpacity(
+                                                      0.5,
+                                                    ),
                                             ),
                                           ),
                                           alignment: Alignment.center,
@@ -1012,7 +1114,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                             "학생회관",
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
-                                              color: src == MealSource.b ? Colors.white : Colors.grey,
+                                              color: src == MealSource.b
+                                                  ? Colors.white
+                                                  : Colors.grey,
                                             ),
                                           ),
                                         ),
@@ -1045,10 +1149,19 @@ class _SettingsPageState extends State<SettingsPage> {
                                         child: Container(
                                           padding: const EdgeInsets.all(10),
                                           decoration: BoxDecoration(
-                                            color: mode == ThemeMode.light ? Colors.grey.withOpacity(0.2) : null,
-                                            borderRadius: BorderRadius.circular(10),
+                                            color: mode == ThemeMode.light
+                                                ? Colors.grey.withOpacity(0.2)
+                                                : null,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                           ),
-                                          child: Column(children: [const Icon(Icons.light_mode), const Text("라이트")]),
+                                          child: Column(
+                                            children: [
+                                              const Icon(Icons.light_mode),
+                                              const Text("라이트"),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1066,10 +1179,19 @@ class _SettingsPageState extends State<SettingsPage> {
                                         child: Container(
                                           padding: const EdgeInsets.all(10),
                                           decoration: BoxDecoration(
-                                            color: mode == ThemeMode.dark ? Colors.grey.withOpacity(0.2) : null,
-                                            borderRadius: BorderRadius.circular(10),
+                                            color: mode == ThemeMode.dark
+                                                ? Colors.grey.withOpacity(0.2)
+                                                : null,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                           ),
-                                          child: Column(children: [const Icon(Icons.dark_mode), const Text("다크")]),
+                                          child: Column(
+                                            children: [
+                                              const Icon(Icons.dark_mode),
+                                              const Text("다크"),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1087,10 +1209,21 @@ class _SettingsPageState extends State<SettingsPage> {
                                         child: Container(
                                           padding: const EdgeInsets.all(10),
                                           decoration: BoxDecoration(
-                                            color: mode == ThemeMode.system ? Colors.grey.withOpacity(0.2) : null,
-                                            borderRadius: BorderRadius.circular(10),
+                                            color: mode == ThemeMode.system
+                                                ? Colors.grey.withOpacity(0.2)
+                                                : null,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                           ),
-                                          child: Column(children: [const Icon(Icons.settings_brightness), const Text("시스템")]),
+                                          child: Column(
+                                            children: [
+                                              const Icon(
+                                                Icons.settings_brightness,
+                                              ),
+                                              const Text("시스템"),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1226,14 +1359,20 @@ class _SettingsPageState extends State<SettingsPage> {
                                 leading: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).brightness == Brightness.dark
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
                                         ? Colors.grey.shade800.withOpacity(0.1)
-                                        : Theme.of(context).primaryColor.withOpacity(0.1),
+                                        : Theme.of(
+                                            context,
+                                          ).primaryColor.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Icon(
                                     Icons.face,
-                                    color: Theme.of(context).brightness == Brightness.dark
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
                                         ? Colors.white
                                         : Theme.of(context).primaryColor,
                                     size: 22,
@@ -1244,20 +1383,30 @@ class _SettingsPageState extends State<SettingsPage> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 15,
-                                    color: Theme.of(context).brightness == Brightness.dark
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
                                         ? Colors.white
                                         : Colors.black87,
                                   ),
                                 ),
                                 subtitle: const Text(
                                   "만든 사람 소개",
-                                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey,
+                                  ),
                                 ),
-                                trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+                                trailing: const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
                                 onTap: () => Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => const DeveloperInfoPage(),
+                                    builder: (context) =>
+                                        const DeveloperInfoPage(),
                                   ),
                                 ),
                               ),
@@ -1270,14 +1419,20 @@ class _SettingsPageState extends State<SettingsPage> {
                                 leading: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).brightness == Brightness.dark
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
                                         ? Colors.grey.shade800.withOpacity(0.1)
-                                        : Theme.of(context).primaryColor.withOpacity(0.1),
+                                        : Theme.of(
+                                            context,
+                                          ).primaryColor.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Icon(
                                     Icons.description_outlined,
-                                    color: Theme.of(context).brightness == Brightness.dark
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
                                         ? Colors.white
                                         : Theme.of(context).primaryColor,
                                     size: 22,
@@ -1288,16 +1443,25 @@ class _SettingsPageState extends State<SettingsPage> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 15,
-                                    color: Theme.of(context).brightness == Brightness.dark
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
                                         ? Colors.white
                                         : Colors.black87,
                                   ),
                                 ),
                                 subtitle: const Text(
                                   "사용된 라이브러리 정보",
-                                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey,
+                                  ),
                                 ),
-                                trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+                                trailing: const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
                                 onTap: () => showLicensePage(
                                   context: context,
                                   applicationName: "KNUE All-in-One",
@@ -1313,14 +1477,20 @@ class _SettingsPageState extends State<SettingsPage> {
                                 leading: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).brightness == Brightness.dark
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
                                         ? Colors.grey.shade800.withOpacity(0.1)
-                                        : Theme.of(context).primaryColor.withOpacity(0.1),
+                                        : Theme.of(
+                                            context,
+                                          ).primaryColor.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Icon(
                                     Icons.info_outline,
-                                    color: Theme.of(context).brightness == Brightness.dark
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
                                         ? Colors.white
                                         : Theme.of(context).primaryColor,
                                     size: 22,
@@ -1331,16 +1501,25 @@ class _SettingsPageState extends State<SettingsPage> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 15,
-                                    color: Theme.of(context).brightness == Brightness.dark
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
                                         ? Colors.white
                                         : Colors.black87,
                                   ),
                                 ),
                                 subtitle: const Text(
                                   "5.8.0 (Final)",
-                                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey,
+                                  ),
                                 ),
-                                trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+                                trailing: const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
                                 onTap: () {},
                               ),
                               const Divider(
@@ -1369,7 +1548,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                     color: Colors.redAccent,
                                   ),
                                 ),
-                                trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+                                trailing: const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
                                 onTap: () async {
                                   await PreferencesService.clearAll();
                                   setState(() => _localTransparency = 0.0);
@@ -1560,7 +1743,7 @@ class _Header extends StatelessWidget {
                 child: Row(
                   children: [
                     const Text(
-                      "KNUE 청람밥상",
+                      "청람밥상",
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 22,
@@ -2137,10 +2320,12 @@ class _MealDetailCardState extends State<_MealDetailCard> {
 
 class DeveloperInfoPage extends StatelessWidget {
   const DeveloperInfoPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).primaryColor;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: primary,
@@ -2154,6 +2339,7 @@ class DeveloperInfoPage extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 40),
+            // [1] 메인 개발자 프로필 아이콘
             Container(
               width: 120,
               height: 120,
@@ -2165,6 +2351,8 @@ class DeveloperInfoPage extends StatelessWidget {
               child: Icon(Icons.person, size: 60, color: primary),
             ),
             const SizedBox(height: 20),
+
+            // [2] 메인 개발자 이름
             const Text(
               "Hwang",
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -2175,6 +2363,8 @@ class DeveloperInfoPage extends StatelessWidget {
               style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 30),
+
+            // [3] 메인 개발자 상세 정보 카드
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
@@ -2217,11 +2407,45 @@ class DeveloperInfoPage extends StatelessWidget {
                 ),
               ),
             ),
+
+            const SizedBox(height: 20),
+
+            // [4] Special Help 카드 (추가됨)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: _buildInfoRow(
+                  context,
+                  Icons.handshake_rounded, // 협력을 의미하는 아이콘
+                  "Special Help",
+                  "Hyunsu, Oh\nSNU Nuclear Engineering",
+                ),
+              ),
+            ),
+
             const SizedBox(height: 40),
+
+            // [5] Copyright
             Text(
               "© 2026 KNUE All-in-One",
               style: TextStyle(color: isDark ? Colors.grey : Colors.black54),
             ),
+            const SizedBox(height: 40),
           ],
         ),
       ),

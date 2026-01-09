@@ -120,10 +120,37 @@ Future<void> shareMenu(
   await Share.share("[$title]\n\n$content");
 }
 
+// [수정] 디자인이 개선된 토스트 메시지 함수
 void showToast(BuildContext context, String msg) {
+  // 이미 떠있는 토스트가 있다면 제거 (빠른 반응성)
   ScaffoldMessenger.of(context).clearSnackBars();
+
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(msg), duration: const Duration(seconds: 1)),
+    SnackBar(
+      content: Text(
+        msg,
+        textAlign: TextAlign.center, // 텍스트 가운데 정렬
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      duration: const Duration(seconds: 2), // 2초간 표시
+      behavior: SnackBarBehavior.floating, // 바닥에 붙지 않고 떠있게 설정
+      margin: const EdgeInsets.only(
+        // 위치 및 여백 설정
+        bottom: 50,
+        left: 60,
+        right: 60,
+      ),
+      shape: RoundedRectangleBorder(
+        // 둥근 알약 모양
+        borderRadius: BorderRadius.circular(30),
+      ),
+      backgroundColor: Colors.grey.withOpacity(0.95), // 세련된 반투명 검정
+      elevation: 0, // 그림자 제거 (플랫 디자인)
+    ),
   );
 }
 
@@ -168,7 +195,7 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
       _updateWidgetWithData(decoded, source).catchError((e) {
         print("위젯 업데이트 실패: $e");
       });
-      
+
       return decoded;
     }
   } on TimeoutException catch (e) {
@@ -178,7 +205,7 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
   } catch (e) {
     print("Fetch Error: $e");
   }
-  
+
   // 에러 시 빈 식단 반환
   return {
     "meals": {"breakfast": [], "lunch": [], "dinner": []},
@@ -191,70 +218,73 @@ Future<void> _updateWidgetWithData(
 ) async {
   try {
     print("=== 위젯 데이터 업데이트 시작 ===");
-    
+
     final now = DateTime.now();
     final hour = now.hour;
-    String title = "";
+    String timeText = ""; // 'title' 변수명을 'timeText'로 의미 명확화 (오늘 점심 등)
     List<dynamic> menu = [];
     String sourceName = widgetSource.value == MealSource.a ? "기숙사 식당" : "학생회관";
-    
-    // 메뉴 데이터 추출
+
+    // 메뉴 데이터 추출 (기존 로직 유지)
     final meals = data['meals'] ?? {};
     final breakfast = meals['조식'] ?? meals['아침'] ?? meals['breakfast'] ?? [];
     final lunch = meals['중식'] ?? meals['점심'] ?? meals['lunch'] ?? [];
     final dinner = meals['석식'] ?? meals['저녁'] ?? meals['dinner'] ?? [];
-    
+
     if (widgetSource.value == MealSource.a) {
-      // 기숙사 식당: 00시~09시 아침, 09시~13시 점심, 13시~24시 저녁
       if (hour < 9) {
-        title = "오늘 아침";
+        timeText = "오늘 아침";
         menu = breakfast;
       } else if (hour < 13) {
-        title = "오늘 점심";
+        timeText = "오늘 점심";
         menu = lunch;
       } else {
-        title = "오늘 저녁";
+        timeText = "오늘 저녁";
         menu = dinner;
       }
     } else {
-      // 학생회관: 00시~14시 점심, 14시~24시 저녁
       if (hour < 14) {
-        title = "오늘 점심";
+        timeText = "오늘 점심";
         menu = lunch;
       } else {
-        title = "오늘 저녁";
+        timeText = "오늘 저녁";
         menu = dinner;
       }
     }
-    
+
     // 메뉴 텍스트 변환
     String menuText = menu.isEmpty
         ? "정보 없음"
         : menu.map((e) => "· $e").join("\n");
-    
+
     print("위젯에 저장할 데이터:");
-    print("- title: $title");
-    print("- content: $menuText");
-    print("- source: $sourceName");
-    print("- themeMode: ${widgetTheme.value.index}");
-    print("- transparency: ${widgetTransparency.value}");
-    
-    // 데이터 저장
-    await HomeWidget.saveWidgetData<String>('title', title);
-    await HomeWidget.saveWidgetData<String>('content', menuText);
+    print("- 식당(widget_title): $sourceName");
+    print("- 시간(widget_time): $timeText");
+    print("- 메뉴(widget_menu): $menuText");
+
+    // --- [중요] 데이터 저장 (XML ID와 Key 일치시키기) ---
+
+    // 1. 식당 이름 -> widget_title
+    await HomeWidget.saveWidgetData<String>('widget_title', sourceName);
+
+    // 2. 시간대(오늘 점심) -> widget_time
+    await HomeWidget.saveWidgetData<String>('widget_time', timeText);
+
+    // 3. 메뉴 내용 -> widget_menu
+    await HomeWidget.saveWidgetData<String>('widget_menu', menuText);
+
+    // 4. 기타 설정 (투명도 등)
     await HomeWidget.saveWidgetData<String>('source', sourceName);
     await HomeWidget.saveWidgetData<int>('themeMode', widgetTheme.value.index);
-    await HomeWidget.saveWidgetData<String>('transparency', widgetTransparency.value.toString());
-    
-    // 디버그: 저장된 데이터 확인
-    final savedTitle = await HomeWidget.getWidgetData<String>('title');
-    print("저장 확인 - title: $savedTitle");
-    
-    // 위젯 업데이트
+    await HomeWidget.saveWidgetData<String>(
+      'transparency',
+      widgetTransparency.value.toString(),
+    );
+
+    // 위젯 업데이트 요청 (AndroidManifest의 리시버 이름과 일치해야 함)
     await HomeWidget.updateWidget(name: 'MealWidgetProvider');
-    
+
     print("=== 위젯 데이터 업데이트 완료 ===");
-    
   } catch (e) {
     print("위젯 업데이트 오류: $e");
   }
@@ -264,27 +294,26 @@ Future<void> _updateWidgetWithData(
 Future<void> debugWidgetStatus() async {
   try {
     print("=== 위젯 디버그 정보 ===");
-    
+
     // 저장된 각각의 위젯 데이터 확인
     final title = await HomeWidget.getWidgetData<String>('title');
     final content = await HomeWidget.getWidgetData<String>('content');
     final source = await HomeWidget.getWidgetData<String>('source');
     final themeMode = await HomeWidget.getWidgetData<int>('themeMode');
     final transparency = await HomeWidget.getWidgetData<String>('transparency');
-    
+
     print("저장된 제목: $title");
     print("저장된 내용: $content");
     print("저장된 식당: $source");
     print("저장된 테마 모드: $themeMode");
     print("저장된 투명도: $transparency");
-    
+
     print("현재 위젯 설정 상태:");
     print("투명도: ${widgetTransparency.value}");
     print("테마: ${widgetTheme.value}");
     print("식당: ${widgetSource.value}");
-    
+
     print("=== 위젯 디버그 완료 ===");
-    
   } catch (e) {
     print("위젯 디버그 오류: $e");
   }
@@ -294,22 +323,22 @@ Future<void> debugWidgetStatus() async {
 Future<void> testBasicWidgetFunction() async {
   try {
     print("기본 위젯 테스트 시작");
-    
+
     // 데이터 저장
     await HomeWidget.saveWidgetData<String>('test_title', '테스트 제목');
     await HomeWidget.saveWidgetData<String>('test_content', '테스트 내용');
-    
+
     // 데이터 읽기
     final title = await HomeWidget.getWidgetData<String>('test_title');
     final content = await HomeWidget.getWidgetData<String>('test_content');
-    
+
     print("저장된 테스트 데이터:");
     print("- title: $title");
     print("- content: $content");
-    
+
     // 위젯 업데이트
     await HomeWidget.updateWidget(name: 'MealWidgetProvider');
-    
+
     print("기본 위젯 테스트 완료");
   } catch (e) {
     print("기본 위젯 테스트 오류: $e");
@@ -325,24 +354,23 @@ Future<void> saveWidgetSettingsAndUpdate(
 ) async {
   try {
     print("=== 위젯 설정 저장 및 업데이트 시작 ===");
-    
+
     // 1. 설정 저장
     await PreferencesService.saveWidgetSettings(trans, theme, source);
-    
+
     print("설정 저장 완료: transparency=$trans, theme=$theme, source=$source");
-    
+
     // 2. 위젯 데이터 업데이트 (API 호출 없이)
     await forceUpdateWidgetWithCurrentSettings();
-    
+
     // 3. 위젯 새로고침 트리거
     await triggerWidgetUpdate();
-    
+
     if (context.mounted) {
       showToast(context, "위젯 설정이 업데이트되었습니다.");
     }
-    
+
     print("=== 위젯 설정 저장 및 업데이트 완료 ===");
-    
   } catch (e) {
     print("위젯 설정 저장 오류: $e");
     if (context.mounted) {
@@ -355,42 +383,48 @@ Future<void> saveWidgetSettingsAndUpdate(
 Future<void> forceUpdateWidgetWithCurrentSettings() async {
   try {
     print("=== 위젯 강제 업데이트 시작 ===");
-    
+
     // 현재 시간과 설정에 맞는 데이터 생성
     final now = DateTime.now();
     final hour = now.hour;
-    
-    String title = "";
-    String content = "";
+
+    String timeText = "";
     String sourceName = widgetSource.value == MealSource.a ? "기숙사 식당" : "학생회관";
-    
+
     if (widgetSource.value == MealSource.a) {
       if (hour < 9) {
-        title = "오늘 아침";
+        timeText = "오늘 아침";
       } else if (hour < 13) {
-        title = "오늘 점심";
+        timeText = "오늘 점심";
       } else {
-        title = "오늘 저녁";
+        timeText = "오늘 저녁";
       }
     } else {
       if (hour < 14) {
-        title = "오늘 점심";
+        timeText = "오늘 점심";
       } else {
-        title = "오늘 저녁";
+        timeText = "오늘 저녁";
       }
     }
-    
-    content = "$sourceName의 $title 메뉴를 불러오는 중...";
-    
-    print("위젯 데이터 설정: $sourceName, $title");
-    
-    // 데이터 저장
-    await HomeWidget.saveWidgetData<String>('title', title);
-    await HomeWidget.saveWidgetData<String>('content', content);
+
+    // 메뉴 칸에 표시할 로딩 문구
+    String loadingText = "정보를 불러오는 중...";
+
+    print("위젯 데이터 설정: $sourceName, $timeText");
+
+    // --- [중요] 데이터 저장 (키값 수정) ---
+    await HomeWidget.saveWidgetData<String>('widget_title', sourceName);
+    await HomeWidget.saveWidgetData<String>('widget_time', timeText);
+    await HomeWidget.saveWidgetData<String>('widget_menu', loadingText);
+
+    // 기타 설정 저장
     await HomeWidget.saveWidgetData<String>('source', sourceName);
     await HomeWidget.saveWidgetData<int>('themeMode', widgetTheme.value.index);
-    await HomeWidget.saveWidgetData<String>('transparency', widgetTransparency.value.toString());
-    
+    await HomeWidget.saveWidgetData<String>(
+      'transparency',
+      widgetTransparency.value.toString(),
+    );
+
     // 위젯 업데이트 시도
     try {
       await HomeWidget.updateWidget(name: 'MealWidgetProvider');
@@ -398,9 +432,8 @@ Future<void> forceUpdateWidgetWithCurrentSettings() async {
     } catch (e) {
       print("HomeWidget.updateWidget 실패: $e");
     }
-    
+
     print("=== 위젯 강제 업데이트 완료 ===");
-    
   } catch (e) {
     print("위젯 강제 업데이트 오류: $e");
   }
@@ -410,19 +443,19 @@ Future<void> forceUpdateWidgetWithCurrentSettings() async {
 Future<void> triggerWidgetUpdate() async {
   try {
     print("위젯 업데이트 트리거링...");
-    
+
     // home_widget 플러그인의 채널을 직접 호출
     const channel = MethodChannel(kHomeWidgetChannel);
-    
+
     // 위젯 데이터 업데이트 요청
     await channel.invokeMethod('updateWidget', {
       'name': 'MealWidgetProvider',
       'android': <String, dynamic>{
         'widgetName': 'MealWidgetProvider',
-        'action': 'UPDATE_WIDGET'
+        'action': 'UPDATE_WIDGET',
       },
     });
-    
+
     print("위젯 업데이트 트리거 완료");
   } catch (e) {
     print("위젯 업데이트 트리거 실패: $e");

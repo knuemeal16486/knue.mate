@@ -52,7 +52,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     Classroom("교원연수관", 36.612346, 127.357202),
   ];
 
-  final Set<String> _favoriteNames = {"한국교원대 정문", "미래도서관"};
+  final Set<String> _favoriteNames = {"한국교원대 정문", "버스정류장"};
   Classroom? _targetClassroom;
   StreamSubscription<Position>? _positionStream;
   Timer? _timer;

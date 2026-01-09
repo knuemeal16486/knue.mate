@@ -16,7 +16,7 @@ void main() async {
   };
 
   print("=== 앱 시작 ===");
-  
+
   // .env 파일 로드
   try {
     await dotenv.load(fileName: ".env");
@@ -33,12 +33,13 @@ void main() async {
     // iOS용 App Group ID (Android에서는 무시됨)
     await HomeWidget.setAppGroupId('group.knue.meal');
     print("HomeWidget AppGroupId 설정 완료");
-    
+
     // 위젯에서 앱 실행 여부 확인
     try {
-      final launchedFromWidget = await HomeWidget.initiallyLaunchedFromHomeWidget();
+      final launchedFromWidget =
+          await HomeWidget.initiallyLaunchedFromHomeWidget();
       print("위젯에서 실행됨: $launchedFromWidget");
-      
+
       if (launchedFromWidget == true) {
         final title = await HomeWidget.getWidgetData<String>('title');
         print("위젯 데이터 - title: $title");
@@ -73,7 +74,7 @@ class MyApp extends StatelessWidget {
           valueListenable: themeColor,
           builder: (context, color, child) {
             return MaterialApp(
-              title: 'KNUE All-in-One',
+              title: 'KNUE Mate',
               debugShowCheckedModeBanner: false,
               theme: ThemeData(
                 useMaterial3: true,

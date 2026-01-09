@@ -1,5 +1,5 @@
 plugins {
-    id("com.android.application")
+    id("com.knue.knuemate")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -28,7 +28,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.flutter_application_1" // (본인 ID)
+        applicationId = "com.knue.knuemate"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
