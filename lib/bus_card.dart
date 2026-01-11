@@ -8,12 +8,12 @@ class BusCard extends StatelessWidget {
 
   // 주요 정류장 정보 데이터
   static const Map<String, String> _busRouteInfo = {
-    "500": "솔밭초등학교, 신영지웰시티, 만수공원, 오송역종점",
-    "502": "고속버스터미널, 한국자산관리공사, 사창사거리, 지하상가(성안길), 만수공원, 오송역5, 조치원",
+    "500": "솔밭초등학교,신영지웰시티, 만수공원, 오송역종점",
+    "502": "지하상가(성안길), 사창사거리(충북대), 고속버스터미널, 한국자산관리공사, 만수공원, 오송역5, 조치원역",
     "503": "고속버스터미널, 오송역",
-    "509": "지하상가, 사창사거리, 고속버스터미널, 오송역5, 조치원역",
-    "511": "청주대교, 사창사거리, 고속버스터미널, 오송119안전센터, 오송역종점",
-    "747": "청주국제공항, 청주대교, 사창사거리, 고속버스터미널, 오송역종점",
+    "509": "지하상가(성안길), 사창사거리(충북대), 고속버스터미널, 오송역5, 조치원역",
+    "511": "청주대교(성안길), 사창사거리(충북대), 고속버스터미널, 오송119안전센터, 오송역종점",
+    "747": "청주국제공항, 청주대교(성안길), 사창사거리(충북대), 고속버스터미널, 오송역종점",
   };
 
   Color getBusColor(String type) {
@@ -201,7 +201,9 @@ class BusCard extends StatelessWidget {
                           style: TextStyle(
                             color: isArrived
                                 ? Colors.redAccent
-                                : (isDark ? Colors.blueAccent : Colors.blue[700]),
+                                : (isDark
+                                      ? Colors.blueAccent
+                                      : Colors.blue[700]),
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
                           ),
@@ -239,7 +241,9 @@ class BusCard extends StatelessWidget {
                         color: bus.color,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                          color: isDark
+                              ? const Color(0xFF1E1E1E)
+                              : Colors.white,
                           width: 2,
                         ),
                       ),
@@ -329,18 +333,18 @@ class BusCard extends StatelessWidget {
     if (best == null) {
       return "${bus.number}번 버스: 운행 정보 없음";
     }
-    
+
     String label = "${bus.number}번 버스: ";
     label += "현재 위치 ${best.currentStopName}, ";
     label += "목적지까지 ${best.remainStops}정거장 남음";
-    
+
     if (best.remainStops > 0) {
       final estimatedMin = (best.remainStops * 1.5).ceil();
       label += ", 예상 도착 시간 약 $estimatedMin분 후";
     } else {
       label += ", 곧 도착";
     }
-    
+
     return label;
   }
 }

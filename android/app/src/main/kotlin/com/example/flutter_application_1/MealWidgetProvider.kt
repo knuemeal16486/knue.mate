@@ -1,4 +1,4 @@
-package com.example.flutter_application_1
+package com.knue.knuemate
 
 import android.appwidget.AppWidgetManager
 import android.content.Context

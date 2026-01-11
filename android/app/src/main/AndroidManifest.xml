@@ -1,6 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.knue.knuemate">
-
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -18,7 +16,6 @@
         android:icon="@mipmap/launcher_icon"
         android:allowBackup="true">
         
-        <!-- Boot Receiver for Notifications -->
         <receiver 
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
             android:exported="true"
@@ -31,7 +28,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -51,7 +47,6 @@
             </intent-filter>
         </activity>
         
-        <!-- Widget Provider -->
         <receiver 
             android:name=".MealWidgetProvider"
             android:exported="true"
@@ -65,7 +60,6 @@
                 android:resource="@xml/widget_info" />
         </receiver>
         
-        <!-- Meta-data for Flutter -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

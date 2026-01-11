@@ -37,6 +37,7 @@ const List<Color> kColorPalette = [
   Color(0xFFEF5350),
   Color(0xFFEC407A),
   Color(0xFFAB47BC),
+  Color.fromARGB(255, 255, 153, 229),
   Color(0xFF7E57C2),
   Color(0xFF5C6BC0),
   Color(0xFF039BE5),
@@ -53,7 +54,6 @@ const List<Color> kColorPalette = [
   Color(0xFF757575),
   Color(0xFF546E7A),
   Color(0xFF000000),
-  Color(0xFF8E8E93),
 ];
 
 enum MealSource { a, b }

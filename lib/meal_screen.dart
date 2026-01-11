@@ -2359,7 +2359,7 @@ class DeveloperInfoPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              "Physics & Elementary Education 23",
+              "KNUE Physics & Elementary Education 23",
               style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 30),
