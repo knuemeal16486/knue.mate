@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'constants.dart';
 import 'bus_screen.dart';
 import 'campus_run_screen.dart';
@@ -174,7 +175,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
     fetchMeals();
   }
 
-  // [수정됨] 알림 토글 함수: 아침/점심/저녁 시작 및 마감 10분 전 알림 설정
   Future<void> _handleAlarmToggle() async {
     if (!Platform.isAndroid && !Platform.isIOS) {
       showToast(context, "모바일에서만 가능합니다.");
@@ -189,7 +189,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
       await NotificationService().requestPermissions();
       final now = DateTime.now();
 
-      // 알림 등록 헬퍼 함수
       Future<void> schedule(
         int id,
         int h,
@@ -205,7 +204,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
         );
       }
 
-      // 1. 아침 시작 (07:30)
       await schedule(
         1,
         7,
@@ -213,7 +211,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
         "좋은 아침이에요! ☀️",
         "아침 식사가 준비됐어요. 든든하게 먹고 하루를 시작해요!",
       );
-      // 2. 아침 마감 10분 전 (08:50)
       await schedule(
         2,
         8,
@@ -221,8 +218,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
         "아침 식사 마감 10분 전 ⏰",
         "곧 배식구가 닫혀요! 아직 식사 전이라면 서두르세요.",
       );
-
-      // 3. 점심 시작 (11:30)
       await schedule(
         3,
         11,
@@ -230,7 +225,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
         "점심 시간이에요! 🍽️",
         "오전 수업 고생 많으셨어요. 맛있는 밥 먹고 에너지 충전해요!",
       );
-      // 4. 점심 마감 10분 전 (13:20)
       await schedule(
         4,
         13,
@@ -238,8 +232,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
         "점심 마감 10분 전 🏃‍♂️",
         "식당 문 닫기 직전이에요! 놓치지 않게 달려가세요.",
       );
-
-      // 5. 저녁 시작 (17:30)
       await schedule(
         5,
         17,
@@ -247,7 +239,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
         "저녁 드실 시간입니다 🌙",
         "오늘 하루도 수고했어요. 따뜻한 저녁 드시러 오세요!",
       );
-      // 6. 저녁 마감 10분 전 (18:50)
       await schedule(
         6,
         18,
@@ -331,7 +322,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
 }
 
 // =============================================================================
-// 3. 월간 식단 페이지 (식당 선택 버튼 + 요일 표시)
+// 3. 월간 식단 페이지
 // =============================================================================
 class MonthlyMealPage extends StatefulWidget {
   const MonthlyMealPage({super.key});
@@ -412,10 +403,15 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
           appBar: AppBar(
             backgroundColor: primaryColor,
             iconTheme: const IconThemeData(color: Colors.white),
-            title: const Text(
+            centerTitle: Platform.isIOS
+                ? false
+                : null, // iOS일 경우에만 강제로 왼쪽 정렬 (false), 그 외엔 기본값(null)
+            title: Text(
               "월간 식단",
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: Platform.isIOS
+                    ? FontWeight.w800
+                    : FontWeight.bold, // iOS는 더 굵게(w800), 나머지는 기본 bold
                 fontSize: 20,
                 color: Colors.white,
               ),
@@ -562,7 +558,6 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                         ],
                       ),
                       const SizedBox(height: 12),
-
                       _CalendarGrid(
                         focusedMonth: _focusedMonth,
                         selectedDate: _selectedDate,
@@ -570,7 +565,6 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                         primaryColor: primaryColor,
                         source: _source,
                       ),
-
                       const SizedBox(height: 20),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -683,10 +677,8 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
   }
 }
 
-// ... [기존 코드는 동일하게 유지] ...
-
 // =============================================================================
-// 4. 설정 페이지 (기능 완벽 복구 - 테마/색상/위젯/라이선스 포함)
+// 4. 설정 페이지
 // =============================================================================
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -719,10 +711,93 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Widget _buildAppInfoItem({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 24),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFeedbackDialog(BuildContext context) {
+    showDialog(context: context, builder: (context) => const FeedbackDialog());
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final boxBorder = isDark ? null : Border.all(color: Colors.grey.shade300);
+    final primary = Theme.of(context).primaryColor;
 
     return ValueListenableBuilder<Color>(
       valueListenable: themeColor,
@@ -734,11 +809,16 @@ class _SettingsPageState extends State<SettingsPage> {
                 expandedHeight: 120,
                 pinned: true,
                 backgroundColor: currentColor,
+                centerTitle: Platform.isIOS
+                    ? false
+                    : null, // iOS일 경우에만 왼쪽 정렬 강제
                 flexibleSpace: FlexibleSpaceBar(
-                  title: const Text(
+                  title: Text(
                     "설정",
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
+                      fontWeight: Platform.isIOS
+                          ? FontWeight.w800
+                          : FontWeight.bold, // iOS만 w800 적용
                       color: Colors.white,
                     ),
                   ),
@@ -766,88 +846,44 @@ class _SettingsPageState extends State<SettingsPage> {
                             valueListenable: themeModeNotifier,
                             builder: (context, mode, _) => Row(
                               children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      themeModeNotifier.value = ThemeMode.light;
-                                      PreferencesService.saveThemeMode(
-                                        ThemeMode.light,
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: mode == ThemeMode.light
-                                            ? Colors.grey.withOpacity(0.2)
-                                            : null,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          const Icon(Icons.light_mode),
-                                          const Text("라이트"),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                _ThemeOption(
+                                  label: "라이트",
+                                  icon: Icons.light_mode,
+                                  selected: mode == ThemeMode.light,
+                                  onTap: () {
+                                    themeModeNotifier.value = ThemeMode.light;
+                                    PreferencesService.saveThemeMode(
+                                      ThemeMode.light,
+                                    );
+                                  },
                                 ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      themeModeNotifier.value = ThemeMode.dark;
-                                      PreferencesService.saveThemeMode(
-                                        ThemeMode.dark,
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: mode == ThemeMode.dark
-                                            ? Colors.grey.withOpacity(0.2)
-                                            : null,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          const Icon(Icons.dark_mode),
-                                          const Text("다크"),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                _ThemeOption(
+                                  label: "다크",
+                                  icon: Icons.dark_mode,
+                                  selected: mode == ThemeMode.dark,
+                                  onTap: () {
+                                    themeModeNotifier.value = ThemeMode.dark;
+                                    PreferencesService.saveThemeMode(
+                                      ThemeMode.dark,
+                                    );
+                                  },
                                 ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      themeModeNotifier.value =
-                                          ThemeMode.system;
-                                      PreferencesService.saveThemeMode(
-                                        ThemeMode.system,
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: mode == ThemeMode.system
-                                            ? Colors.grey.withOpacity(0.2)
-                                            : null,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          const Icon(Icons.settings_brightness),
-                                          const Text("시스템"),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                _ThemeOption(
+                                  label: "시스템",
+                                  icon: Icons.settings_brightness,
+                                  selected: mode == ThemeMode.system,
+                                  onTap: () {
+                                    themeModeNotifier.value = ThemeMode.system;
+                                    PreferencesService.saveThemeMode(
+                                      ThemeMode.system,
+                                    );
+                                  },
                                 ),
                               ],
                             ),
                           ),
                         ),
                         const SizedBox(height: 24),
-
                         _buildSectionTitle("테마 색상"),
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -861,32 +897,15 @@ class _SettingsPageState extends State<SettingsPage> {
                             runSpacing: 12,
                             children: kColorPalette
                                 .map(
-                                  (c) => GestureDetector(
-                                    onTap: () {
-                                      themeColor.value = c;
-                                      PreferencesService.saveThemeColor(c);
-                                    },
-                                    child: Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: c,
-                                        shape: BoxShape.circle,
-                                        border: c.value == currentColor.value
-                                            ? Border.all(
-                                                width: 3,
-                                                color: Colors.white,
-                                              )
-                                            : null,
-                                      ),
-                                    ),
+                                  (c) => _ColorPickerItem(
+                                    color: c,
+                                    isSelected: c.value == currentColor.value,
                                   ),
                                 )
                                 .toList(),
                           ),
                         ),
                         const SizedBox(height: 24),
-
                         const Text(
                           "위젯 미리보기",
                           style: TextStyle(
@@ -896,7 +915,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ),
                         const SizedBox(height: 10),
-
                         ValueListenableBuilder<ThemeMode>(
                           valueListenable: widgetTheme,
                           builder: (context, mode, _) {
@@ -905,30 +923,21 @@ class _SettingsPageState extends State<SettingsPage> {
                                 (mode == ThemeMode.system &&
                                     Theme.of(context).brightness ==
                                         Brightness.dark);
-
                             return ValueListenableBuilder<MealSource>(
                               valueListenable: widgetSource,
                               builder: (context, src, _) {
                                 final now = DateTime.now();
                                 final hour = now.hour;
                                 String mealType = "";
-
                                 if (src == MealSource.a) {
-                                  if (hour < 9) {
-                                    mealType = "아침";
-                                  } else if (hour < 13) {
-                                    mealType = "점심";
-                                  } else {
-                                    mealType = "저녁";
-                                  }
+                                  mealType = hour < 9
+                                      ? "아침"
+                                      : hour < 13
+                                      ? "점심"
+                                      : "저녁";
                                 } else {
-                                  if (hour < 14) {
-                                    mealType = "점심";
-                                  } else {
-                                    mealType = "저녁";
-                                  }
+                                  mealType = hour < 14 ? "점심" : "저녁";
                                 }
-
                                 return Container(
                                   width: double.infinity,
                                   padding: const EdgeInsets.all(16),
@@ -1012,7 +1021,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           },
                         ),
                         const SizedBox(height: 24),
-
                         _buildSectionTitle("위젯 설정"),
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -1033,94 +1041,30 @@ class _SettingsPageState extends State<SettingsPage> {
                                 valueListenable: widgetSource,
                                 builder: (context, src, _) => Row(
                                   children: [
-                                    Expanded(
-                                      child: GestureDetector(
-                                        onTap: () async {
-                                          await saveWidgetSettingsAndUpdate(
-                                            widgetTransparency.value,
-                                            widgetTheme.value,
-                                            MealSource.a,
-                                            context,
-                                          );
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: src == MealSource.a
-                                                ? Theme.of(context).primaryColor
-                                                : Colors.transparent,
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            border: Border.all(
-                                              color: src == MealSource.a
-                                                  ? Theme.of(
-                                                      context,
-                                                    ).primaryColor
-                                                  : Colors.grey.withOpacity(
-                                                      0.5,
-                                                    ),
-                                            ),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            "기숙사",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: src == MealSource.a
-                                                  ? Colors.white
-                                                  : Colors.grey,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                    _WidgetOption(
+                                      label: "기숙사",
+                                      isSelected: src == MealSource.a,
+                                      onTap: () async {
+                                        await saveWidgetSettingsAndUpdate(
+                                          widgetTransparency.value,
+                                          widgetTheme.value,
+                                          MealSource.a,
+                                          context,
+                                        );
+                                      },
                                     ),
                                     const SizedBox(width: 10),
-                                    Expanded(
-                                      child: GestureDetector(
-                                        onTap: () async {
-                                          await saveWidgetSettingsAndUpdate(
-                                            widgetTransparency.value,
-                                            widgetTheme.value,
-                                            MealSource.b,
-                                            context,
-                                          );
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: src == MealSource.b
-                                                ? Theme.of(context).primaryColor
-                                                : Colors.transparent,
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            border: Border.all(
-                                              color: src == MealSource.b
-                                                  ? Theme.of(
-                                                      context,
-                                                    ).primaryColor
-                                                  : Colors.grey.withOpacity(
-                                                      0.5,
-                                                    ),
-                                            ),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            "학생회관",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: src == MealSource.b
-                                                  ? Colors.white
-                                                  : Colors.grey,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                    _WidgetOption(
+                                      label: "학생회관",
+                                      isSelected: src == MealSource.b,
+                                      onTap: () async {
+                                        await saveWidgetSettingsAndUpdate(
+                                          widgetTransparency.value,
+                                          widgetTheme.value,
+                                          MealSource.b,
+                                          context,
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),
@@ -1135,97 +1079,47 @@ class _SettingsPageState extends State<SettingsPage> {
                                 valueListenable: widgetTheme,
                                 builder: (context, mode, _) => Row(
                                   children: [
-                                    Expanded(
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          widgetTheme.value = ThemeMode.light;
-                                          PreferencesService.saveWidgetSettings(
-                                            widgetTransparency.value,
-                                            ThemeMode.light,
-                                            widgetSource.value,
-                                          );
-                                          _forceUpdateWidget(context);
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(
-                                            color: mode == ThemeMode.light
-                                                ? Colors.grey.withOpacity(0.2)
-                                                : null,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: Column(
-                                            children: [
-                                              const Icon(Icons.light_mode),
-                                              const Text("라이트"),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
+                                    _ThemeOption(
+                                      label: "라이트",
+                                      icon: Icons.light_mode,
+                                      selected: mode == ThemeMode.light,
+                                      onTap: () {
+                                        widgetTheme.value = ThemeMode.light;
+                                        PreferencesService.saveWidgetSettings(
+                                          widgetTransparency.value,
+                                          ThemeMode.light,
+                                          widgetSource.value,
+                                        );
+                                        _forceUpdateWidget(context);
+                                      },
                                     ),
-                                    Expanded(
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          widgetTheme.value = ThemeMode.dark;
-                                          PreferencesService.saveWidgetSettings(
-                                            widgetTransparency.value,
-                                            ThemeMode.dark,
-                                            widgetSource.value,
-                                          );
-                                          _forceUpdateWidget(context);
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(
-                                            color: mode == ThemeMode.dark
-                                                ? Colors.grey.withOpacity(0.2)
-                                                : null,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: Column(
-                                            children: [
-                                              const Icon(Icons.dark_mode),
-                                              const Text("다크"),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
+                                    _ThemeOption(
+                                      label: "다크",
+                                      icon: Icons.dark_mode,
+                                      selected: mode == ThemeMode.dark,
+                                      onTap: () {
+                                        widgetTheme.value = ThemeMode.dark;
+                                        PreferencesService.saveWidgetSettings(
+                                          widgetTransparency.value,
+                                          ThemeMode.dark,
+                                          widgetSource.value,
+                                        );
+                                        _forceUpdateWidget(context);
+                                      },
                                     ),
-                                    Expanded(
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          widgetTheme.value = ThemeMode.system;
-                                          PreferencesService.saveWidgetSettings(
-                                            widgetTransparency.value,
-                                            ThemeMode.system,
-                                            widgetSource.value,
-                                          );
-                                          _forceUpdateWidget(context);
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(
-                                            color: mode == ThemeMode.system
-                                                ? Colors.grey.withOpacity(0.2)
-                                                : null,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: Column(
-                                            children: [
-                                              const Icon(
-                                                Icons.settings_brightness,
-                                              ),
-                                              const Text("시스템"),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
+                                    _ThemeOption(
+                                      label: "시스템",
+                                      icon: Icons.settings_brightness,
+                                      selected: mode == ThemeMode.system,
+                                      onTap: () {
+                                        widgetTheme.value = ThemeMode.system;
+                                        PreferencesService.saveWidgetSettings(
+                                          widgetTransparency.value,
+                                          ThemeMode.system,
+                                          widgetSource.value,
+                                        );
+                                        _forceUpdateWidget(context);
+                                      },
                                     ),
                                   ],
                                 ),
@@ -1307,27 +1201,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: () async {
-                                    print("위젯 상태 디버그 시작");
-                                    await debugWidgetStatus();
-                                    if (context.mounted) {
-                                      showToast(context, "위젯 상태를 로그에서 확인하세요");
-                                    }
-                                  },
-                                  icon: const Icon(Icons.bug_report),
-                                  label: const Text("위젯 상태 디버그"),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: currentColor,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
-                                    ),
-                                  ),
-                                ),
-                              ),
                               const SizedBox(height: 8),
                               SizedBox(
                                 width: double.infinity,
@@ -1346,223 +1219,68 @@ class _SettingsPageState extends State<SettingsPage> {
                         const SizedBox(height: 24),
 
                         _buildSectionTitle("앱 정보"),
-                        Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).cardColor,
-                            borderRadius: BorderRadius.circular(16),
-                            border: boxBorder,
-                          ),
-                          child: Column(
-                            children: [
-                              ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.grey.shade800.withOpacity(0.1)
-                                        : Theme.of(
-                                            context,
-                                          ).primaryColor.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(
-                                    Icons.face,
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white
-                                        : Theme.of(context).primaryColor,
-                                    size: 22,
-                                  ),
-                                ),
-                                title: Text(
-                                  "개발자 정보",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white
-                                        : Colors.black87,
-                                  ),
-                                ),
-                                subtitle: const Text(
-                                  "만든 사람 소개",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.grey,
-                                  size: 20,
-                                ),
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const DeveloperInfoPage(),
-                                  ),
-                                ),
-                              ),
-                              const Divider(
-                                height: 1,
-                                indent: 16,
-                                endIndent: 16,
-                              ),
-                              ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.grey.shade800.withOpacity(0.1)
-                                        : Theme.of(
-                                            context,
-                                          ).primaryColor.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(
-                                    Icons.description_outlined,
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white
-                                        : Theme.of(context).primaryColor,
-                                    size: 22,
-                                  ),
-                                ),
-                                title: Text(
-                                  "오픈소스 라이선스",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white
-                                        : Colors.black87,
-                                  ),
-                                ),
-                                subtitle: const Text(
-                                  "사용된 라이브러리 정보",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.grey,
-                                  size: 20,
-                                ),
-                                onTap: () => showLicensePage(
-                                  context: context,
-                                  applicationName: "KNUE All-in-One",
-                                  applicationVersion: "5.8.0",
-                                ),
-                              ),
-                              const Divider(
-                                height: 1,
-                                indent: 16,
-                                endIndent: 16,
-                              ),
-                              ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.grey.shade800.withOpacity(0.1)
-                                        : Theme.of(
-                                            context,
-                                          ).primaryColor.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(
-                                    Icons.info_outline,
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white
-                                        : Theme.of(context).primaryColor,
-                                    size: 22,
-                                  ),
-                                ),
-                                title: Text(
-                                  "버전 정보",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white
-                                        : Colors.black87,
-                                  ),
-                                ),
-                                subtitle: const Text(
-                                  "5.8.0 (Final)",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.grey,
-                                  size: 20,
-                                ),
-                                onTap: () {},
-                              ),
-                              const Divider(
-                                height: 1,
-                                indent: 16,
-                                endIndent: 16,
-                              ),
-                              ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.redAccent.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Icon(
-                                    Icons.refresh_rounded,
-                                    color: Colors.redAccent,
-                                    size: 22,
-                                  ),
-                                ),
-                                title: Text(
-                                  "설정 초기화",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                    color: Colors.redAccent,
-                                  ),
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.grey,
-                                  size: 20,
-                                ),
-                                onTap: () async {
-                                  await PreferencesService.clearAll();
-                                  setState(() => _localTransparency = 0.0);
-                                  await forceUpdateWidgetWithCurrentSettings();
-                                  showToast(ctx, "초기화되었습니다.");
-                                },
-                              ),
-                            ],
+
+                        _buildAppInfoItem(
+                          context: context,
+                          icon: Icons.face,
+                          title: "개발자 정보",
+                          subtitle: "만든 사람 소개",
+                          iconColor: primary,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DeveloperInfoPage(),
+                            ),
                           ),
                         ),
+
+                        _buildAppInfoItem(
+                          context: context,
+                          icon: Icons.feedback_outlined,
+                          title: "사용자 의견 보내기",
+                          subtitle: "버그 제보 및 기능 제안",
+                          iconColor: Colors.amber[700]!,
+                          onTap: () => _showFeedbackDialog(context),
+                        ),
+
+                        _buildAppInfoItem(
+                          context: context,
+                          icon: Icons.description_outlined,
+                          title: "오픈소스 라이선스",
+                          subtitle: "사용된 라이브러리 정보",
+                          iconColor: Colors.blueGrey,
+                          onTap: () => showLicensePage(
+                            context: context,
+                            applicationName: "KNUE All-in-One",
+                            applicationVersion: "5.8.0",
+                          ),
+                        ),
+
+                        _buildAppInfoItem(
+                          context: context,
+                          icon: Icons.refresh_rounded,
+                          title: "설정 초기화",
+                          subtitle: "앱 설정을 기본값으로 되돌리기",
+                          iconColor: Colors.redAccent,
+                          onTap: () async {
+                            await PreferencesService.clearAll();
+                            setState(() => _localTransparency = 0.0);
+                            await forceUpdateWidgetWithCurrentSettings();
+                            showToast(ctx, "초기화되었습니다.");
+                          },
+                        ),
+
+                        const SizedBox(height: 10),
+                        Center(
+                          child: Text(
+                            "버전 5.8.0 (Final)",
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 40),
                       ],
                     ),
                   ),
@@ -1586,10 +1304,212 @@ class _SettingsPageState extends State<SettingsPage> {
     ),
   );
 }
-// ... [나머지 코드는 동일하게 유지] ...
 
 // -----------------------------------------------------------------------------
-// UI 컴포넌트들
+// [NEW] 사용자 의견 보내기 - 팝업 Dialog 위젯
+// -----------------------------------------------------------------------------
+class FeedbackDialog extends StatefulWidget {
+  const FeedbackDialog({super.key});
+
+  @override
+  State<FeedbackDialog> createState() => _FeedbackDialogState();
+}
+
+class _FeedbackDialogState extends State<FeedbackDialog> {
+  final TextEditingController _feedbackController = TextEditingController();
+  bool _isAgreed = false;
+
+  @override
+  void dispose() {
+    _feedbackController.dispose();
+    super.dispose();
+  }
+
+  String? _encodeQueryParameters(Map<String, String> params) {
+    return params.entries
+        .map(
+          (e) =>
+              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+        )
+        .join('&');
+  }
+
+  Future<void> _sendFeedback() async {
+    if (_feedbackController.text.isEmpty || !_isAgreed) return;
+
+    const String developerEmail = 'knuemeal16486@gmail.com';
+    const String subject = '[KNUE Mate] 사용자 의견 및 제보';
+    final String body = _feedbackController.text;
+
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: developerEmail,
+      query: _encodeQueryParameters(<String, String>{
+        'subject': subject,
+        'body':
+            '내용을 적어주세요:\n$body\n\n----------------------------\n(앱 버전: 5.8.0)',
+      }),
+    );
+
+    try {
+      if (await canLaunchUrl(emailUri)) {
+        await launchUrl(emailUri);
+        if (mounted) Navigator.pop(context);
+      } else {
+        if (mounted) showToast(context, "기본 이메일 앱을 실행할 수 없습니다.");
+      }
+    } catch (e) {
+      if (mounted) showToast(context, "오류가 발생했습니다: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).primaryColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isButtonEnabled =
+        _feedbackController.text.isNotEmpty && _isAgreed;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      insetPadding: const EdgeInsets.all(20),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "사용자 의견 보내기",
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "KNUE Mate를 더 나은 앱으로 만들기 위해\n여러분의 소중한 의견을 들려주세요.",
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.5,
+                  color: isDark ? Colors.grey.shade300 : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                  ),
+                ),
+                child: TextField(
+                  controller: _feedbackController,
+                  maxLines: 6,
+                  onChanged: (text) => setState(() {}),
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                  decoration: InputDecoration(
+                    hintText: "불편했던 점, 개선할 점, 칭찬하고 싶은 점 등을 자유롭게 적어주세요.",
+                    hintStyle: TextStyle(
+                      color: isDark
+                          ? Colors.grey.shade500
+                          : Colors.grey.shade500,
+                      fontSize: 14,
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () => setState(() => _isAgreed = !_isAgreed),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: _isAgreed,
+                        activeColor: primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        onChanged: (value) =>
+                            setState(() => _isAgreed = value ?? false),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          text: "개인정보 수집 및 이용에 동의합니다. ",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.black87,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: "(필수)",
+                              style: TextStyle(
+                                color: primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: isButtonEnabled ? _sendFeedback : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primary,
+                    disabledBackgroundColor: isDark
+                        ? Colors.grey.shade800
+                        : Colors.grey.shade300,
+                    foregroundColor: Colors.white,
+                    disabledForegroundColor: Colors.grey.shade500,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    "이메일로 보내기",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// UI 컴포넌트들 (기존과 동일)
 // -----------------------------------------------------------------------------
 
 class _Header extends StatelessWidget {
@@ -1988,18 +1908,15 @@ class _MealDetailCardState extends State<_MealDetailCard> {
   Widget build(BuildContext context) {
     bool isStudentHallBreakfast =
         (widget.source == MealSource.b && widget.type == MealType.breakfast);
-
     final bool unavailable =
         widget.items.isEmpty ||
         widget.items.first.contains("없음") ||
         widget.items.first.contains("미운영") ||
         isStudentHallBreakfast;
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).primaryColor;
     final aiTextColor = isDark ? Colors.purpleAccent : Colors.deepPurple;
     final aiIconColor = isDark ? Colors.purpleAccent : Colors.purple;
-
     final boxBorder = isDark
         ? (widget.isToday
               ? Border.all(color: primary.withOpacity(0.5), width: 2)
@@ -2297,7 +2214,6 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     if (!widget.isToday) return "";
     String range = _getTimeRangeText();
     if (range == "미운영") return "";
-
     final now = DateTime.now();
     try {
       final times = range.split("~")[1].trim().split(":");
@@ -2318,28 +2234,33 @@ class _MealDetailCardState extends State<_MealDetailCard> {
   }
 }
 
+// -----------------------------------------------------------------------------
+// [UPDATED] DeveloperInfoPage (아이콘 색상 및 디자인 개선)
+// -----------------------------------------------------------------------------
 class DeveloperInfoPage extends StatelessWidget {
   const DeveloperInfoPage({super.key});
-
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).primaryColor;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: primary,
-        title: const Text(
+        centerTitle: Platform.isIOS ? false : null, // iOS일 경우에만 왼쪽 정렬 강제
+        title: Text(
           "개발자 정보",
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+            fontWeight: Platform.isIOS
+                ? FontWeight.w800
+                : FontWeight.bold, // iOS만 w800 적용
+            color: Colors.white,
+          ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
             const SizedBox(height: 40),
-            // [1] 메인 개발자 프로필 아이콘
             Container(
               width: 120,
               height: 120,
@@ -2351,8 +2272,6 @@ class DeveloperInfoPage extends StatelessWidget {
               child: Icon(Icons.person, size: 60, color: primary),
             ),
             const SizedBox(height: 20),
-
-            // [2] 메인 개발자 이름
             const Text(
               "Hwang",
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -2363,8 +2282,6 @@ class DeveloperInfoPage extends StatelessWidget {
               style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 30),
-
-            // [3] 메인 개발자 상세 정보 카드
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
@@ -2381,36 +2298,42 @@ class DeveloperInfoPage extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _buildInfoRow(context, Icons.school, "소속", "한국교원대학교 물리교육과"),
-                    const Divider(),
                     _buildInfoRow(
-                      context,
-                      Icons.code,
-                      "관심 분야",
-                      "Physical Computing, Embedded System , AI",
+                      context: context,
+                      icon: Icons.school,
+                      label: "소속",
+                      content: "한국교원대학교 물리교육과",
+                      color: Colors.blue, // 파란색 (지성)
                     ),
-                    const Divider(),
+                    const Divider(height: 24),
                     _buildInfoRow(
-                      context,
-                      Icons.email,
-                      "이메일",
-                      "knuemeal16486@gmail.com",
+                      context: context,
+                      icon: Icons.code,
+                      label: "관심 분야",
+                      content: "Physical Computing, Embedded System , AI",
+                      color: Colors.orange, // 주황색 (창의)
                     ),
-                    const Divider(),
+                    const Divider(height: 24),
                     _buildInfoRow(
-                      context,
-                      Icons.money,
-                      "후원",
-                      "고생한 개발자를 위해 커피 사주기\n신한 110-334-965296",
+                      context: context,
+                      icon: Icons.email,
+                      label: "이메일",
+                      content: "knuemeal16486@gmail.com",
+                      color: Colors.green, // 초록색 (소통)
+                    ),
+                    const Divider(height: 24),
+                    _buildInfoRow(
+                      context: context,
+                      icon: Icons.money,
+                      label: "후원",
+                      content: "고생한 개발자를 위해 커피 사주기\n신한 110-334-965296",
+                      color: Colors.pink, // 분홍색 (감사)
                     ),
                   ],
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
-
-            // [4] Special Help 카드 (추가됨)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
@@ -2430,17 +2353,15 @@ class DeveloperInfoPage extends StatelessWidget {
                   ],
                 ),
                 child: _buildInfoRow(
-                  context,
-                  Icons.handshake_rounded, // 협력을 의미하는 아이콘
-                  "Special Help",
-                  "Hyunsu, Oh\nSNU Nuclear Engineering",
+                  context: context,
+                  icon: Icons.handshake_rounded,
+                  label: "Special Help",
+                  content: "Hyunsu, Oh\nSNU Nuclear Engineering",
+                  color: Colors.deepPurple, // 보라색 (존중)
                 ),
               ),
             ),
-
             const SizedBox(height: 40),
-
-            // [5] Copyright
             Text(
               "© 2026 KNUE All-in-One",
               style: TextStyle(color: isDark ? Colors.grey : Colors.black54),
@@ -2452,16 +2373,25 @@ class DeveloperInfoPage extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(
-    BuildContext context,
-    IconData icon,
-    String label,
-    String content,
-  ) {
+  // [DESIGN FIX] 아이콘에 색상 배경을 추가한 새로운 로우 빌더
+  Widget _buildInfoRow({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required String content,
+    required Color color,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 22, color: Theme.of(context).primaryColor),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, size: 24, color: color),
+        ),
         const SizedBox(width: 16),
         Expanded(
           child: Column(
@@ -2476,7 +2406,14 @@ class DeveloperInfoPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(content, style: const TextStyle(fontSize: 16)),
+              Text(
+                content,
+                style: const TextStyle(
+                  fontSize: 16,
+                  height: 1.3,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
           ),
         ),
@@ -2557,7 +2494,6 @@ class _CalendarGrid extends StatelessWidget {
   final ValueChanged<DateTime> onDateSelected;
   final Color primaryColor;
   final MealSource source;
-
   const _CalendarGrid({
     required this.focusedMonth,
     required this.selectedDate,
@@ -2565,7 +2501,6 @@ class _CalendarGrid extends StatelessWidget {
     required this.primaryColor,
     required this.source,
   });
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -2579,7 +2514,6 @@ class _CalendarGrid extends StatelessWidget {
       1,
     ).weekday;
     final offset = firstDayWeekday % 7;
-
     DateTime now = DateTime.now();
     DateTime thisWeekMonday = DateTime(
       now.year,
@@ -2599,35 +2533,28 @@ class _CalendarGrid extends StatelessWidget {
         if (index < offset) return const SizedBox();
         final day = index - offset + 1;
         final date = DateTime(focusedMonth.year, focusedMonth.month, day);
-
         bool isEnabled = true;
         if (source == MealSource.b) {
           if (date.weekday == DateTime.saturday ||
-              date.weekday == DateTime.sunday) {
+              date.weekday == DateTime.sunday)
             isEnabled = false;
-          }
           DateTime target = DateTime(date.year, date.month, date.day);
-          if (target.isBefore(thisWeekMonday) ||
-              target.isAfter(thisWeekFriday)) {
+          if (target.isBefore(thisWeekMonday) || target.isAfter(thisWeekFriday))
             isEnabled = false;
-          }
         }
-
         final isSel = DateUtils.isSameDay(date, selectedDate);
         final isToday = DateUtils.isSameDay(date, DateTime.now());
-
         Color textColor;
-        if (!isEnabled) {
+        if (!isEnabled)
           textColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
-        } else if (isSel) {
+        else if (isSel)
           textColor = Colors.white;
-        } else if (date.weekday == DateTime.sunday) {
+        else if (date.weekday == DateTime.sunday)
           textColor = Colors.redAccent;
-        } else if (date.weekday == DateTime.saturday) {
+        else if (date.weekday == DateTime.saturday)
           textColor = Colors.blueAccent;
-        } else {
+        else
           textColor = isDark ? Colors.white : Colors.black87;
-        }
 
         return GestureDetector(
           onTap: isEnabled ? () => onDateSelected(date) : null,
