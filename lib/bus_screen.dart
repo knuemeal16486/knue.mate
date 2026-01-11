@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io'; // [필수] Platform 감지
 import 'package:flutter/material.dart';
 import 'constants.dart';
 import 'bus_model.dart';
@@ -29,276 +31,78 @@ class _BusAppScreenState extends State<BusAppScreen>
     "513": {
       "outgoing": {
         "weekday": [
-          "06:20",
-          "07:15",
-          "07:30",
-          "08:50",
-          "10:05",
-          "10:50",
-          "11:45",
-          "12:39",
-          "13:33",
-          "14:27",
-          "15:35",
-          "16:30",
-          "17:23",
-          "18:16",
-          "19:34",
-          "20:27",
-          "21:07",
-          "22:00",
-          "22:40",
+          "06:20", "07:15", "07:30", "08:50", "10:05", "10:50", "11:45", "12:39",
+          "13:33", "14:27", "15:35", "16:30", "17:23", "18:16", "19:34", "20:27",
+          "21:07", "22:00", "22:40",
         ],
         "holiday": [
-          "06:20",
-          "07:15",
-          "07:30",
-          "08:50",
-          "10:05",
-          "10:50",
-          "11:45",
-          "12:39",
-          "13:33",
-          "14:27",
-          "15:35",
-          "16:30",
-          "17:23",
-          "18:16",
-          "19:34",
-          "20:27",
-          "21:07",
-          "22:00",
-          "22:40",
+          "06:20", "07:15", "07:30", "08:50", "10:05", "10:50", "11:45", "12:39",
+          "13:33", "14:27", "15:35", "16:30", "17:23", "18:16", "19:34", "20:27",
+          "21:07", "22:00", "22:40",
         ],
       },
       "incoming": {
         "weekday": [
-          "06:05",
-          "07:00",
-          "08:10",
-          "09:20",
-          "10:15",
-          "11:09",
-          "12:03",
-          "12:57",
-          "14:05",
-          "15:00",
-          "15:53",
-          "16:46",
-          "17:39",
-          "18:32",
-          "19:37",
-          "20:30",
-          "21:20",
-          "22:10",
+          "06:05", "07:00", "08:10", "09:20", "10:15", "11:09", "12:03", "12:57",
+          "14:05", "15:00", "15:53", "16:46", "17:39", "18:32", "19:37", "20:30",
+          "21:20", "22:10",
         ],
         "holiday": [
-          "06:05",
-          "07:00",
-          "08:10",
-          "09:20",
-          "10:15",
-          "11:09",
-          "12:03",
-          "12:57",
-          "14:05",
-          "15:00",
-          "15:53",
-          "16:46",
-          "17:39",
-          "18:32",
-          "19:37",
-          "20:30",
-          "21:20",
-          "22:10",
+          "06:05", "07:00", "08:10", "09:20", "10:15", "11:09", "12:03", "12:57",
+          "14:05", "15:00", "15:53", "16:46", "17:39", "18:32", "19:37", "20:30",
+          "21:20", "22:10",
         ],
       },
     },
     "514": {
       "outgoing": {
         "weekday": [
-          "05:30",
-          "06:10",
-          "06:55",
-          "07:50",
-          "09:25",
-          "10:30",
-          "11:17",
-          "12:12",
-          "13:06",
-          "14:00",
-          "15:02",
-          "16:03",
-          "16:56",
-          "17:49",
-          "19:07",
-          "20:00",
-          "20:40",
-          "21:34",
-          "22:27",
+          "05:30", "06:10", "06:55", "07:50", "09:25", "10:30", "11:17", "12:12",
+          "13:06", "14:00", "15:02", "16:03", "16:56", "17:49", "19:07", "20:00",
+          "20:40", "21:34", "22:27",
         ],
         "holiday": [
-          "05:30",
-          "06:10",
-          "06:55",
-          "07:50",
-          "09:25",
-          "10:30",
-          "11:17",
-          "12:12",
-          "13:06",
-          "14:00",
-          "15:02",
-          "16:03",
-          "16:56",
-          "17:49",
-          "19:07",
-          "20:00",
-          "20:40",
-          "21:34",
-          "22:27",
+          "05:30", "06:10", "06:55", "07:50", "09:25", "10:30", "11:17", "12:12",
+          "13:06", "14:00", "15:02", "16:03", "16:56", "17:49", "19:07", "20:00",
+          "20:40", "21:34", "22:27",
         ],
       },
       "incoming": {
         "weekday": [
-          "05:30",
-          "06:25",
-          "07:35",
-          "08:35",
-          "09:47",
-          "10:42",
-          "11:36",
-          "12:30",
-          "13:32",
-          "14:33",
-          "15:26",
-          "16:19",
-          "17:12",
-          "18:00",
-          "19:10",
-          "20:04",
-          "20:57",
-          "21:50",
-          "22:30",
+          "05:30", "06:25", "07:35", "08:35", "09:47", "10:42", "11:36", "12:30",
+          "13:32", "14:33", "15:26", "16:19", "17:12", "18:00", "19:10", "20:04",
+          "20:57", "21:50", "22:30",
         ],
         "holiday": [
-          "05:30",
-          "06:25",
-          "07:35",
-          "08:35",
-          "09:47",
-          "10:42",
-          "11:36",
-          "12:30",
-          "13:32",
-          "14:33",
-          "15:26",
-          "16:19",
-          "17:12",
-          "18:00",
-          "19:10",
-          "20:04",
-          "20:57",
-          "21:50",
-          "22:30",
+          "05:30", "06:25", "07:35", "08:35", "09:47", "10:42", "11:36", "12:30",
+          "13:32", "14:33", "15:26", "16:19", "17:12", "18:00", "19:10", "20:04",
+          "20:57", "21:50", "22:30",
         ],
       },
     },
     "518": {
       "outgoing": {
         "weekday": [
-          "05:40",
-          "06:30",
-          "07:05",
-          "08:05",
-          "08:55",
-          "09:55",
-          "11:25",
-          "12:15",
-          "12:55",
-          "13:45",
-          "14:25",
-          "15:15",
-          "16:25",
-          "17:15",
-          "18:00",
-          "19:05",
-          "19:50",
-          "20:35",
-          "21:20",
-          "22:05",
-          "22:50",
+          "05:40", "06:30", "07:05", "08:05", "08:55", "09:55", "11:25", "12:15",
+          "12:55", "13:45", "14:25", "15:15", "16:25", "17:15", "18:00", "19:05",
+          "19:50", "20:35", "21:20", "22:05", "22:50",
         ],
         "holiday": [
-          "05:40",
-          "06:30",
-          "07:05",
-          "08:05",
-          "08:55",
-          "09:55",
-          "11:25",
-          "12:15",
-          "12:55",
-          "13:45",
-          "14:25",
-          "15:15",
-          "16:25",
-          "17:15",
-          "18:00",
-          "19:05",
-          "19:50",
-          "20:35",
-          "21:20",
-          "22:05",
-          "22:50",
+          "05:40", "06:30", "07:05", "08:05", "08:55", "09:55", "11:25", "12:15",
+          "12:55", "13:45", "14:25", "15:15", "16:25", "17:15", "18:00", "19:05",
+          "19:50", "20:35", "21:20", "22:05", "22:50",
         ],
       },
       "incoming": {
         "weekday": [
-          "05:40",
-          "06:15",
-          "07:05",
-          "07:50",
-          "08:50",
-          "09:40",
-          "10:30",
-          "12:00",
-          "12:50",
-          "13:30",
-          "14:20",
-          "15:00",
-          "15:50",
-          "17:00",
-          "18:00",
-          "18:45",
-          "19:40",
-          "20:25",
-          "21:10",
-          "21:55",
-          "22:40",
+          "05:40", "06:15", "07:05", "07:50", "08:50", "09:40", "10:30", "12:00",
+          "12:50", "13:30", "14:20", "15:00", "15:50", "17:00", "18:00", "18:45",
+          "19:40", "20:25", "21:10", "21:55", "22:40",
         ],
         "holiday": [
-          "05:40",
-          "06:15",
-          "07:05",
-          "07:50",
-          "08:50",
-          "09:40",
-          "10:30",
-          "12:00",
-          "12:50",
-          "13:30",
-          "14:20",
-          "15:00",
-          "15:50",
-          "17:00",
-          "18:00",
-          "18:45",
-          "19:40",
-          "20:25",
-          "21:10",
-          "21:55",
-          "22:40",
+          "05:40", "06:15", "07:05", "07:50", "08:50", "09:40", "10:30", "12:00",
+          "12:50", "13:30", "14:20", "15:00", "15:50", "17:00", "18:00", "18:45",
+          "19:40", "20:25", "21:10", "21:55", "22:40",
         ],
       },
     },
@@ -313,7 +117,6 @@ class _BusAppScreenState extends State<BusAppScreen>
   @override
   void initState() {
     super.initState();
-    // [수정] 탭 개수 2개로 변경 (스마트 경로 제거)
     _tabController = TabController(length: 2, vsync: this);
     final weekday = DateTime.now().weekday;
     _isWeekend = (weekday == 6 || weekday == 7);
@@ -373,7 +176,7 @@ class _BusAppScreenState extends State<BusAppScreen>
 
   String _getTerminusName() {
     if (_selectedBus == "518") return "보건의료행정타운 출발";
-    if (_selectedBus == "502") return "청주역 출발"; // 추가
+    if (_selectedBus == "502") return "청주역 출발";
     return "동부종점 출발";
   }
 
@@ -385,10 +188,12 @@ class _BusAppScreenState extends State<BusAppScreen>
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
           appBar: AppBar(
-            title: const Text(
+            // [수정] iOS 스타일 적용 (왼쪽 정렬, ExtraBold)
+            centerTitle: Platform.isIOS ? false : null,
+            title: Text(
               "청람버스",
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: Platform.isIOS ? FontWeight.w800 : FontWeight.bold,
                 color: Colors.white,
               ),
             ),
@@ -419,37 +224,40 @@ class _BusAppScreenState extends State<BusAppScreen>
                           ),
                           const SizedBox(height: 20),
 
-                          // 1. 청람밥상 이동 버튼
+                          // [수정] 색상 아이콘 적용 (청람밥상 - Orange)
                           _AppSwitchOption(
                             icon: Icons.restaurant_menu,
                             label: "청람밥상",
                             isSelected: false,
+                            color: Colors.orange,
                             onTap: () {
                               Navigator.pop(dialogContext);
-                              Navigator.pop(context); // 버스 앱 종료 -> 밥상 앱으로
+                              Navigator.pop(context);
                             },
                           ),
                           const SizedBox(height: 12),
 
-                          // 2. 청람버스 (현재 화면)
+                          // [수정] 색상 아이콘 적용 (청람버스 - Blue)
                           _AppSwitchOption(
                             icon: Icons.directions_bus,
                             label: "청람버스",
-                            isSelected: true, // 현재 선택됨
+                            isSelected: true,
+                            color: Colors.blue,
                             onTap: () {
                               Navigator.pop(dialogContext);
-                              _refreshData(); // 새로고침 효과
+                              _refreshData();
                             },
                           ),
                           const SizedBox(height: 12),
 
-                          // 3. 캠퍼스런 이동 버튼
+                          // [수정] 색상 아이콘 적용 (캠퍼스런 - Green)
                           _AppSwitchOption(
                             icon: Icons.directions_run,
                             label: "캠퍼스런",
                             isSelected: false,
+                            color: Colors.green,
                             onTap: () {
-                              Navigator.pop(dialogContext); // 다이얼로그 닫기
+                              Navigator.pop(dialogContext);
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -471,7 +279,6 @@ class _BusAppScreenState extends State<BusAppScreen>
                 icon: const Icon(Icons.refresh),
                 tooltip: "새로고침",
               ),
-              // 추가: 예상 도착 시간 정보 버튼
               IconButton(
                 onPressed: () => _showArrivalInfoDialog(context),
                 icon: const Icon(Icons.info_outline),
@@ -487,7 +294,6 @@ class _BusAppScreenState extends State<BusAppScreen>
               tabs: const [
                 Tab(text: "버스 시간표"),
                 Tab(text: "실시간 위치"),
-                // [수정] 스마트 경로 탭 제거됨
               ],
             ),
           ),
@@ -496,7 +302,6 @@ class _BusAppScreenState extends State<BusAppScreen>
             children: [
               _buildTimetableTab(isDark, color),
               _buildRealtimeTab(isDark),
-              // [수정] 스마트 경로 탭 뷰 제거됨
             ],
           ),
         );
@@ -590,7 +395,6 @@ class _BusAppScreenState extends State<BusAppScreen>
                     ),
                   ),
 
-                // 추가: 도착 시간 안내
                 _buildArrivalInfoSection(isDark),
               ],
             ),
@@ -600,7 +404,6 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
-  // 도착 시간 안내 섹션 (추가된 기능)
   Widget _buildArrivalInfoSection(bool isDark) {
     return Container(
       margin: const EdgeInsets.all(16),
@@ -647,7 +450,6 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
-  // 도착 시간 정보 다이얼로그 (추가된 기능)
   void _showArrivalInfoDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -703,7 +505,6 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
-  // 섹션 헤더 위젯
   Widget _buildSectionHeader(String title, bool isDark) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
@@ -1152,54 +953,65 @@ class _BusAppScreenState extends State<BusAppScreen>
   }
 }
 
+// [수정] _AppSwitchOption: 색상 지원 및 디자인 개선
 class _AppSwitchOption extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isSelected;
+  final Color color; // 색상 파라미터 추가
   final VoidCallback onTap;
+
   const _AppSwitchOption({
     required this.icon,
     required this.label,
     required this.isSelected,
+    required this.color, // 필수 인자로 변경
     required this.onTap,
   });
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final color = isSelected
-        ? (isDark ? Colors.white : Theme.of(context).primaryColor)
-        : Colors.grey;
+    final activeColor = color; // 해당 앱의 고유 색상
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12), // 패딩 조정
         decoration: BoxDecoration(
           color: isSelected
-              ? (isDark
-                    ? Colors.white24
-                    : Theme.of(context).primaryColor.withOpacity(0.1))
+              ? activeColor.withOpacity(0.1) // 선택 시 연한 배경
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected
-                ? (isDark ? Colors.white54 : Theme.of(context).primaryColor)
-                : Colors.grey.withOpacity(0.3),
+                ? activeColor
+                : Colors.grey.withOpacity(0.2),
+            width: isSelected ? 2 : 1,
           ),
         ),
         child: Row(
           children: [
-            Icon(icon, color: color),
+            // 아이콘 배경 박스 추가
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: activeColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: activeColor, size: 24),
+            ),
             const SizedBox(width: 16),
             Text(
               label,
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: isSelected ? FontWeight.w900 : FontWeight.normal,
-                color: color,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isDark ? Colors.white : Colors.black87,
               ),
             ),
             const Spacer(),
-            if (isSelected) Icon(Icons.check_circle, color: color),
+            if (isSelected) Icon(Icons.check_circle_rounded, color: activeColor),
           ],
         ),
       ),
