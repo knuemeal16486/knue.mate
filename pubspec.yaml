@@ -62,13 +62,13 @@ dev_dependencies:
   
 flutter_native_splash:
   color: "#FFFFFF"            # 배경색 (흰색은 #FFFFFF, 검정은 #000000)
-  image: "assets/icon.png"    # 가운데 띄울 이미지 경로
-  branding: "assets/icon.png" # (선택) 로고 아래에 브랜드 이미지 추가하고 싶을 때
+  image: "assets/icons/knuesquare.png"    # 가운데 띄울 이미지 경로
+  branding: "assets/icons/knuesquare.png" # (선택) 로고 아래에 브랜드 이미지 추가하고 싶을 때
   color_dark: "#000000"       # (선택) 다크모드일 때 배경색
-  image_dark: "assets/icon.png" # (선택) 다크모드일 때 이미지
+  image_dark: "assets/icons/knuesquare.png" # (선택) 다크모드일 때 이미지
   
   android_12:                 # 안드로이드 12 이상을 위한 설정
-    image: "assets/icon.png"
+    image: "assets/icons/knuesquare.png"
     color: "#FFFFFF"
 flutter_launcher_icons:
   android: "launcher_icon"
