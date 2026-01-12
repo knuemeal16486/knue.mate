@@ -1,10 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#FFFFFF" />
     <corners android:radius="16dp" />
-    <!-- 배경색은 코드에서 동적으로 설정되므로 여기서는 투명하게 -->
-    <solid android:color="#FFFFFFFF" />
-    <stroke
-        android:width="1dp"
-        android:color="#30000000" />
 </shape>
