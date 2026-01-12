@@ -175,6 +175,51 @@ class _TodayMealPageState extends State<TodayMealPage> {
     fetchMeals();
   }
 
+  // [New] 식당 소스에 따라 알림 스케줄링 (Dorm vs Student)
+  Future<void> _scheduleAlarmsBySource(MealSource source) async {
+    final now = DateTime.now();
+
+    // 알림 등록 헬퍼 함수
+    Future<void> schedule(int id, int h, int m, String title, String body) async {
+      await NotificationService().scheduleAlarm(
+        id: id,
+        title: title,
+        body: body,
+        scheduledTime: DateTime(now.year, now.month, now.day, h, m),
+      );
+    }
+
+    await NotificationService().cancelAll(); // 기존 알림 제거
+
+    if (source == MealSource.a) {
+      // === 기숙사 식당 시간표 ===
+      // 아침: 07:30 ~ 09:00
+      await schedule(1, 7, 30, "기숙사 아침 식사 ☀️", "아침 식사가 시작되었습니다. 든든하게 챙겨 드세요!");
+      await schedule(2, 8, 50, "기숙사 아침 마감 임박 ⏰", "10분 뒤 배식이 종료됩니다.");
+
+      // 점심: 11:30 ~ 13:30
+      await schedule(3, 11, 30, "기숙사 점심 식사 🍽️", "맛있는 점심 시간입니다!");
+      await schedule(4, 13, 20, "기숙사 점심 마감 임박 🏃‍♂️", "10분 뒤 점심 식사가 종료됩니다.");
+
+      // 저녁: 17:30 ~ 19:00
+      await schedule(5, 17, 30, "기숙사 저녁 식사 🌙", "저녁 식사가 준비되었습니다.");
+      await schedule(6, 18, 50, "기숙사 저녁 마감 임박 ⚠️", "10분 뒤 저녁 배식이 끝납니다.");
+      
+    } else {
+      // === 학생회관 식당 시간표 ===
+      // 아침: 미운영 (알림 없음)
+
+      // 점심: 11:00 ~ 14:00
+      await schedule(3, 11, 00, "학생회관 점심 시작 🍽️", "학생회관 점심 식사가 시작되었습니다!");
+      await schedule(4, 13, 50, "학생회관 점심 마감 임박 🏃‍♂️", "10분 뒤 식당이 문을 닫습니다.");
+
+      // 저녁: 17:00 ~ 18:30
+      await schedule(5, 17, 00, "학생회관 저녁 시작 🌙", "학생회관 저녁 식사 시간입니다.");
+      await schedule(6, 18, 20, "학생회관 저녁 마감 임박 ⚠️", "10분 뒤 저녁 운영이 종료됩니다.");
+    }
+  }
+
+  // [Updated] 알림 토글 핸들러
   Future<void> _handleAlarmToggle() async {
     if (!Platform.isAndroid && !Platform.isIOS) {
       showToast(context, "모바일에서만 가능합니다.");
@@ -187,35 +232,28 @@ class _TodayMealPageState extends State<TodayMealPage> {
 
     if (newState) {
       await NotificationService().requestPermissions();
-      final now = DateTime.now();
-
-      Future<void> schedule(
-        int id,
-        int h,
-        int m,
-        String title,
-        String body,
-      ) async {
-        await NotificationService().scheduleAlarm(
-          id: id,
-          title: title,
-          body: body,
-          scheduledTime: DateTime(now.year, now.month, now.day, h, m),
-        );
-      }
-
-      await schedule(1, 7, 30, "좋은 아침이에요! ☀️", "아침 식사가 준비됐어요. 든든하게 먹고 하루를 시작해요!");
-      await schedule(2, 8, 50, "아침 식사 마감 10분 전 ⏰", "곧 배식구가 닫혀요! 아직 식사 전이라면 서두르세요.");
-      await schedule(3, 11, 30, "점심 시간이에요! 🍽️", "오전 수업 고생 많으셨어요. 맛있는 밥 먹고 에너지 충전해요!");
-      await schedule(4, 13, 20, "점심 마감 10분 전 🏃‍♂️", "식당 문 닫기 직전이에요! 놓치지 않게 달려가세요.");
-      await schedule(5, 17, 30, "저녁 드실 시간입니다 🌙", "오늘 하루도 수고했어요. 따뜻한 저녁 드시러 오세요!");
-      await schedule(6, 18, 50, "저녁 마감 10분 전 ⚠️", "오늘의 마지막 식사가 곧 종료돼요. 아직 못 드셨나요?");
-
-      showToast(context, "식사 시작 및 마감 임박 알림이 설정되었습니다.");
+      await _scheduleAlarmsBySource(_source);
+      final restaurantName = _source == MealSource.a ? "기숙사" : "학생회관";
+      showToast(context, "$restaurantName 식당 시간으로 알림이 설정되었습니다.");
     } else {
       await NotificationService().cancelAll();
       showToast(context, "알림이 해제되었습니다.");
     }
+  }
+
+  // [New] 식당 탭 변경 시 알림 자동 업데이트
+  Future<void> _onSourceChangedWithAlarmUpdate(MealSource s) async {
+    setState(() => _source = s);
+    PreferencesService.saveMealSource(s);
+    
+    // 알림이 켜져 있다면, 변경된 식당 시간으로 재설정
+    if (_alarmOn) {
+      await _scheduleAlarmsBySource(s);
+      final restaurantName = s == MealSource.a ? "기숙사" : "학생회관";
+      showToast(context, "$restaurantName 시간으로 알림이 업데이트되었습니다.");
+    }
+    
+    await fetchMeals();
   }
 
   @override
@@ -230,13 +268,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
         onPrev: _loading ? null : () => _changeDate(-1),
         onNext: _loading ? null : () => _changeDate(1),
         source: _source,
-        onSourceChanged: _loading
-            ? null
-            : (s) async {
-                setState(() => _source = s);
-                PreferencesService.saveMealSource(s);
-                await fetchMeals();
-              },
+        onSourceChanged: _loading ? null : _onSourceChangedWithAlarmUpdate,
       ),
       content: SingleChildScrollView(
         child: Column(
