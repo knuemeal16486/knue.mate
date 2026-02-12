@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io'; // [필수] Platform 감지
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'constants.dart';
 import 'bus_model.dart';
@@ -9,24 +9,31 @@ import 'campus_run_screen.dart';
 
 class BusAppScreen extends StatefulWidget {
   const BusAppScreen({super.key});
+
   @override
   State<BusAppScreen> createState() => _BusAppScreenState();
 }
 
 class _BusAppScreenState extends State<BusAppScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver { // [수정] Observer 추가
+  
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
 
   final BusService _busService = BusService();
-  Future<List<BusSummary>>? _realtimeBusFuture;
+  
+  // [수정] FutureBuilder 대신 상태 변수 사용 (깜빡임 없는 갱신을 위해)
+  List<BusSummary> _realtimeBusList = [];
+  bool _isLoading = true;
+  bool _hasError = false;
+  Timer? _timer; // [수정] 타이머 변수 추가
 
   String _selectedBus = "513";
   bool _isWeekend = false;
   bool _isToSchool = false;
   int _selectedStopOffset = 0;
 
-  // [시간표 데이터]
+  // [시간표 데이터 유지]
   final Map<String, Map<String, Map<String, List<String>>>> _busSchedules = {
     "513": {
       "outgoing": {
@@ -117,26 +124,79 @@ class _BusAppScreenState extends State<BusAppScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // [수정] 옵저버 등록
+    
     _tabController = TabController(length: 2, vsync: this);
     final weekday = DateTime.now().weekday;
     _isWeekend = (weekday == 6 || weekday == 7);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshData();
+    // 초기 데이터 로드 및 타이머 시작
+    _fetchBusData(); 
+    _startAutoRefresh(); 
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // [수정] 옵저버 해제
+    _timer?.cancel(); // [수정] 타이머 해제
+    _tabController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // [수정] 앱 생명주기 관리: 백그라운드 시 타이머 정지
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _fetchBusData(isQuietRefetch: true);
+      _startAutoRefresh();
+    } else if (state == AppLifecycleState.paused) {
+      _timer?.cancel();
+    }
+  }
+
+  // [수정] 자동 새로고침 타이머 시작
+  void _startAutoRefresh() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 15), (timer) {
+      if (mounted) {
+        _fetchBusData(isQuietRefetch: true); // 로딩바 없이 갱신
+      }
     });
   }
 
-  void _refreshData() {
-    if (!mounted) return;
+  // [수정] 버스 데이터 가져오기 (Seamless Update 지원)
+  Future<void> _fetchBusData({bool isQuietRefetch = false}) async {
+    if (!isQuietRefetch) {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+    }
 
-    setState(() {
-      _realtimeBusFuture = _busService
-          .fetchAllBuses()
-          .then((buses) => buses)
-          .catchError((error) => <BusSummary>[]);
-
-      showToast(context, "버스 정보를 업데이트했습니다.");
-    });
+    try {
+      final buses = await _busService.fetchAllBuses(); // Service 메서드 호출
+      if (mounted) {
+        setState(() {
+          _realtimeBusList = buses;
+          _isLoading = false;
+          _hasError = false;
+        });
+        
+        // 수동 새로고침일 때만 토스트 메시지
+        if (!isQuietRefetch) {
+          showToast(context, "버스 정보를 업데이트했습니다.");
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+        debugPrint("Bus Fetch Error: $e");
+      }
+    }
   }
 
   void _scrollToNextBus(int index) {
@@ -188,7 +248,6 @@ class _BusAppScreenState extends State<BusAppScreen>
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
           appBar: AppBar(
-            // [수정] iOS 스타일 적용 (왼쪽 정렬, ExtraBold)
             centerTitle: Platform.isIOS ? false : null,
             title: Text(
               "청람버스",
@@ -223,8 +282,6 @@ class _BusAppScreenState extends State<BusAppScreen>
                             ),
                           ),
                           const SizedBox(height: 20),
-
-                          // [수정] 색상 아이콘 적용 (청람밥상 - Orange)
                           _AppSwitchOption(
                             icon: Icons.restaurant_menu,
                             label: "청람밥상",
@@ -236,8 +293,6 @@ class _BusAppScreenState extends State<BusAppScreen>
                             },
                           ),
                           const SizedBox(height: 12),
-
-                          // [수정] 색상 아이콘 적용 (청람버스 - Blue)
                           _AppSwitchOption(
                             icon: Icons.directions_bus,
                             label: "청람버스",
@@ -245,12 +300,10 @@ class _BusAppScreenState extends State<BusAppScreen>
                             color: Colors.blue,
                             onTap: () {
                               Navigator.pop(dialogContext);
-                              _refreshData();
+                              _fetchBusData();
                             },
                           ),
                           const SizedBox(height: 12),
-
-                          // [수정] 색상 아이콘 적용 (캠퍼스런 - Green)
                           _AppSwitchOption(
                             icon: Icons.directions_run,
                             label: "캠퍼스런",
@@ -275,7 +328,7 @@ class _BusAppScreenState extends State<BusAppScreen>
             ),
             actions: [
               IconButton(
-                onPressed: _refreshData,
+                onPressed: () => _fetchBusData(), // [수정] 수동 새로고침 연결
                 icon: const Icon(Icons.refresh),
                 tooltip: "새로고침",
               ),
@@ -309,97 +362,93 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
-  // 실시간 탭
+  // [수정] 실시간 탭 - FutureBuilder 대신 상태 변수 기반 렌더링
   Widget _buildRealtimeTab(bool isDark) {
     return Container(
       color: isDark ? Colors.black12 : const Color(0xFFF9FAFB),
-      child: FutureBuilder<List<BusSummary>>(
-        future: _realtimeBusFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "데이터 로드 실패\n(네트워크 확인)",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _refreshData,
-                    child: const Text("다시 시도"),
-                  ),
-                ],
-              ),
-            );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.directions_bus_outlined,
-                    size: 48,
-                    color: Colors.grey,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "현재 운행 중인 버스가 없습니다.",
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _refreshData,
-                    child: const Text("새로고침"),
-                  ),
-                ],
-              ),
-            );
-          }
+      child: _buildRealtimeContent(isDark),
+    );
+  }
 
-          final buses = snapshot.data!;
-          final directBuses = buses.where((b) => b.isDirect).toList();
-          final tapyeonBuses = buses.where((b) => !b.isDirect).toList();
+  Widget _buildRealtimeContent(bool isDark) {
+    // 1. 초기 로딩 중
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-          return RefreshIndicator(
-            onRefresh: () async => _refreshData(),
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              children: [
-                if (directBuses.isNotEmpty) ...[
-                  _buildSectionHeader("교원대 직행", isDark),
-                  ...directBuses.map((b) => BusCard(bus: b)),
-                  const SizedBox(height: 20),
-                ],
-
-                if (tapyeonBuses.isNotEmpty) ...[
-                  _buildSectionHeader("탑연삼거리 경유", isDark),
-                  ...tapyeonBuses.map((b) => BusCard(bus: b)),
-                  const SizedBox(height: 20),
-                ],
-
-                if (directBuses.isEmpty && tapyeonBuses.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(
-                      child: Text(
-                        "운행중인 버스가 없습니다.",
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ),
-                  ),
-
-                _buildArrivalInfoSection(isDark),
-              ],
+    // 2. 에러 발생 시
+    if (_hasError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              "데이터 로드 실패\n(네트워크 확인)",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
             ),
-          );
-        },
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _fetchBusData(),
+              child: const Text("다시 시도"),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. 데이터 없음
+    if (_realtimeBusList.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.directions_bus_outlined,
+              size: 48,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              "현재 운행 중인 버스가 없습니다.",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _fetchBusData(),
+              child: const Text("새로고침"),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 4. 버스 목록 표시
+    final directBuses = _realtimeBusList.where((b) => b.isDirect).toList();
+    final tapyeonBuses = _realtimeBusList.where((b) => !b.isDirect).toList();
+
+    return RefreshIndicator(
+      onRefresh: () async => _fetchBusData(),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(), // 내용이 적어도 당기기 가능하게 설정
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        children: [
+          if (directBuses.isNotEmpty) ...[
+            _buildSectionHeader("교원대 직행", isDark),
+            ...directBuses.map((b) => BusCard(bus: b)),
+            const SizedBox(height: 20),
+          ],
+
+          if (tapyeonBuses.isNotEmpty) ...[
+            _buildSectionHeader("탑연삼거리 경유", isDark),
+            ...tapyeonBuses.map((b) => BusCard(bus: b)),
+            const SizedBox(height: 20),
+          ],
+
+          _buildArrivalInfoSection(isDark),
+        ],
       ),
     );
   }
@@ -529,7 +578,7 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
-  // 시간표 탭
+  // 시간표 탭 (기존 코드 그대로 유지)
   Widget _buildTimetableTab(bool isDark, Color primary) {
     final directionKey = _isToSchool ? "incoming" : "outgoing";
     final dayKey = _isWeekend ? "holiday" : "weekday";
@@ -704,15 +753,15 @@ class _BusAppScreenState extends State<BusAppScreen>
                             color: isSelected
                                 ? primary
                                 : (isDark
-                                      ? Colors.grey.shade800
-                                      : Colors.white),
+                                    ? Colors.grey.shade800
+                                    : Colors.white),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: isSelected
                                   ? primary
                                   : (isDark
-                                        ? Colors.grey.shade700
-                                        : Colors.grey.shade400),
+                                      ? Colors.grey.shade700
+                                      : Colors.grey.shade400),
                             ),
                           ),
                           child: Text(
@@ -722,8 +771,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                               color: isSelected
                                   ? Colors.white
                                   : (isDark
-                                        ? Colors.grey.shade400
-                                        : Colors.grey.shade700),
+                                      ? Colors.grey.shade400
+                                      : Colors.grey.shade700),
                             ),
                           ),
                         ),
@@ -823,10 +872,10 @@ class _BusAppScreenState extends State<BusAppScreen>
                           color: isNext
                               ? (isDark ? Colors.white : primary)
                               : (passed
-                                    ? Colors.grey
-                                    : (isDark
-                                          ? Colors.white70
-                                          : Colors.black54)),
+                                  ? Colors.grey
+                                  : (isDark
+                                      ? Colors.white70
+                                      : Colors.black54)),
                           size: isNext ? 26 : 20,
                         ),
                         const SizedBox(width: 12),
@@ -934,8 +983,8 @@ class _BusAppScreenState extends State<BusAppScreen>
             color: isSelected
                 ? primary
                 : (isDark
-                      ? Colors.grey.shade600
-                      : Colors.grey.withOpacity(0.5)),
+                    ? Colors.grey.shade600
+                    : Colors.grey.withOpacity(0.5)),
           ),
         ),
         child: Text(
@@ -953,34 +1002,34 @@ class _BusAppScreenState extends State<BusAppScreen>
   }
 }
 
-// [수정] _AppSwitchOption: 색상 지원 및 디자인 개선
+// _AppSwitchOption 클래스 (기존 디자인 유지)
 class _AppSwitchOption extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isSelected;
-  final Color color; // 색상 파라미터 추가
+  final Color color;
   final VoidCallback onTap;
 
   const _AppSwitchOption({
     required this.icon,
     required this.label,
     required this.isSelected,
-    required this.color, // 필수 인자로 변경
+    required this.color,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeColor = color; // 해당 앱의 고유 색상
+    final activeColor = color;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(12), // 패딩 조정
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected
-              ? activeColor.withOpacity(0.1) // 선택 시 연한 배경
+              ? activeColor.withOpacity(0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -992,7 +1041,6 @@ class _AppSwitchOption extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // 아이콘 배경 박스 추가
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(

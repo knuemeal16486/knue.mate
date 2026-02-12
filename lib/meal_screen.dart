@@ -180,7 +180,13 @@ class _TodayMealPageState extends State<TodayMealPage> {
     final now = DateTime.now();
 
     // 알림 등록 헬퍼 함수
-    Future<void> schedule(int id, int h, int m, String title, String body) async {
+    Future<void> schedule(
+      int id,
+      int h,
+      int m,
+      String title,
+      String body,
+    ) async {
       await NotificationService().scheduleAlarm(
         id: id,
         title: title,
@@ -204,7 +210,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
       // 저녁: 17:30 ~ 19:00
       await schedule(5, 17, 30, "기숙사 저녁 식사 🌙", "저녁 식사가 준비되었습니다.");
       await schedule(6, 18, 50, "기숙사 저녁 마감 임박 ⚠️", "10분 뒤 저녁 배식이 끝납니다.");
-      
     } else {
       // === 학생회관 식당 시간표 ===
       // 아침: 미운영 (알림 없음)
@@ -245,14 +250,14 @@ class _TodayMealPageState extends State<TodayMealPage> {
   Future<void> _onSourceChangedWithAlarmUpdate(MealSource s) async {
     setState(() => _source = s);
     PreferencesService.saveMealSource(s);
-    
+
     // 알림이 켜져 있다면, 변경된 식당 시간으로 재설정
     if (_alarmOn) {
       await _scheduleAlarmsBySource(s);
       final restaurantName = s == MealSource.a ? "기숙사" : "학생회관";
       showToast(context, "$restaurantName 시간으로 알림이 업데이트되었습니다.");
     }
-    
+
     await fetchMeals();
   }
 
@@ -373,12 +378,12 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
   }
 
   void _changeMonth(int delta) => setState(
-        () => _focusedMonth = DateTime(
-          _focusedMonth.year,
-          _focusedMonth.month + delta,
-          1,
-        ),
-      );
+    () => _focusedMonth = DateTime(
+      _focusedMonth.year,
+      _focusedMonth.month + delta,
+      1,
+    ),
+  );
 
   void _onDateSelected(DateTime date) {
     setState(() {
@@ -498,13 +503,55 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: const [
-                          Text("일", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                          Text("월", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                          Text("화", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                          Text("수", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                          Text("목", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                          Text("금", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                          Text("토", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                          Text(
+                            "일",
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "월",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "화",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "수",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "목",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "금",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "토",
+                            style: TextStyle(
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -519,9 +566,21 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _buildLegendItem(context, isToday: true, isSelected: false, label: "오늘", color: primaryColor),
+                          _buildLegendItem(
+                            context,
+                            isToday: true,
+                            isSelected: false,
+                            label: "오늘",
+                            color: primaryColor,
+                          ),
                           const SizedBox(width: 20),
-                          _buildLegendItem(context, isToday: false, isSelected: true, label: "선택됨", color: primaryColor),
+                          _buildLegendItem(
+                            context,
+                            isToday: false,
+                            isSelected: true,
+                            label: "선택됨",
+                            color: primaryColor,
+                          ),
                         ],
                       ),
                       if (_source == MealSource.b)
@@ -545,12 +604,21 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                 ),
                 const SizedBox(height: 16),
                 if (_loading)
-                  const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
                 else if (_error != null)
                   _ErrorCard(message: _error!)
                 else
                   _MealDetailCard(
-                    status: statusFor(_selectedType, DateTime.now(), _selectedDate),
+                    status: statusFor(
+                      _selectedType,
+                      DateTime.now(),
+                      _selectedDate,
+                    ),
                     type: _selectedType,
                     source: _source,
                     items: _meals[_selectedType.stdKey] ?? [],
@@ -587,7 +655,9 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
           decoration: BoxDecoration(
             color: isSelected ? color : Colors.transparent,
             shape: BoxShape.circle,
-            border: (isToday && !isSelected) ? Border.all(color: color, width: 2) : null,
+            border: (isToday && !isSelected)
+                ? Border.all(color: color, width: 2)
+                : null,
           ),
         ),
         const SizedBox(width: 8),
@@ -624,7 +694,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _forceUpdateWidget(BuildContext context) async {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("위젯 갱신 중..."), duration: Duration(milliseconds: 800)),
+      const SnackBar(
+        content: Text("위젯 갱신 중..."),
+        duration: Duration(milliseconds: 800),
+      ),
     );
     try {
       await fetchMealApi(DateTime.now(), widgetSource.value);
@@ -692,7 +765,9 @@ class _SettingsPageState extends State<SettingsPage> {
                         subtitle,
                         style: TextStyle(
                           fontSize: 13,
-                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
                         ),
                       ),
                     ],
@@ -712,10 +787,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _showFeedbackDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => const FeedbackDialog(),
-    );
+    showDialog(context: context, builder: (context) => const FeedbackDialog());
   }
 
   @override
@@ -739,7 +811,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: Text(
                     "설정",
                     style: TextStyle(
-                      fontWeight: Platform.isIOS ? FontWeight.w800 : FontWeight.bold,
+                      fontWeight: Platform.isIOS
+                          ? FontWeight.w800
+                          : FontWeight.bold,
                       color: Colors.white,
                     ),
                   ),
@@ -754,7 +828,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       children: [
                         _buildSectionTitle("앱 테마"),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
                             color: Theme.of(context).cardColor,
                             borderRadius: BorderRadius.circular(16),
@@ -770,7 +847,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                   selected: mode == ThemeMode.light,
                                   onTap: () {
                                     themeModeNotifier.value = ThemeMode.light;
-                                    PreferencesService.saveThemeMode(ThemeMode.light);
+                                    PreferencesService.saveThemeMode(
+                                      ThemeMode.light,
+                                    );
                                   },
                                 ),
                                 _ThemeOption(
@@ -779,7 +858,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                   selected: mode == ThemeMode.dark,
                                   onTap: () {
                                     themeModeNotifier.value = ThemeMode.dark;
-                                    PreferencesService.saveThemeMode(ThemeMode.dark);
+                                    PreferencesService.saveThemeMode(
+                                      ThemeMode.dark,
+                                    );
                                   },
                                 ),
                                 _ThemeOption(
@@ -788,7 +869,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                   selected: mode == ThemeMode.system,
                                   onTap: () {
                                     themeModeNotifier.value = ThemeMode.system;
-                                    PreferencesService.saveThemeMode(ThemeMode.system);
+                                    PreferencesService.saveThemeMode(
+                                      ThemeMode.system,
+                                    );
                                   },
                                 ),
                               ],
@@ -808,25 +891,33 @@ class _SettingsPageState extends State<SettingsPage> {
                             spacing: 12,
                             runSpacing: 12,
                             children: kColorPalette
-                                .map((c) => _ColorPickerItem(
-                                      color: c,
-                                      isSelected: c.value == currentColor.value,
-                                    ))
+                                .map(
+                                  (c) => _ColorPickerItem(
+                                    color: c,
+                                    isSelected: c.value == currentColor.value,
+                                  ),
+                                )
                                 .toList(),
                           ),
                         ),
                         const SizedBox(height: 24),
                         const Text(
                           "위젯 미리보기",
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         ValueListenableBuilder<ThemeMode>(
                           valueListenable: widgetTheme,
                           builder: (context, mode, _) {
-                            final bool wIsDark = mode == ThemeMode.dark ||
+                            final bool wIsDark =
+                                mode == ThemeMode.dark ||
                                 (mode == ThemeMode.system &&
-                                    Theme.of(context).brightness == Brightness.dark);
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark);
                             return ValueListenableBuilder<MealSource>(
                               valueListenable: widgetSource,
                               builder: (context, src, _) {
@@ -834,7 +925,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                 final hour = now.hour;
                                 String mealType = "";
                                 if (src == MealSource.a) {
-                                  mealType = hour < 9 ? "아침" : hour < 13 ? "점심" : "저녁";
+                                  mealType = hour < 9
+                                      ? "아침"
+                                      : hour < 13
+                                      ? "점심"
+                                      : "저녁";
                                 } else {
                                   mealType = hour < 14 ? "점심" : "저녁";
                                 }
@@ -842,46 +937,76 @@ class _SettingsPageState extends State<SettingsPage> {
                                   width: double.infinity,
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: (wIsDark ? const Color(0xFF1E1E1E) : Colors.white)
-                                        .withOpacity(1.0 - _localTransparency),
+                                    color:
+                                        (wIsDark
+                                                ? const Color(0xFF1E1E1E)
+                                                : Colors.white)
+                                            .withOpacity(
+                                              1.0 - _localTransparency,
+                                            ),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.grey.withOpacity(0.5)),
+                                    border: Border.all(
+                                      color: Colors.grey.withOpacity(0.5),
+                                    ),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
-                                          Icon(Icons.restaurant_menu,
-                                              size: 16, color: wIsDark ? Colors.white : Colors.black),
+                                          Icon(
+                                            Icons.restaurant_menu,
+                                            size: 16,
+                                            color: wIsDark
+                                                ? Colors.white
+                                                : Colors.black,
+                                          ),
                                           const SizedBox(width: 8),
                                           Text(
-                                            src == MealSource.a ? "기숙사 식당" : "학생회관",
+                                            src == MealSource.a
+                                                ? "기숙사 식당"
+                                                : "학생회관",
                                             style: TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: wIsDark ? Colors.white : Colors.black),
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: wIsDark
+                                                  ? Colors.white
+                                                  : Colors.black,
+                                            ),
                                           ),
                                           const Spacer(),
-                                          Text("오늘 $mealType",
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: wIsDark ? Colors.white70 : Colors.black54)),
+                                          Text(
+                                            "오늘 $mealType",
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: wIsDark
+                                                  ? Colors.white70
+                                                  : Colors.black54,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                       const SizedBox(height: 12),
                                       Text(
                                         "· 쌀밥\n· 돈육김치찌개\n· 계란말이\n· 깍두기",
                                         style: TextStyle(
-                                            fontSize: 14,
-                                            color: wIsDark ? Colors.white : Colors.black87,
-                                            height: 1.5),
+                                          fontSize: 14,
+                                          color: wIsDark
+                                              ? Colors.white
+                                              : Colors.black87,
+                                          height: 1.5,
+                                        ),
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
                                         "투명도: ${(_localTransparency * 100).toInt()}%",
                                         style: TextStyle(
-                                            fontSize: 11, color: wIsDark ? Colors.white54 : Colors.grey),
+                                          fontSize: 11,
+                                          color: wIsDark
+                                              ? Colors.white54
+                                              : Colors.grey,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -902,7 +1027,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text("표시할 식당", style: TextStyle(fontWeight: FontWeight.bold)),
+                              const Text(
+                                "표시할 식당",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                               const SizedBox(height: 8),
                               ValueListenableBuilder<MealSource>(
                                 valueListenable: widgetSource,
@@ -913,7 +1041,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                       isSelected: src == MealSource.a,
                                       onTap: () async {
                                         await saveWidgetSettingsAndUpdate(
-                                            widgetTransparency.value, widgetTheme.value, MealSource.a, context);
+                                          widgetTransparency.value,
+                                          widgetTheme.value,
+                                          MealSource.a,
+                                          context,
+                                        );
                                       },
                                     ),
                                     const SizedBox(width: 10),
@@ -922,14 +1054,21 @@ class _SettingsPageState extends State<SettingsPage> {
                                       isSelected: src == MealSource.b,
                                       onTap: () async {
                                         await saveWidgetSettingsAndUpdate(
-                                            widgetTransparency.value, widgetTheme.value, MealSource.b, context);
+                                          widgetTransparency.value,
+                                          widgetTheme.value,
+                                          MealSource.b,
+                                          context,
+                                        );
                                       },
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              const Text("위젯 배경 테마", style: TextStyle(fontWeight: FontWeight.bold)),
+                              const Text(
+                                "위젯 배경 테마",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                               const SizedBox(height: 8),
                               ValueListenableBuilder<ThemeMode>(
                                 valueListenable: widgetTheme,
@@ -941,8 +1080,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                       selected: mode == ThemeMode.light,
                                       onTap: () {
                                         widgetTheme.value = ThemeMode.light;
-                                        PreferencesService.saveWidgetSettings(widgetTransparency.value,
-                                            ThemeMode.light, widgetSource.value);
+                                        PreferencesService.saveWidgetSettings(
+                                          widgetTransparency.value,
+                                          ThemeMode.light,
+                                          widgetSource.value,
+                                        );
                                         _forceUpdateWidget(context);
                                       },
                                     ),
@@ -952,8 +1094,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                       selected: mode == ThemeMode.dark,
                                       onTap: () {
                                         widgetTheme.value = ThemeMode.dark;
-                                        PreferencesService.saveWidgetSettings(widgetTransparency.value,
-                                            ThemeMode.dark, widgetSource.value);
+                                        PreferencesService.saveWidgetSettings(
+                                          widgetTransparency.value,
+                                          ThemeMode.dark,
+                                          widgetSource.value,
+                                        );
                                         _forceUpdateWidget(context);
                                       },
                                     ),
@@ -963,8 +1108,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                       selected: mode == ThemeMode.system,
                                       onTap: () {
                                         widgetTheme.value = ThemeMode.system;
-                                        PreferencesService.saveWidgetSettings(widgetTransparency.value,
-                                            ThemeMode.system, widgetSource.value);
+                                        PreferencesService.saveWidgetSettings(
+                                          widgetTransparency.value,
+                                          ThemeMode.system,
+                                          widgetSource.value,
+                                        );
                                         _forceUpdateWidget(context);
                                       },
                                     ),
@@ -972,7 +1120,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              const Text("배경 투명도", style: TextStyle(fontWeight: FontWeight.bold)),
+                              const Text(
+                                "배경 투명도",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                               const SizedBox(height: 8),
                               Row(
                                 children: [
@@ -989,14 +1140,21 @@ class _SettingsPageState extends State<SettingsPage> {
                                       },
                                       onChangeEnd: (v) async {
                                         await saveWidgetSettingsAndUpdate(
-                                            v, widgetTheme.value, widgetSource.value, context);
+                                          v,
+                                          widgetTheme.value,
+                                          widgetSource.value,
+                                          context,
+                                        );
                                       },
                                     ),
                                   ),
                                   const SizedBox(width: 16),
                                   Container(
                                     width: 50,
-                                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                      horizontal: 8,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: currentColor.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(8),
@@ -1004,7 +1162,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                     child: Text(
                                       "${(_localTransparency * 100).toInt()}%",
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(fontWeight: FontWeight.bold, color: currentColor),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: currentColor,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1013,8 +1174,11 @@ class _SettingsPageState extends State<SettingsPage> {
                               Text(
                                 "투명도가 높을수록 위젯 배경이 투명해집니다.",
                                 style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark ? Colors.grey : Colors.grey.shade600),
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? Colors.grey
+                                      : Colors.grey.shade600,
+                                ),
                               ),
                               const SizedBox(height: 16),
                               SizedBox(
@@ -1026,7 +1190,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                   style: FilledButton.styleFrom(
                                     backgroundColor: currentColor,
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1037,16 +1203,18 @@ class _SettingsPageState extends State<SettingsPage> {
                                   onPressed: testBasicWidgetFunction,
                                   icon: const Icon(Icons.verified),
                                   label: const Text("기본 위젯 테스트"),
-                                  style: OutlinedButton.styleFrom(foregroundColor: currentColor),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: currentColor,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 24),
-                        
+
                         _buildSectionTitle("앱 정보"),
-                        
+
                         _buildAppInfoItem(
                           context: context,
                           icon: Icons.face,
@@ -1055,10 +1223,12 @@ class _SettingsPageState extends State<SettingsPage> {
                           iconColor: primary,
                           onTap: () => Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const DeveloperInfoPage()),
+                            MaterialPageRoute(
+                              builder: (context) => const DeveloperInfoPage(),
+                            ),
                           ),
                         ),
-                        
+
                         _buildAppInfoItem(
                           context: context,
                           icon: Icons.feedback_outlined,
@@ -1094,7 +1264,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             showToast(ctx, "초기화되었습니다.");
                           },
                         ),
-                        
+
                         const SizedBox(height: 10),
                         Center(
                           child: Text(
@@ -1119,12 +1289,15 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildSectionTitle(String title) => Align(
-        alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 12, left: 4),
-          child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ),
-      );
+    alignment: Alignment.centerLeft,
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      ),
+    ),
+  );
 }
 
 // -----------------------------------------------------------------------------
@@ -1149,7 +1322,10 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
 
   String? _encodeQueryParameters(Map<String, String> params) {
     return params.entries
-        .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+        .map(
+          (e) =>
+              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+        )
         .join('&');
   }
 
@@ -1165,7 +1341,8 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
       path: developerEmail,
       query: _encodeQueryParameters(<String, String>{
         'subject': subject,
-        'body': '내용:\n$body\n\n----------------------------\n(앱 버전: 5.8.0 / 기기 정보 등 필요시 추가)',
+        'body':
+            '내용:\n$body\n\n----------------------------\n(앱 버전: 5.8.0 / 기기 정보 등 필요시 추가)',
       }),
     );
 
@@ -1185,7 +1362,8 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
   Widget build(BuildContext context) {
     final primary = Theme.of(context).primaryColor;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bool isButtonEnabled = _feedbackController.text.isNotEmpty && _isAgreed;
+    final bool isButtonEnabled =
+        _feedbackController.text.isNotEmpty && _isAgreed;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -1227,7 +1405,9 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                 decoration: BoxDecoration(
                   color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                  border: Border.all(
+                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                  ),
                 ),
                 child: TextField(
                   controller: _feedbackController,
@@ -1237,7 +1417,9 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                   decoration: InputDecoration(
                     hintText: "불편했던 점, 개선할 점, 칭찬하고 싶은 점 등을 자유롭게 적어주세요.",
                     hintStyle: TextStyle(
-                      color: isDark ? Colors.grey.shade500 : Colors.grey.shade500,
+                      color: isDark
+                          ? Colors.grey.shade500
+                          : Colors.grey.shade500,
                       fontSize: 14,
                     ),
                     border: InputBorder.none,
@@ -1256,8 +1438,11 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                       child: Checkbox(
                         value: _isAgreed,
                         activeColor: primary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        onChanged: (value) => setState(() => _isAgreed = value ?? false),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        onChanged: (value) =>
+                            setState(() => _isAgreed = value ?? false),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -1265,9 +1450,20 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                       child: Text.rich(
                         TextSpan(
                           text: "개인정보 수집 및 이용에 동의합니다. ",
-                          style: TextStyle(fontSize: 13, color: isDark ? Colors.grey.shade400 : Colors.black87),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.black87,
+                          ),
                           children: [
-                            TextSpan(text: "(필수)", style: TextStyle(color: primary, fontWeight: FontWeight.bold)),
+                            TextSpan(
+                              text: "(필수)",
+                              style: TextStyle(
+                                color: primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1283,13 +1479,20 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                   onPressed: isButtonEnabled ? _sendFeedback : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primary,
-                    disabledBackgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                    disabledBackgroundColor: isDark
+                        ? Colors.grey.shade800
+                        : Colors.grey.shade300,
                     foregroundColor: Colors.white,
                     disabledForegroundColor: Colors.grey.shade500,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: const Text("이메일로 보내기", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    "이메일로 보내기",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
             ],
@@ -1313,7 +1516,13 @@ class DeveloperInfoPage extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: primary,
         centerTitle: Platform.isIOS ? false : null,
-        title: Text("개발자 정보", style: TextStyle(fontWeight: Platform.isIOS ? FontWeight.w800 : FontWeight.bold, color: Colors.white)),
+        title: Text(
+          "개발자 정보",
+          style: TextStyle(
+            fontWeight: Platform.isIOS ? FontWeight.w800 : FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
@@ -1321,14 +1530,25 @@ class DeveloperInfoPage extends StatelessWidget {
           children: [
             const SizedBox(height: 40),
             Container(
-              width: 120, height: 120,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: primary.withOpacity(0.1), border: Border.all(color: primary, width: 3)),
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: primary.withOpacity(0.1),
+                border: Border.all(color: primary, width: 3),
+              ),
               child: Icon(Icons.person, size: 60, color: primary),
             ),
             const SizedBox(height: 20),
-            const Text("Hwang", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const Text(
+              "Hwang",
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
-            const Text("KNUE Physics & Elementary Education 23", style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const Text(
+              "KNUE Physics & Elementary Education 23",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
             const SizedBox(height: 30),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1337,7 +1557,12 @@ class DeveloperInfoPage extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(20),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                    ),
+                  ],
                 ),
                 child: Column(
                   children: [
@@ -1346,7 +1571,7 @@ class DeveloperInfoPage extends StatelessWidget {
                       icon: Icons.school,
                       label: "소속",
                       content: "한국교원대학교 물리교육과",
-                      color: Colors.blue, 
+                      color: Colors.blue,
                     ),
                     const Divider(height: 24),
                     _buildInfoRow(
@@ -1354,7 +1579,7 @@ class DeveloperInfoPage extends StatelessWidget {
                       icon: Icons.code,
                       label: "관심 분야",
                       content: "Physical Computing, Embedded System , AI",
-                      color: Colors.orange, 
+                      color: Colors.orange,
                     ),
                     const Divider(height: 24),
                     _buildInfoRow(
@@ -1362,7 +1587,7 @@ class DeveloperInfoPage extends StatelessWidget {
                       icon: Icons.email,
                       label: "이메일",
                       content: "knuemeal16486@gmail.com",
-                      color: Colors.green, 
+                      color: Colors.green,
                     ),
                     const Divider(height: 24),
                     _buildInfoRow(
@@ -1370,7 +1595,7 @@ class DeveloperInfoPage extends StatelessWidget {
                       icon: Icons.money,
                       label: "후원",
                       content: "고생한 개발자를 위해 커피 사주기\n신한 110-334-965296",
-                      color: Colors.pink, 
+                      color: Colors.pink,
                     ),
                   ],
                 ),
@@ -1381,23 +1606,34 @@ class DeveloperInfoPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
                 decoration: BoxDecoration(
                   color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(20),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                    ),
+                  ],
                 ),
                 child: _buildInfoRow(
                   context: context,
                   icon: Icons.handshake_rounded,
                   label: "Special Help",
                   content: "Hyunsu, Oh\nSNU Nuclear Engineering",
-                  color: Colors.deepPurple, 
+                  color: Colors.deepPurple,
                 ),
               ),
             ),
             const SizedBox(height: 40),
-            Text("© 2026 KNUE All-in-One", style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
+            Text(
+              "© 2026 KNUE Mate",
+              style: TextStyle(color: isDark ? Colors.grey : Colors.black54),
+            ),
             const SizedBox(height: 40),
           ],
         ),
@@ -1430,12 +1666,20 @@ class DeveloperInfoPage extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 content,
-                style: const TextStyle(fontSize: 16, height: 1.3, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  fontSize: 16,
+                  height: 1.3,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -1453,7 +1697,12 @@ class _BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = Theme.of(context).primaryColor;
     return Container(
-      decoration: BoxDecoration(color: Theme.of(context).cardColor, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)]),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20),
+        ],
+      ),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1470,19 +1719,34 @@ class _BottomNavBar extends StatelessWidget {
     );
   }
 
-  Widget _item(BuildContext context, int index, IconData icon, String label, Color primary) {
+  Widget _item(
+    BuildContext context,
+    int index,
+    IconData icon,
+    String label,
+    Color primary,
+  ) {
     final isSel = index == currentIndex;
     return InkWell(
       onTap: () => onTap(index),
       child: Container(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: isSel ? primary : Colors.transparent, borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(
+          color: isSel ? primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
         child: Row(
           children: [
             Icon(icon, color: isSel ? Colors.white : Colors.grey),
             if (isSel) ...[
               const SizedBox(width: 8),
-              Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ],
         ),
@@ -1497,21 +1761,40 @@ class _CalendarGrid extends StatelessWidget {
   final ValueChanged<DateTime> onDateSelected;
   final Color primaryColor;
   final MealSource source;
-  const _CalendarGrid({required this.focusedMonth, required this.selectedDate, required this.onDateSelected, required this.primaryColor, required this.source});
+  const _CalendarGrid({
+    required this.focusedMonth,
+    required this.selectedDate,
+    required this.onDateSelected,
+    required this.primaryColor,
+    required this.source,
+  });
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final daysInMonth = DateUtils.getDaysInMonth(focusedMonth.year, focusedMonth.month);
-    final firstDayWeekday = DateTime(focusedMonth.year, focusedMonth.month, 1).weekday;
+    final daysInMonth = DateUtils.getDaysInMonth(
+      focusedMonth.year,
+      focusedMonth.month,
+    );
+    final firstDayWeekday = DateTime(
+      focusedMonth.year,
+      focusedMonth.month,
+      1,
+    ).weekday;
     final offset = firstDayWeekday % 7;
     DateTime now = DateTime.now();
-    DateTime thisWeekMonday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+    DateTime thisWeekMonday = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
     DateTime thisWeekFriday = thisWeekMonday.add(const Duration(days: 4));
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7,
+      ),
       itemCount: daysInMonth + offset,
       itemBuilder: (context, index) {
         if (index < offset) return const SizedBox();
@@ -1519,26 +1802,49 @@ class _CalendarGrid extends StatelessWidget {
         final date = DateTime(focusedMonth.year, focusedMonth.month, day);
         bool isEnabled = true;
         if (source == MealSource.b) {
-          if (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday) isEnabled = false;
+          if (date.weekday == DateTime.saturday ||
+              date.weekday == DateTime.sunday)
+            isEnabled = false;
           DateTime target = DateTime(date.year, date.month, date.day);
-          if (target.isBefore(thisWeekMonday) || target.isAfter(thisWeekFriday)) isEnabled = false;
+          if (target.isBefore(thisWeekMonday) || target.isAfter(thisWeekFriday))
+            isEnabled = false;
         }
         final isSel = DateUtils.isSameDay(date, selectedDate);
         final isToday = DateUtils.isSameDay(date, DateTime.now());
         Color textColor;
-        if (!isEnabled) textColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
-        else if (isSel) textColor = Colors.white;
-        else if (date.weekday == DateTime.sunday) textColor = Colors.redAccent;
-        else if (date.weekday == DateTime.saturday) textColor = Colors.blueAccent;
-        else textColor = isDark ? Colors.white : Colors.black87;
+        if (!isEnabled)
+          textColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
+        else if (isSel)
+          textColor = Colors.white;
+        else if (date.weekday == DateTime.sunday)
+          textColor = Colors.redAccent;
+        else if (date.weekday == DateTime.saturday)
+          textColor = Colors.blueAccent;
+        else
+          textColor = isDark ? Colors.white : Colors.black87;
 
         return GestureDetector(
           onTap: isEnabled ? () => onDateSelected(date) : null,
           child: Container(
             margin: const EdgeInsets.all(4),
-            decoration: BoxDecoration(shape: BoxShape.circle, color: isSel ? primaryColor : null, border: (isToday && !isSel) ? Border.all(color: primaryColor, width: 2) : null),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isSel ? primaryColor : null,
+              border: (isToday && !isSel)
+                  ? Border.all(color: primaryColor, width: 2)
+                  : null,
+            ),
             alignment: Alignment.center,
-            child: Text("$day", style: TextStyle(color: textColor, fontWeight: (isSel || isToday) ? FontWeight.bold : FontWeight.normal, decoration: !isEnabled ? TextDecoration.lineThrough : null)),
+            child: Text(
+              "$day",
+              style: TextStyle(
+                color: textColor,
+                fontWeight: (isSel || isToday)
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                decoration: !isEnabled ? TextDecoration.lineThrough : null,
+              ),
+            ),
           ),
         );
       },
@@ -1551,41 +1857,65 @@ class _ThemeOption extends StatelessWidget {
   final IconData icon;
   final bool selected;
   final VoidCallback onTap;
-  const _ThemeOption({required this.label, required this.icon, required this.selected, required this.onTap});
+  const _ThemeOption({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) => Expanded(
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: selected ? Colors.grey.withOpacity(0.2) : null, borderRadius: BorderRadius.circular(10)),
-            child: Column(children: [Icon(icon), Text(label)]),
-          ),
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: selected ? Colors.grey.withOpacity(0.2) : null,
+          borderRadius: BorderRadius.circular(10),
         ),
-      );
+        child: Column(children: [Icon(icon), Text(label)]),
+      ),
+    ),
+  );
 }
 
 class _WidgetOption extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
-  const _WidgetOption({required this.label, required this.isSelected, required this.onTap});
+  const _WidgetOption({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) => Expanded(
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: isSelected ? Theme.of(context).primaryColor : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isSelected ? Theme.of(context).primaryColor : Colors.grey.withOpacity(0.5)),
-            ),
-            alignment: Alignment.center,
-            child: Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.grey)),
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).primaryColor
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).primaryColor
+                : Colors.grey.withOpacity(0.5),
           ),
         ),
-      );
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : Colors.grey,
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _ColorPickerItem extends StatelessWidget {
@@ -1594,15 +1924,20 @@ class _ColorPickerItem extends StatelessWidget {
   const _ColorPickerItem({required this.color, required this.isSelected});
   @override
   Widget build(BuildContext context) => GestureDetector(
-        onTap: () {
-          themeColor.value = color;
-          PreferencesService.saveThemeColor(color);
-        },
-        child: Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: isSelected ? Border.all(width: 3, color: Colors.white) : null),
-        ),
-      );
+    onTap: () {
+      themeColor.value = color;
+      PreferencesService.saveThemeColor(color);
+    },
+    child: Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: isSelected ? Border.all(width: 3, color: Colors.white) : null,
+      ),
+    ),
+  );
 }
 
 class _AppSwitchOption extends StatelessWidget {
@@ -1635,7 +1970,9 @@ class _AppSwitchOption extends StatelessWidget {
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? activeColor : Colors.grey.withOpacity(0.2), // [NEW] 선택 시 해당 색상 테두리
+            color: isSelected
+                ? activeColor
+                : Colors.grey.withOpacity(0.2), // [NEW] 선택 시 해당 색상 테두리
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -1660,7 +1997,8 @@ class _AppSwitchOption extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            if (isSelected) Icon(Icons.check_circle_rounded, color: activeColor),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: activeColor),
           ],
         ),
       ),
@@ -1680,7 +2018,14 @@ class _MealTabs extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: isDark ? null : Border.all(color: Colors.grey.shade300), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: isDark ? null : Border.all(color: Colors.grey.shade300),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+          ],
+        ),
         child: Row(
           children: MealType.values.map((t) {
             final isSel = t == selected;
@@ -1690,14 +2035,27 @@ class _MealTabs extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(color: isSel ? primary : Colors.transparent, borderRadius: BorderRadius.circular(16)),
+                  decoration: BoxDecoration(
+                    color: isSel ? primary : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   alignment: Alignment.center,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(t.icon, size: 18, color: isSel ? Colors.white : Colors.grey),
+                      Icon(
+                        t.icon,
+                        size: 18,
+                        color: isSel ? Colors.white : Colors.grey,
+                      ),
                       const SizedBox(width: 6),
-                      Text(t.label, style: TextStyle(fontWeight: FontWeight.bold, color: isSel ? Colors.white : Colors.grey)),
+                      Text(
+                        t.label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isSel ? Colors.white : Colors.grey,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1715,14 +2073,23 @@ class _CommonMealLayout extends StatelessWidget {
   final Widget content;
   const _CommonMealLayout({required this.header, required this.content});
   @override
-  Widget build(BuildContext context) => Scaffold(body: Column(children: [header, Expanded(child: content)]));
+  Widget build(BuildContext context) => Scaffold(
+    body: Column(
+      children: [
+        header,
+        Expanded(child: content),
+      ],
+    ),
+  );
 }
 
 class _ErrorCard extends StatelessWidget {
   final String message;
   const _ErrorCard({required this.message});
   @override
-  Widget build(BuildContext context) => Center(child: Text(message, style: const TextStyle(color: Colors.red)));
+  Widget build(BuildContext context) => Center(
+    child: Text(message, style: const TextStyle(color: Colors.red)),
+  );
 }
 
 // -----------------------------------------------------------------------------
@@ -1756,18 +2123,29 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     if (mounted) setState(() => _isCalorieLoading = true);
     try {
       String result = await GeminiService.estimateCalories(widget.items);
-      if (mounted) setState(() { _caloriesInfo = result; _isCalorieLoading = false; });
+      if (mounted)
+        setState(() {
+          _caloriesInfo = result;
+          _isCalorieLoading = false;
+        });
     } catch (e) {
-      if (mounted) setState(() { _caloriesInfo = "측정 실패"; _isCalorieLoading = false; });
+      if (mounted)
+        setState(() {
+          _caloriesInfo = "측정 실패";
+          _isCalorieLoading = false;
+        });
     }
   }
 
   String _getTimeRangeText() {
     if (widget.source == MealSource.b) {
       switch (widget.type) {
-        case MealType.breakfast: return "미운영";
-        case MealType.lunch: return "11:00 ~ 14:00";
-        case MealType.dinner: return "17:00 ~ 18:30";
+        case MealType.breakfast:
+          return "미운영";
+        case MealType.lunch:
+          return "11:00 ~ 14:00";
+        case MealType.dinner:
+          return "17:00 ~ 18:30";
       }
     }
     return widget.type.timeRange;
@@ -1775,15 +2153,27 @@ class _MealDetailCardState extends State<_MealDetailCard> {
 
   @override
   Widget build(BuildContext context) {
-    bool isStudentHallBreakfast = (widget.source == MealSource.b && widget.type == MealType.breakfast);
-    final bool unavailable = widget.items.isEmpty || widget.items.first.contains("없음") || widget.items.first.contains("미운영") || isStudentHallBreakfast;
+    bool isStudentHallBreakfast =
+        (widget.source == MealSource.b && widget.type == MealType.breakfast);
+    final bool unavailable =
+        widget.items.isEmpty ||
+        widget.items.first.contains("없음") ||
+        widget.items.first.contains("미운영") ||
+        isStudentHallBreakfast;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).primaryColor;
     final aiTextColor = isDark ? Colors.purpleAccent : Colors.deepPurple;
     final aiIconColor = isDark ? Colors.purpleAccent : Colors.purple;
     final boxBorder = isDark
-        ? (widget.isToday ? Border.all(color: primary.withOpacity(0.5), width: 2) : Border.all(color: Colors.transparent))
-        : Border.all(color: widget.isToday ? primary.withOpacity(0.5) : Colors.grey.shade300, width: widget.isToday ? 2 : 1);
+        ? (widget.isToday
+              ? Border.all(color: primary.withOpacity(0.5), width: 2)
+              : Border.all(color: Colors.transparent))
+        : Border.all(
+            color: widget.isToday
+                ? primary.withOpacity(0.5)
+                : Colors.grey.shade300,
+            width: widget.isToday ? 2 : 1,
+          );
 
     Color statusColor = const Color(0xFF2E7D32);
     String statusText = "운영 중";
@@ -1795,10 +2185,25 @@ class _MealDetailCardState extends State<_MealDetailCard> {
       statusIcon = Icons.block;
     } else {
       switch (widget.status) {
-        case ServeStatus.open: statusColor = const Color(0xFF2E7D32); statusText = "식당 운영 중"; break;
-        case ServeStatus.waiting: statusColor = const Color(0xFF1976D2); statusText = "식사 준비 중"; statusIcon = Icons.access_time; break;
-        case ServeStatus.closed: statusColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600; statusText = "운영 종료"; statusIcon = Icons.block; break;
-        case ServeStatus.notToday: statusColor = isDark ? Colors.grey.shade600 : Colors.grey.shade500; statusText = "식당 운영시간 아님"; statusIcon = Icons.calendar_today_rounded; break;
+        case ServeStatus.open:
+          statusColor = const Color(0xFF2E7D32);
+          statusText = "식당 운영 중";
+          break;
+        case ServeStatus.waiting:
+          statusColor = const Color(0xFF1976D2);
+          statusText = "식사 준비 중";
+          statusIcon = Icons.access_time;
+          break;
+        case ServeStatus.closed:
+          statusColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
+          statusText = "운영 종료";
+          statusIcon = Icons.block;
+          break;
+        case ServeStatus.notToday:
+          statusColor = isDark ? Colors.grey.shade600 : Colors.grey.shade500;
+          statusText = "식당 운영시간 아님";
+          statusIcon = Icons.calendar_today_rounded;
+          break;
       }
     }
 
@@ -1811,7 +2216,13 @@ class _MealDetailCardState extends State<_MealDetailCard> {
         borderRadius: BorderRadius.circular(24),
         border: boxBorder,
         boxShadow: [
-          BoxShadow(color: widget.isToday ? primary.withOpacity(0.15) : Colors.black.withOpacity(0.05), blurRadius: widget.isToday ? 20 : 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: widget.isToday
+                ? primary.withOpacity(0.15)
+                : Colors.black.withOpacity(0.05),
+            blurRadius: widget.isToday ? 20 : 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -1820,40 +2231,96 @@ class _MealDetailCardState extends State<_MealDetailCard> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
-              color: widget.isToday ? primary.withOpacity(0.05) : Colors.transparent,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              border: Border(bottom: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade100)),
+              color: widget.isToday
+                  ? primary.withOpacity(0.05)
+                  : Colors.transparent,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                ),
+              ),
             ),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Row(
                     children: [
                       Icon(statusIcon, size: 16, color: statusColor),
                       const SizedBox(width: 6),
-                      Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                if (widget.status == ServeStatus.open && timeLeft.isNotEmpty && !isStudentHallBreakfast) ...[
+                if (widget.status == ServeStatus.open &&
+                    timeLeft.isNotEmpty &&
+                    !isStudentHallBreakfast) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: Text(timeLeft, style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      timeLeft,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
                 const Spacer(),
                 if (widget.isToday)
                   Container(
                     margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(8)),
-                    child: const Text("TODAY", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      "TODAY",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ),
-                Text(_getTimeRangeText(), style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 13)),
+                Text(
+                  _getTimeRangeText(),
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1865,31 +2332,61 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                       children: [
                         Icon(Icons.no_meals, size: 40, color: Colors.grey),
                         SizedBox(height: 10),
-                        Text("운영하지 않거나 메뉴 정보가 없습니다.", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                        Text(
+                          "운영하지 않거나 메뉴 정보가 없습니다.",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: widget.items.map((e) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(margin: const EdgeInsets.only(top: 7), width: 6, height: 6, decoration: BoxDecoration(color: primary, shape: BoxShape.circle)),
-                              const SizedBox(width: 12),
-                              Expanded(child: Text(e, style: const TextStyle(fontSize: 16, height: 1.4))),
-                            ],
+                    children: widget.items
+                        .map(
+                          (e) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  margin: const EdgeInsets.only(top: 7),
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: primary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    e,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        )).toList(),
+                        )
+                        .toList(),
                   ),
           ),
           if (!unavailable)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: BoxDecoration(
-                color: isDark ? Colors.black.withOpacity(0.2) : const Color(0xFFF8F9FA),
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                color: isDark
+                    ? Colors.black.withOpacity(0.2)
+                    : const Color(0xFFF8F9FA),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(24),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1898,7 +2395,10 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                     onTap: _isCalorieLoading ? null : _fetchCalories,
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: aiTextColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
@@ -1907,11 +2407,31 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                       child: Row(
                         children: [
                           if (_isCalorieLoading)
-                            SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: aiTextColor))
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: aiTextColor,
+                              ),
+                            )
                           else
-                            Icon(Icons.auto_awesome, size: 16, color: aiIconColor),
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 16,
+                              color: aiIconColor,
+                            ),
                           const SizedBox(width: 8),
-                          Text(_isCalorieLoading ? "분석 중..." : (_caloriesInfo ?? "AI 칼로리 계산"), style: TextStyle(color: aiTextColor, fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text(
+                            _isCalorieLoading
+                                ? "분석 중..."
+                                : (_caloriesInfo ?? "AI 칼로리 계산"),
+                            style: TextStyle(
+                              color: aiTextColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1923,7 +2443,10 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                     style: FilledButton.styleFrom(
                       backgroundColor: primary,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                 ],
@@ -1941,7 +2464,13 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     final now = DateTime.now();
     try {
       final times = range.split("~")[1].trim().split(":");
-      final end = DateTime(now.year, now.month, now.day, int.parse(times[0]), int.parse(times[1]));
+      final end = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        int.parse(times[0]),
+        int.parse(times[1]),
+      );
       if (now.isAfter(end)) return "마감됨";
       final diff = end.difference(now);
       if (diff.inMinutes < 60) return "마감 ${diff.inMinutes}분 전";
@@ -1990,17 +2519,35 @@ class _Header extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: Theme.of(context).primaryColor, shape: BoxShape.circle),
-                child: const Icon(Icons.storefront_rounded, size: 40, color: Colors.white),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.storefront_rounded,
+                  size: 40,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(height: 16),
-              const Text("식당 운영 정보", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text(
+                "식당 운영 정보",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 20),
               _buildInfoRow(Icons.place, "위치", isDorm ? "관리동 1층" : "학생회관 1층"),
               const SizedBox(height: 12),
-              _buildInfoRow(Icons.attach_money, "가격", isDorm ? "의무입사생 무료" : "5,000원 (일반)"),
+              _buildInfoRow(
+                Icons.attach_money,
+                "가격",
+                isDorm ? "의무입사생 무료" : "5,000원 (일반)",
+              ),
               const SizedBox(height: 12),
-              _buildInfoRow(Icons.access_time, "운영", isDorm ? "연중무휴" : "주말/공휴일 휴무"),
+              _buildInfoRow(
+                Icons.access_time,
+                "운영",
+                isDorm ? "연중무휴" : "주말/공휴일 휴무",
+              ),
               const SizedBox(height: 24),
               GestureDetector(
                 onTap: () => Navigator.pop(context),
@@ -2034,9 +2581,20 @@ class _Header extends StatelessWidget {
       children: [
         Icon(icon, size: 20, color: Colors.grey),
         const SizedBox(width: 12),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.grey,
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500))),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+        ),
       ],
     );
   }
@@ -2047,7 +2605,12 @@ class _Header extends StatelessWidget {
     const wd = ["", "월", "화", "수", "목", "금", "토", "일"];
 
     return Container(
-      padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 10, 20, 24),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        MediaQuery.of(context).padding.top + 10,
+        20,
+        24,
+      ),
       decoration: BoxDecoration(
         color: color,
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
@@ -2071,13 +2634,24 @@ class _Header extends StatelessWidget {
               Expanded(
                 child: Row(
                   children: [
-                    const Text("청람밥상", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+                    const Text(
+                      "청람밥상",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(width: 4),
                     GestureDetector(
                       onTap: () => _showCafeteriaInfo(context),
                       child: Padding(
                         padding: const EdgeInsets.all(4),
-                        child: Icon(Icons.info_outline, color: Colors.white.withOpacity(0.8), size: 20),
+                        child: Icon(
+                          Icons.info_outline,
+                          color: Colors.white.withOpacity(0.8),
+                          size: 20,
+                        ),
                       ),
                     ),
                   ],
@@ -2085,14 +2659,22 @@ class _Header extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onToggleAlarm,
-                icon: Icon(alarmOn ? Icons.notifications_active : Icons.notifications_none, color: Colors.white),
+                icon: Icon(
+                  alarmOn
+                      ? Icons.notifications_active
+                      : Icons.notifications_none,
+                  color: Colors.white,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Row(
               children: [
                 _buildSegmentBtn("기숙사 식당", MealSource.a),
@@ -2104,21 +2686,54 @@ class _Header extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(onPressed: onPrev, icon: const Icon(Icons.chevron_left, color: Colors.white)),
+              IconButton(
+                onPressed: onPrev,
+                icon: const Icon(Icons.chevron_left, color: Colors.white),
+              ),
               Column(
                 children: [
                   if (isToday)
                     Container(
                       margin: const EdgeInsets.only(bottom: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                      child: Text("오늘의 식단", style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        "오늘의 식단",
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
-                  Text("${wd[date.weekday]}요일", style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14, fontWeight: FontWeight.w600)),
-                  Text("${date.year}년 ${date.month.toString().padLeft(2, '0')}월 ${date.day.toString().padLeft(2, '0')}일", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    "${wd[date.weekday]}요일",
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    "${date.year}년 ${date.month.toString().padLeft(2, '0')}월 ${date.day.toString().padLeft(2, '0')}일",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
-              IconButton(onPressed: onNext, icon: const Icon(Icons.chevron_right, color: Colors.white)),
+              IconButton(
+                onPressed: onNext,
+                icon: const Icon(Icons.chevron_right, color: Colors.white),
+              ),
             ],
           ),
         ],
@@ -2135,7 +2750,10 @@ class _Header extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("앱 바로가기", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text(
+                "앱 바로가기",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 20),
               _AppSwitchOption(
                 icon: Icons.restaurant_menu,
@@ -2152,7 +2770,10 @@ class _Header extends StatelessWidget {
                 color: Colors.blue, // [NEW] 청람버스 - 파란색
                 onTap: () {
                   Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (c) => const BusAppScreen()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (c) => const BusAppScreen()),
+                  );
                 },
               ),
               const SizedBox(height: 12),
@@ -2163,7 +2784,10 @@ class _Header extends StatelessWidget {
                 color: Colors.green, // [NEW] 캠퍼스런 - 초록색
                 onTap: () {
                   Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (c) => const CampusRunScreen()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (c) => const CampusRunScreen()),
+                  );
                 },
               ),
             ],
@@ -2181,11 +2805,17 @@ class _Header extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(color: isSel ? Colors.white : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(
+            color: isSel ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
           alignment: Alignment.center,
           child: Text(
             title,
-            style: TextStyle(color: isSel ? Colors.black87 : Colors.white.withOpacity(0.7), fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: isSel ? Colors.black87 : Colors.white.withOpacity(0.7),
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ),
