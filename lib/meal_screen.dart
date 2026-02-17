@@ -1342,7 +1342,7 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
       query: _encodeQueryParameters(<String, String>{
         'subject': subject,
         'body':
-            '내용:\n$body\n\n----------------------------\n(앱 버전: 5.8.0 / 기기 정보 등 필요시 추가)',
+            '내용:\n$body\n\n----------------------------\n(  )',
       }),
     );
 
