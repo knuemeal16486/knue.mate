@@ -47,10 +47,11 @@ android {
     }
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
+            // 값이 null일 경우 에러를 내는 대신 빈 문자열("")이나 임시 파일명을 넣도록 안전하게 처리
+            keyAlias = keystoreProperties.getProperty("keyAlias", "")
+            keyPassword = keystoreProperties.getProperty("keyPassword", "")
+            storeFile = file(keystoreProperties.getProperty("storeFile", "keystore.jks"))
+            storePassword = keystoreProperties.getProperty("storePassword", "")
         }
     }
 
