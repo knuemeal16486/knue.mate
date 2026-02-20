@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "📱 Android (스마트폰)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "-d",
+                "android"
+            ]
+        },
+        {
+            "name": "🖥️ Windows (데스크톱)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "-d",
+                "windows"
+            ]
+        },
+        {
+            "name": "🌐 Chrome (웹)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "-d",
+                "chrome"
+            ]
+        }
+    ]
+}

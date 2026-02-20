@@ -77,5 +77,4 @@ dependencies {
     // [여기에 추가하세요]
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
     
-    implementation(platform("org.jetbrains.kotlin:kotlin-bom:1.8.0"))
 }

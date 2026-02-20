@@ -1,0 +1,19 @@
+{
+    "java.jdt.ls.java.home": "C:\\Users\\user\\AppData\\Local\\Programs\\Eclipse Adoptium\\jdk-17.0.17.10-hotspot",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-17",
+            "path": "C:\\Users\\user\\AppData\\Local\\Programs\\Eclipse Adoptium\\jdk-17.0.17.10-hotspot",
+            "default": true
+        }
+    ],
+    "java.import.gradle.java.home": "C:\\Users\\user\\AppData\\Local\\Programs\\Eclipse Adoptium\\jdk-17.0.17.10-hotspot",
+    "java.import.gradle.wrapper.enabled": true,
+    "java.import.gradle.offline.mode": false,
+    "gradle.javaDebug.cleanOutput": true,
+    "java.import.gradle.arguments": "--no-daemon",
+    "files.exclude": {
+        "**/.gradle": true,
+        "**/build": true
+    }
+}

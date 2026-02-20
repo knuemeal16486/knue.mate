@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'constants.dart';
 import 'meal_screen.dart';
 
@@ -85,11 +86,27 @@ class MyApp extends StatelessWidget {
                   primary: color,
                   brightness: Brightness.light,
                 ),
-                scaffoldBackgroundColor: const Color(0xFFF9FAFB),
+                textTheme: GoogleFonts.notoSansKrTextTheme(
+                  ThemeData(brightness: Brightness.light).textTheme,
+                ),
+                scaffoldBackgroundColor: const Color(0xFFF4F6FB),
                 cardColor: Colors.white,
+                cardTheme: CardThemeData(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  color: Colors.white,
+                ),
                 appBarTheme: AppBarTheme(
                   backgroundColor: color,
                   foregroundColor: Colors.white,
+                  elevation: 0,
+                  titleTextStyle: GoogleFonts.notoSansKr(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               darkTheme: ThemeData(
@@ -102,11 +119,27 @@ class MyApp extends StatelessWidget {
                   brightness: Brightness.dark,
                   surface: const Color(0xFF121212),
                 ),
-                scaffoldBackgroundColor: const Color(0xFF121212),
-                cardColor: const Color(0xFF1E1E1E),
+                textTheme: GoogleFonts.notoSansKrTextTheme(
+                  ThemeData(brightness: Brightness.dark).textTheme,
+                ),
+                scaffoldBackgroundColor: const Color(0xFF0D0D0D),
+                cardColor: const Color(0xFF1C1C1E),
+                cardTheme: CardThemeData(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  color: const Color(0xFF1C1C1E),
+                ),
                 appBarTheme: AppBarTheme(
                   backgroundColor: color,
                   foregroundColor: Colors.white,
+                  elevation: 0,
+                  titleTextStyle: GoogleFonts.notoSansKr(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               themeMode: mode,

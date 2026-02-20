@@ -6,6 +6,7 @@ import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_card.dart';
 import 'campus_run_screen.dart';
+import 'campus_map_screen.dart';
 
 class BusAppScreen extends StatefulWidget {
   const BusAppScreen({super.key});
@@ -249,13 +250,7 @@ class _BusAppScreenState extends State<BusAppScreen>
         return Scaffold(
           appBar: AppBar(
             centerTitle: Platform.isIOS ? false : null,
-            title: Text(
-              "청람버스",
-              style: TextStyle(
-                fontWeight: Platform.isIOS ? FontWeight.w800 : FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+            title: const Text("청람버스"),
             backgroundColor: color,
             iconTheme: const IconThemeData(color: Colors.white),
             leading: Builder(
@@ -315,6 +310,22 @@ class _BusAppScreenState extends State<BusAppScreen>
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => const CampusRunScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          _AppSwitchOption(
+                            icon: Icons.map_rounded,
+                            label: "캠퍼스맵",
+                            isSelected: false,
+                            color: Colors.deepPurple,
+                            onTap: () {
+                              Navigator.pop(dialogContext);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const CampusMapScreen(),
                                 ),
                               );
                             },

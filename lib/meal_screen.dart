@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'constants.dart';
 import 'bus_screen.dart';
 import 'campus_run_screen.dart';
+import 'campus_map_screen.dart';
 import 'gemini_service.dart';
 
 // =============================================================================
@@ -2781,12 +2782,26 @@ class _Header extends StatelessWidget {
                 icon: Icons.directions_run,
                 label: "캠퍼스런",
                 isSelected: false,
-                color: Colors.green, // [NEW] 캠퍼스런 - 초록색
+                color: Colors.green,
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (c) => const CampusRunScreen()),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              _AppSwitchOption(
+                icon: Icons.map_rounded,
+                label: "캠퍼스맵",
+                isSelected: false,
+                color: Colors.deepPurple,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (c) => const CampusMapScreen()),
                   );
                 },
               ),

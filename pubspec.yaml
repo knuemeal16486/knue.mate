@@ -46,6 +46,8 @@ dependencies:
   flutter_dotenv: ^6.0.0
   html: ^0.15.4
   url_launcher: ^6.2.0
+  webview_flutter: ^4.10.0
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
