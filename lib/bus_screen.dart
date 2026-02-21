@@ -273,7 +273,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                             "앱 바로가기",
                             style: TextStyle(
                               fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
                             ),
                           ),
                           const SizedBox(height: 20),
@@ -1065,7 +1066,7 @@ class _AppSwitchOption extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontWeight: FontWeight.bold,
                 color: isDark ? Colors.white : Colors.black87,
               ),
             ),
