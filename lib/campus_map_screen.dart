@@ -163,7 +163,7 @@ class MapFacility {
 }
 
 class FloorData {
-  final int floor;
+  final dynamic floor; // int or String
   final List<String> rooms;
   const FloorData({required this.floor, required this.rooms});
 }
@@ -4113,7 +4113,11 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                             ),
                             alignment: Alignment.center,
                             child: Text(
-                              f.floor < 0 ? 'B${f.floor.abs()}' : '${f.floor}F',
+                              f.floor is int
+                                  ? (f.floor < 0
+                                        ? 'B${(f.floor as int).abs()}'
+                                        : '${f.floor}F')
+                                  : f.floor.toString(),
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 color: b.color,
