@@ -16,13 +16,14 @@ class BusAppScreen extends StatefulWidget {
 }
 
 class _BusAppScreenState extends State<BusAppScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver { // [수정] Observer 추가
-  
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  // [수정] Observer 추가
+
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
 
   final BusService _busService = BusService();
-  
+
   // [수정] FutureBuilder 대신 상태 변수 사용 (깜빡임 없는 갱신을 위해)
   List<BusSummary> _realtimeBusList = [];
   bool _isLoading = true;
@@ -39,78 +40,276 @@ class _BusAppScreenState extends State<BusAppScreen>
     "513": {
       "outgoing": {
         "weekday": [
-          "06:20", "07:15", "07:30", "08:50", "10:05", "10:50", "11:45", "12:39",
-          "13:33", "14:27", "15:35", "16:30", "17:23", "18:16", "19:34", "20:27",
-          "21:07", "22:00", "22:40",
+          "06:20",
+          "07:15",
+          "07:30",
+          "08:50",
+          "10:05",
+          "10:50",
+          "11:45",
+          "12:39",
+          "13:33",
+          "14:27",
+          "15:35",
+          "16:30",
+          "17:23",
+          "18:16",
+          "19:34",
+          "20:27",
+          "21:07",
+          "22:00",
+          "22:40",
         ],
         "holiday": [
-          "06:20", "07:15", "07:30", "08:50", "10:05", "10:50", "11:45", "12:39",
-          "13:33", "14:27", "15:35", "16:30", "17:23", "18:16", "19:34", "20:27",
-          "21:07", "22:00", "22:40",
+          "06:20",
+          "07:15",
+          "07:30",
+          "08:50",
+          "10:05",
+          "10:50",
+          "11:45",
+          "12:39",
+          "13:33",
+          "14:27",
+          "15:35",
+          "16:30",
+          "17:23",
+          "18:16",
+          "19:34",
+          "20:27",
+          "21:07",
+          "22:00",
+          "22:40",
         ],
       },
       "incoming": {
         "weekday": [
-          "06:05", "07:00", "08:10", "09:20", "10:15", "11:09", "12:03", "12:57",
-          "14:05", "15:00", "15:53", "16:46", "17:39", "18:32", "19:37", "20:30",
-          "21:20", "22:10",
+          "06:05",
+          "07:00",
+          "08:10",
+          "09:20",
+          "10:15",
+          "11:09",
+          "12:03",
+          "12:57",
+          "14:05",
+          "15:00",
+          "15:53",
+          "16:46",
+          "17:39",
+          "18:32",
+          "19:37",
+          "20:30",
+          "21:20",
+          "22:10",
         ],
         "holiday": [
-          "06:05", "07:00", "08:10", "09:20", "10:15", "11:09", "12:03", "12:57",
-          "14:05", "15:00", "15:53", "16:46", "17:39", "18:32", "19:37", "20:30",
-          "21:20", "22:10",
+          "06:05",
+          "07:00",
+          "08:10",
+          "09:20",
+          "10:15",
+          "11:09",
+          "12:03",
+          "12:57",
+          "14:05",
+          "15:00",
+          "15:53",
+          "16:46",
+          "17:39",
+          "18:32",
+          "19:37",
+          "20:30",
+          "21:20",
+          "22:10",
         ],
       },
     },
     "514": {
       "outgoing": {
         "weekday": [
-          "05:30", "06:10", "06:55", "07:50", "09:25", "10:30", "11:17", "12:12",
-          "13:06", "14:00", "15:02", "16:03", "16:56", "17:49", "19:07", "20:00",
-          "20:40", "21:34", "22:27",
+          "05:30",
+          "06:10",
+          "06:55",
+          "07:50",
+          "09:25",
+          "10:30",
+          "11:17",
+          "12:12",
+          "13:06",
+          "14:00",
+          "15:02",
+          "16:03",
+          "16:56",
+          "17:49",
+          "19:07",
+          "20:00",
+          "20:40",
+          "21:34",
+          "22:27",
         ],
         "holiday": [
-          "05:30", "06:10", "06:55", "07:50", "09:25", "10:30", "11:17", "12:12",
-          "13:06", "14:00", "15:02", "16:03", "16:56", "17:49", "19:07", "20:00",
-          "20:40", "21:34", "22:27",
+          "05:30",
+          "06:10",
+          "06:55",
+          "07:50",
+          "09:25",
+          "10:30",
+          "11:17",
+          "12:12",
+          "13:06",
+          "14:00",
+          "15:02",
+          "16:03",
+          "16:56",
+          "17:49",
+          "19:07",
+          "20:00",
+          "20:40",
+          "21:34",
+          "22:27",
         ],
       },
       "incoming": {
         "weekday": [
-          "05:30", "06:25", "07:35", "08:35", "09:47", "10:42", "11:36", "12:30",
-          "13:32", "14:33", "15:26", "16:19", "17:12", "18:00", "19:10", "20:04",
-          "20:57", "21:50", "22:30",
+          "05:30",
+          "06:25",
+          "07:35",
+          "08:35",
+          "09:47",
+          "10:42",
+          "11:36",
+          "12:30",
+          "13:32",
+          "14:33",
+          "15:26",
+          "16:19",
+          "17:12",
+          "18:00",
+          "19:10",
+          "20:04",
+          "20:57",
+          "21:50",
+          "22:30",
         ],
         "holiday": [
-          "05:30", "06:25", "07:35", "08:35", "09:47", "10:42", "11:36", "12:30",
-          "13:32", "14:33", "15:26", "16:19", "17:12", "18:00", "19:10", "20:04",
-          "20:57", "21:50", "22:30",
+          "05:30",
+          "06:25",
+          "07:35",
+          "08:35",
+          "09:47",
+          "10:42",
+          "11:36",
+          "12:30",
+          "13:32",
+          "14:33",
+          "15:26",
+          "16:19",
+          "17:12",
+          "18:00",
+          "19:10",
+          "20:04",
+          "20:57",
+          "21:50",
+          "22:30",
         ],
       },
     },
     "518": {
       "outgoing": {
         "weekday": [
-          "05:40", "06:30", "07:05", "08:05", "08:55", "09:55", "11:25", "12:15",
-          "12:55", "13:45", "14:25", "15:15", "16:25", "17:15", "18:00", "19:05",
-          "19:50", "20:35", "21:20", "22:05", "22:50",
+          "05:40",
+          "06:30",
+          "07:05",
+          "08:05",
+          "08:55",
+          "09:55",
+          "11:25",
+          "12:15",
+          "12:55",
+          "13:45",
+          "14:25",
+          "15:15",
+          "16:25",
+          "17:15",
+          "18:00",
+          "19:05",
+          "19:50",
+          "20:35",
+          "21:20",
+          "22:05",
+          "22:50",
         ],
         "holiday": [
-          "05:40", "06:30", "07:05", "08:05", "08:55", "09:55", "11:25", "12:15",
-          "12:55", "13:45", "14:25", "15:15", "16:25", "17:15", "18:00", "19:05",
-          "19:50", "20:35", "21:20", "22:05", "22:50",
+          "05:40",
+          "06:30",
+          "07:05",
+          "08:05",
+          "08:55",
+          "09:55",
+          "11:25",
+          "12:15",
+          "12:55",
+          "13:45",
+          "14:25",
+          "15:15",
+          "16:25",
+          "17:15",
+          "18:00",
+          "19:05",
+          "19:50",
+          "20:35",
+          "21:20",
+          "22:05",
+          "22:50",
         ],
       },
       "incoming": {
         "weekday": [
-          "05:40", "06:15", "07:05", "07:50", "08:50", "09:40", "10:30", "12:00",
-          "12:50", "13:30", "14:20", "15:00", "15:50", "17:00", "18:00", "18:45",
-          "19:40", "20:25", "21:10", "21:55", "22:40",
+          "05:40",
+          "06:15",
+          "07:05",
+          "07:50",
+          "08:50",
+          "09:40",
+          "10:30",
+          "12:00",
+          "12:50",
+          "13:30",
+          "14:20",
+          "15:00",
+          "15:50",
+          "17:00",
+          "18:00",
+          "18:45",
+          "19:40",
+          "20:25",
+          "21:10",
+          "21:55",
+          "22:40",
         ],
         "holiday": [
-          "05:40", "06:15", "07:05", "07:50", "08:50", "09:40", "10:30", "12:00",
-          "12:50", "13:30", "14:20", "15:00", "15:50", "17:00", "18:00", "18:45",
-          "19:40", "20:25", "21:10", "21:55", "22:40",
+          "05:40",
+          "06:15",
+          "07:05",
+          "07:50",
+          "08:50",
+          "09:40",
+          "10:30",
+          "12:00",
+          "12:50",
+          "13:30",
+          "14:20",
+          "15:00",
+          "15:50",
+          "17:00",
+          "18:00",
+          "18:45",
+          "19:40",
+          "20:25",
+          "21:10",
+          "21:55",
+          "22:40",
         ],
       },
     },
@@ -126,14 +325,14 @@ class _BusAppScreenState extends State<BusAppScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this); // [수정] 옵저버 등록
-    
+
     _tabController = TabController(length: 2, vsync: this);
     final weekday = DateTime.now().weekday;
     _isWeekend = (weekday == 6 || weekday == 7);
 
     // 초기 데이터 로드 및 타이머 시작
-    _fetchBusData(); 
-    _startAutoRefresh(); 
+    _fetchBusData();
+    _startAutoRefresh();
   }
 
   @override
@@ -183,7 +382,7 @@ class _BusAppScreenState extends State<BusAppScreen>
           _isLoading = false;
           _hasError = false;
         });
-        
+
         // 수동 새로고침일 때만 토스트 메시지
         if (!isQuietRefetch) {
           showToast(context, "버스 정보를 업데이트했습니다.");
@@ -646,20 +845,34 @@ class _BusAppScreenState extends State<BusAppScreen>
                       _selectedBus = busNo;
                       _selectedStopOffset = 0;
                     }),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                        horizontal: 18,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
                         color: isSelected ? primary : Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(24),
                         border: Border.all(
                           color: isSelected
                               ? primary
-                              : Colors.grey.withOpacity(0.5),
+                              : Colors.grey.withOpacity(0.3),
+                          width: isSelected ? 2 : 1,
                         ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: primary.withOpacity(
+                                    isDark ? 0.15 : 0.08,
+                                  ),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ]
+                            : null,
                       ),
                       child: Text(
                         "$busNo번",
@@ -765,15 +978,15 @@ class _BusAppScreenState extends State<BusAppScreen>
                             color: isSelected
                                 ? primary
                                 : (isDark
-                                    ? Colors.grey.shade800
-                                    : Colors.white),
+                                      ? Colors.grey.shade800
+                                      : Colors.white),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: isSelected
                                   ? primary
                                   : (isDark
-                                      ? Colors.grey.shade700
-                                      : Colors.grey.shade400),
+                                        ? Colors.grey.shade700
+                                        : Colors.grey.shade400),
                             ),
                           ),
                           child: Text(
@@ -783,8 +996,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                               color: isSelected
                                   ? Colors.white
                                   : (isDark
-                                      ? Colors.grey.shade400
-                                      : Colors.grey.shade700),
+                                        ? Colors.grey.shade400
+                                        : Colors.grey.shade700),
                             ),
                           ),
                         ),
@@ -852,15 +1065,19 @@ class _BusAppScreenState extends State<BusAppScreen>
                   statusIcon = Icons.directions_run;
               }
 
-              return Container(
-                height: isNext ? 75 : 60,
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOutCubic,
+                height: isNext ? 80 : 64,
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
                   color: isNext
-                      ? primary.withOpacity(0.2)
+                      ? (isDark
+                            ? primary.withOpacity(0.2)
+                            : primary.withOpacity(0.08))
                       : Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                   border: isNext
                       ? Border.all(color: primary, width: 2)
                       : Border.all(
@@ -868,9 +1085,11 @@ class _BusAppScreenState extends State<BusAppScreen>
                         ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: isNext
+                          ? primary.withOpacity(isDark ? 0.1 : 0.05)
+                          : Colors.black.withOpacity(isDark ? 0.15 : 0.015),
+                      blurRadius: isNext ? 32 : 12,
+                      offset: Offset(0, isNext ? 6 : 4),
                     ),
                   ],
                 ),
@@ -884,10 +1103,10 @@ class _BusAppScreenState extends State<BusAppScreen>
                           color: isNext
                               ? (isDark ? Colors.white : primary)
                               : (passed
-                                  ? Colors.grey
-                                  : (isDark
-                                      ? Colors.white70
-                                      : Colors.black54)),
+                                    ? Colors.grey
+                                    : (isDark
+                                          ? Colors.white70
+                                          : Colors.black54)),
                           size: isNext ? 26 : 20,
                         ),
                         const SizedBox(width: 12),
@@ -995,8 +1214,8 @@ class _BusAppScreenState extends State<BusAppScreen>
             color: isSelected
                 ? primary
                 : (isDark
-                    ? Colors.grey.shade600
-                    : Colors.grey.withOpacity(0.5)),
+                      ? Colors.grey.shade600
+                      : Colors.grey.withOpacity(0.5)),
           ),
         ),
         child: Text(
@@ -1040,14 +1259,10 @@ class _AppSwitchOption extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected
-              ? activeColor.withOpacity(0.1)
-              : Colors.transparent,
+          color: isSelected ? activeColor.withOpacity(0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected
-                ? activeColor
-                : Colors.grey.withOpacity(0.2),
+            color: isSelected ? activeColor : Colors.grey.withOpacity(0.2),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -1071,7 +1286,8 @@ class _AppSwitchOption extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            if (isSelected) Icon(Icons.check_circle_rounded, color: activeColor),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: activeColor),
           ],
         ),
       ),

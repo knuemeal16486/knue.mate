@@ -2209,19 +2209,33 @@ class _MealDetailCardState extends State<_MealDetailCard> {
 
     final timeLeft = _getTimeLeft();
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+      clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(24),
+        color: isDark
+            ? const Color(0xFF1E1E22).withOpacity(0.85)
+            : Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(28),
         border: boxBorder,
+        gradient: widget.isToday
+            ? LinearGradient(
+                colors: isDark
+                    ? [primary.withOpacity(0.06), Colors.transparent]
+                    : [primary.withOpacity(0.015), Colors.transparent],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
         boxShadow: [
           BoxShadow(
             color: widget.isToday
-                ? primary.withOpacity(0.15)
-                : Colors.black.withOpacity(0.05),
-            blurRadius: widget.isToday ? 20 : 10,
-            offset: const Offset(0, 4),
+                ? primary.withOpacity(isDark ? 0.1 : 0.05)
+                : Colors.black.withOpacity(isDark ? 0.15 : 0.015),
+            blurRadius: widget.isToday ? 32 : 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -2232,94 +2246,94 @@ class _MealDetailCardState extends State<_MealDetailCard> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
               color: widget.isToday
-                  ? primary.withOpacity(0.05)
+                  ? primary.withOpacity(0.03) // 조금 더 연하게
                   : Colors.transparent,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+                top: Radius.circular(28),
               ),
               border: Border(
                 bottom: BorderSide(
-                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                  color: isDark ? Colors.white10 : Colors.grey.shade200,
+                  width: 1.0,
                 ),
               ),
             ),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (widget.isToday)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          "TODAY",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (widget.isToday)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
                           ),
-                        ),
-                      ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(statusIcon, size: 16, color: statusColor),
-                          const SizedBox(width: 6),
-                          Text(
-                            statusText,
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            "TODAY",
                             style: TextStyle(
-                              color: statusColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    if (widget.status == ServeStatus.open &&
-                        timeLeft.isNotEmpty &&
-                        !isStudentHallBreakfast)
+                        ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                          horizontal: 10,
+                          vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.redAccent.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          timeLeft,
-                          style: const TextStyle(
-                            color: Colors.redAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(statusIcon, size: 16, color: statusColor),
+                            const SizedBox(width: 6),
+                            Text(
+                              statusText,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                  ],
+                      if (widget.status == ServeStatus.open &&
+                          timeLeft.isNotEmpty &&
+                          !isStudentHallBreakfast)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            timeLeft,
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
                 Text(
                   _getTimeRangeText(),
@@ -2328,6 +2342,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
+                  textAlign: TextAlign.right,
                 ),
               ],
             ),
@@ -2390,10 +2405,16 @@ class _MealDetailCardState extends State<_MealDetailCard> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: BoxDecoration(
                 color: isDark
-                    ? Colors.black.withOpacity(0.2)
-                    : const Color(0xFFF8F9FA),
+                    ? Colors.white.withOpacity(0.02)
+                    : primary.withOpacity(0.015),
                 borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(24),
+                  bottom: Radius.circular(28),
+                ),
+                border: Border(
+                  top: BorderSide(
+                    color: isDark ? Colors.white10 : Colors.grey.shade200,
+                    width: 1.0,
+                  ),
                 ),
               ),
               child: Row(

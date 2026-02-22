@@ -1,4 +1,4 @@
- import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_widget/home_widget.dart';
@@ -84,29 +84,39 @@ class MyApp extends StatelessWidget {
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: color,
                   primary: color,
+                  secondary: color.withOpacity(0.8),
                   brightness: Brightness.light,
                 ),
                 textTheme: GoogleFonts.notoSansKrTextTheme(
                   ThemeData(brightness: Brightness.light).textTheme,
                 ),
-                scaffoldBackgroundColor: const Color(0xFFF4F6FB),
+                scaffoldBackgroundColor: const Color(0xFFF8F9FE),
                 cardColor: Colors.white,
                 cardTheme: CardThemeData(
-                  elevation: 0,
+                  elevation: 8,
+                  shadowColor: Colors.black.withOpacity(0.04),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(24),
                   ),
                   color: Colors.white,
+                  surfaceTintColor: Colors.transparent,
                 ),
                 appBarTheme: AppBarTheme(
                   backgroundColor: color,
                   foregroundColor: Colors.white,
                   elevation: 0,
+                  scrolledUnderElevation: 0,
                   titleTextStyle: GoogleFonts.notoSansKr(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
+                ),
+                pageTransitionsTheme: const PageTransitionsTheme(
+                  builders: {
+                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                  },
                 ),
               ),
               darkTheme: ThemeData(
@@ -116,30 +126,40 @@ class MyApp extends StatelessWidget {
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: color,
                   primary: color,
+                  secondary: color.withOpacity(0.8),
                   brightness: Brightness.dark,
-                  surface: const Color(0xFF121212),
+                  surface: const Color(0xFF161618),
                 ),
                 textTheme: GoogleFonts.notoSansKrTextTheme(
                   ThemeData(brightness: Brightness.dark).textTheme,
                 ),
-                scaffoldBackgroundColor: const Color(0xFF0D0D0D),
-                cardColor: const Color(0xFF1C1C1E),
+                scaffoldBackgroundColor: const Color(0xFF0D0D0F),
+                cardColor: const Color(0xFF1E1E22),
                 cardTheme: CardThemeData(
-                  elevation: 0,
+                  elevation: 8,
+                  shadowColor: Colors.black.withOpacity(0.2),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(24),
                   ),
-                  color: const Color(0xFF1C1C1E),
+                  color: const Color(0xFF1E1E22),
+                  surfaceTintColor: Colors.transparent,
                 ),
                 appBarTheme: AppBarTheme(
                   backgroundColor: color,
                   foregroundColor: Colors.white,
                   elevation: 0,
+                  scrolledUnderElevation: 0,
                   titleTextStyle: GoogleFonts.notoSansKr(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
+                ),
+                pageTransitionsTheme: const PageTransitionsTheme(
+                  builders: {
+                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                  },
                 ),
               ),
               themeMode: mode,
