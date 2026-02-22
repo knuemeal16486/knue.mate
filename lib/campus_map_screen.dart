@@ -432,7 +432,7 @@ final List<BuildingData> kBuildings = [
   ),
   BuildingData(
     name: '교수회관',
-    shortName: '교수관',
+    shortName: '교수회관',
     description: '교수 휴게·회의 공간',
     position: const LatLng(36.6106240, 127.3586735),
     color: Colors.brown,
@@ -880,6 +880,12 @@ final List<MapFacility> kFacilities = [
     type: FacilityType.restaurant,
     position: LatLng(36.612830, 127.360559),
     detail: '07:00~19:00',
+  ),
+  const MapFacility(
+    name: '뉴욕 버거',
+    type: FacilityType.restaurant,
+    position: LatLng(36.6104197, 127.3589766),
+    detail: '11:00~20:00',
   ),
   const MapFacility(
     name: '농협은행 교원대출장소',
