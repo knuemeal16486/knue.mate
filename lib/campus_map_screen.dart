@@ -2054,9 +2054,41 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      trailing: Icon(
-                        Icons.drag_handle_rounded,
-                        color: isDark ? Colors.white38 : Colors.black26,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              _hiddenFacilityIdx.contains(tempOrder[i])
+                                  ? Icons.visibility_off_rounded
+                                  : Icons.visibility_rounded,
+                              color: _hiddenFacilityIdx.contains(tempOrder[i])
+                                  ? Colors.redAccent
+                                  : (isDark ? Colors.white54 : Colors.black54),
+                              size: 20,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            constraints: const BoxConstraints(),
+                            onPressed: () {
+                              setLocal(() {
+                                setState(() {
+                                  if (_hiddenFacilityIdx.contains(
+                                    tempOrder[i],
+                                  )) {
+                                    _hiddenFacilityIdx.remove(tempOrder[i]);
+                                  } else {
+                                    _hiddenFacilityIdx.add(tempOrder[i]);
+                                  }
+                                });
+                              });
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.drag_handle_rounded,
+                            color: isDark ? Colors.white38 : Colors.black26,
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -3035,9 +3067,41 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                           color: isDark ? Colors.white38 : Colors.black38,
                         ),
                       ),
-                      trailing: Icon(
-                        Icons.drag_handle_rounded,
-                        color: isDark ? Colors.white38 : Colors.black26,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              _hiddenBuildingIdx.contains(tempOrder[i])
+                                  ? Icons.visibility_off_rounded
+                                  : Icons.visibility_rounded,
+                              color: _hiddenBuildingIdx.contains(tempOrder[i])
+                                  ? Colors.redAccent
+                                  : (isDark ? Colors.white54 : Colors.black54),
+                              size: 20,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            constraints: const BoxConstraints(),
+                            onPressed: () {
+                              setLocalState(() {
+                                setState(() {
+                                  if (_hiddenBuildingIdx.contains(
+                                    tempOrder[i],
+                                  )) {
+                                    _hiddenBuildingIdx.remove(tempOrder[i]);
+                                  } else {
+                                    _hiddenBuildingIdx.add(tempOrder[i]);
+                                  }
+                                });
+                              });
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.drag_handle_rounded,
+                            color: isDark ? Colors.white38 : Colors.black26,
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -3432,43 +3496,39 @@ class _CampusMapScreenState extends State<CampusMapScreen>
               ),
               // 버튼들
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: CupertinoButton(
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(14),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          setState(() {
-                            final idx = kBuildings.indexOf(b);
-                            if (idx >= 0) _hiddenBuildingIdx.add(idx);
-                          });
-                        },
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.visibility_off_rounded,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              '지도에서 숨기기',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      setState(() {
+                        final idx = kBuildings.indexOf(b);
+                        if (idx >= 0) _hiddenBuildingIdx.add(idx);
+                      });
+                    },
+                    icon: const Icon(
+                      Icons.visibility_off_rounded,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
+                    label: const Text(
+                      '이 마커 지도에서 숨기기',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
                       ),
                     ),
-                  ],
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -3593,32 +3653,11 @@ class _CampusMapScreenState extends State<CampusMapScreen>
               ],
               // 버튼
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                child: Column(
                   children: [
-                    Expanded(
-                      flex: 1,
-                      child: CupertinoButton(
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        color: Colors.redAccent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(14),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          setState(() {
-                            final idx = kFacilities.indexOf(f);
-                            if (idx >= 0) _hiddenFacilityIdx.add(idx);
-                          });
-                        },
-                        child: const Icon(
-                          Icons.visibility_off_rounded,
-                          size: 20,
-                          color: Colors.redAccent,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 4,
+                    SizedBox(
+                      width: double.infinity,
                       child: CupertinoButton(
                         padding: const EdgeInsets.symmetric(vertical: 15),
                         color: f.type.color,
@@ -3645,6 +3684,40 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          setState(() {
+                            final idx = kFacilities.indexOf(f);
+                            if (idx >= 0) _hiddenFacilityIdx.add(idx);
+                          });
+                        },
+                        icon: const Icon(
+                          Icons.visibility_off_rounded,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
+                        label: const Text(
+                          '이 마커 지도에서 숨기기',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       ),
                     ),
