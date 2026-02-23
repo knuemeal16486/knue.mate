@@ -1,0 +1,35 @@
+workflows:
+  ios-release-workflow:
+    name: KNUE MoA iOS Release
+    # iOS 빌드를 위해 코드매직의 Mac 환경(M2)을 사용
+    instance_type: mac_mini_m2 
+    
+    environment:
+      flutter: stable # 플러터 최신 안정화 버전 사용
+      ios_signing:
+        distribution_type: app_store
+        # ★여기에 아까 애플 개발자 센터에서 만든 KNUE MoA의 진짜 번들 ID를 넣어줘! (예: com.yourname.knuemoa)
+        bundle_identifier: com.knue.knuemoa 
+        
+    scripts:
+      - name: Set up code signing settings on macOS builder
+        script: |
+          xcode-project use-profiles
+          
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+          
+      - name: Build IPA for App Store
+        script: |
+          flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
+          
+    artifacts:
+      - build/ios/ipa/*.ipa # 완성된 앱 설치 파일
+      - /tmp/xcodebuild_logs/*.log # 에러 확인용 로그
+      
+    publishing:
+      app_store_connect:
+        # 코드매직 UI에 연동해 둔 App Store Connect API 키를 자동으로 사용함
+        auth: integration 
+        submit_to_testflight: true # 빌드 성공 시 TestFlight로 자동 업로드
