@@ -62,6 +62,12 @@
     <key>NSLocationWhenInUseUsageDescription</key>
 	<string>캠퍼스 런 기능을 위해 사용자의 현재 위치를 확인합니다.</string>
 
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>캠퍼스런 기능을 위해 백그라운드에서도 사용자의 위치 정보가 필요합니다.</string>
+
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
