@@ -1381,7 +1381,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
             ? const Color(0xFF0D0D0D)
             : const Color(0xFFF4F6FB),
         appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(114),
+          preferredSize: const Size.fromHeight(124),
           child: _buildTopBar(primary, isDark),
         ),
         body: Stack(
@@ -1592,7 +1592,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
               .toList();
 
     return Positioned.fill(
-      top: 114, // AppBar 높이 만큼
+      top: 134, // AppBar 높이 만큼
       child: ClipRRect(
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -1791,8 +1791,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
           children: [
             TileLayer(
               urlTemplate: isDark
-                  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                  : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  ? 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}{r}.png'
+                  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
               userAgentPackageName: 'com.knue.knuemate',
             ),
             // 저장된 산책로
@@ -1960,7 +1960,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
         // 필터 바
         Positioned(
-          top: 122, // 투명한 AppBar 높이 아래쪽에 위치
+          top: 134, // 투명한 AppBar 높이 아래쪽에 위치
           left: 10,
           right: 10,
           child: _buildFilterBar(isDark),
@@ -2557,7 +2557,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     return Column(
       children: [
         SizedBox(
-          height: MediaQuery.of(context).padding.top + 96,
+          height: MediaQuery.of(context).padding.top + 110,
         ), // padding for the new floating app bar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -2928,7 +2928,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     return Column(
       children: [
         SizedBox(
-          height: MediaQuery.of(context).padding.top + 96,
+          height: MediaQuery.of(context).padding.top + 110,
         ), // Padding for floating app bar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -3238,7 +3238,9 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         List<Widget> tabItems = [];
 
         // 1. 헤더 (검색 패널)
-        tabItems.add(SizedBox(height: MediaQuery.of(context).padding.top + 96));
+        tabItems.add(
+          SizedBox(height: MediaQuery.of(context).padding.top + 110),
+        );
         tabItems.add(
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -5209,8 +5211,8 @@ class _ScreenshotShareDialogState extends State<_ScreenshotShareDialog> {
                         children: [
                           TileLayer(
                             urlTemplate: isDark
-                                ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                                : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                ? 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}{r}.png'
+                                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
                             userAgentPackageName: 'com.knue.knuemate',
                           ),
                           PolylineLayer(
