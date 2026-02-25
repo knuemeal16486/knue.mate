@@ -1099,7 +1099,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   void initState() {
     super.initState();
     _mapController = MapController();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
 
     // 학생들이 많이 이용하는 건물 우선 배치 (학부생 위주 정렬)
     final pop = [
@@ -1381,7 +1381,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
             ? const Color(0xFF0D0D0D)
             : const Color(0xFFF4F6FB),
         appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(160),
+          preferredSize: const Size.fromHeight(104),
           child: _buildTopBar(primary, isDark),
         ),
         body: Stack(
@@ -1395,7 +1395,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                 _buildFacilityTab(primary, isDark),
                 _buildTrailTab(primary, isDark),
                 _buildDeptOfficeTab(isDark),
-                _buildAdminOfficeTab(isDark),
               ],
             ),
             if (_searchOpen) _buildSearchOverlay(primary, isDark),
@@ -1526,7 +1525,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                     Tab(text: '부속시설', height: 32),
                     Tab(text: '산책로', height: 32),
                     Tab(text: '과 사무실', height: 32),
-                    Tab(text: '행정 부서', height: 32),
                   ],
                 ),
               ],
@@ -1592,7 +1590,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
               .toList();
 
     return Positioned.fill(
-      top: MediaQuery.of(context).padding.top + 160,
+      top: MediaQuery.of(context).padding.top + 104,
       child: ClipRRect(
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -1959,7 +1957,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
         // 필터 바
         Positioned(
-          top: MediaQuery.of(context).padding.top + 160 + 4,
+          top: MediaQuery.of(context).padding.top + 104 + 8,
           left: 10,
           right: 10,
           child: _buildFilterBar(isDark),
@@ -2354,7 +2352,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         .toList();
     return Column(
       children: [
-        SizedBox(height: MediaQuery.of(context).padding.top + 96),
+        SizedBox(height: MediaQuery.of(context).padding.top + 104),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
@@ -2556,7 +2554,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     return Column(
       children: [
         SizedBox(
-          height: MediaQuery.of(context).padding.top + 160,
+          height: MediaQuery.of(context).padding.top + 104,
         ), // padding for the new floating app bar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -2927,7 +2925,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     return Column(
       children: [
         SizedBox(
-          height: MediaQuery.of(context).padding.top + 160,
+          height: MediaQuery.of(context).padding.top + 104,
         ), // Padding for floating app bar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -3237,7 +3235,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         List<Widget> tabItems = [];
 
         tabItems.add(
-          SizedBox(height: MediaQuery.of(context).padding.top + 160),
+          SizedBox(height: MediaQuery.of(context).padding.top + 104),
         );
         tabItems.add(
           Padding(
@@ -3702,97 +3700,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildAdminOfficeTab(bool isDark) {
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 24, left: 16, right: 16),
-      itemCount: kAdminOffices.length,
-      itemBuilder: (ctx, idx) {
-        final d = kAdminOffices[idx];
-        final color = themeColor.value;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withValues(alpha: 0.15)),
-          ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
-            leading: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: Icon(
-                  Icons.business_center_rounded,
-                  color: color,
-                  size: 20,
-                ),
-              ),
-            ),
-            title: Text(
-              d.dept,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            subtitle: Text(
-              '${d.building} ${d.room}',
-              style: TextStyle(
-                fontSize: 11,
-                color: isDark ? Colors.white54 : Colors.black54,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: d.phone.split(',').map((p) {
-                final phoneNum = p.trim();
-                return GestureDetector(
-                  onTap: () async {
-                    final uri = Uri.parse('tel:$phoneNum');
-                    if (await canLaunchUrl(uri)) launchUrl(uri);
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(left: 6),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.call_rounded, size: 13, color: color),
-                        const SizedBox(height: 2),
-                        Text(
-                          phoneNum.replaceFirst('043-', ''),
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            color: color,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        );
-      },
     );
   }
 

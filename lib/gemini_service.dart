@@ -14,7 +14,7 @@ class GeminiService {
 
   // 모델 초기화
   static GenerativeModel get _model => GenerativeModel(
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     apiKey: apiKey,
     // [추가] 음식 이름에 의한 불필요한 필터링 방지
     safetySettings: [
