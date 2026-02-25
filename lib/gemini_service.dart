@@ -96,63 +96,32 @@ class GeminiService {
     final menuString = menuItems.join(", ");
 
     return """
-    학식 전문 영양사로서 다음 메뉴의 총 칼로리를 추산해줘.
+    당신은 영양학 전문가입니다. 제공된 메뉴 리스트의 총 칼로리를 추산해 주세요.
     
     메뉴: $menuString
     
-    [출력 규칙]
-    1. 20대 성인 기준 1인분 총 칼로리를 계산할 것.
-    2. 반드시 '숫자~숫자kcal' 형식으로만 대답할 것 (예: 600~700kcal).
-    3. 다른 미사여구나 설명은 절대 생략할 것.
-    4. 정확한 계산이 어려우면 가장 근접한 범위를 제시할 것.
+    [출력 타입]
+    반드시 '숫자~숫자kcal' 형식으로 응답하십시오. (예: 650~750kcal)
+    다른 어떤 설명이나 텍스트도 포함하지 마십시오. 오직 칼로리 범위만 출력하십시오.
     """;
   }
 
   static String _normalizeCalorieResponse(String rawResponse) {
-    // 1. 불필요한 특수문자 제거 (마크다운 등)
-    String clean = rawResponse.replaceAll('*', '').replaceAll('#', '').trim();
+    // 1. 공백 및 불필요 문자 정리
+    String clean = rawResponse.replaceAll(RegExp(r'[*#_]'), '').trim();
 
-    // 2. 숫자~숫자 kcal 패턴 (공백 허용)
-    final rangeRegex = RegExp(
-      r'(\d+)\s*[~-]\s*(\d+)\s*kcal',
-      caseSensitive: false,
-    );
-    final rangeMatch = rangeRegex.firstMatch(clean);
-
-    if (rangeMatch != null) {
-      return "${rangeMatch.group(1)}~${rangeMatch.group(2)}kcal";
-    }
-
-    // 3. 단일 숫자 kcal 패턴 -> 범위로 자동 변환
-    final singleRegex = RegExp(r'(\d+)\s*kcal', caseSensitive: false);
-    final singleMatch = singleRegex.firstMatch(clean);
-
-    if (singleMatch != null) {
-      final value = int.tryParse(singleMatch.group(1)!) ?? 0;
-      if (value > 0) {
-        return "${value - 50}~${value + 50}kcal";
-      }
-    }
-
-    // 4. 숫자 범위만 있는 경우 (kcal 생략 시)
-    final numbersOnlyRegex = RegExp(
-      r'(\d+)\s*[~-]\s*(\d+)',
-      caseSensitive: false,
-    );
-    final numbersMatch = numbersOnlyRegex.firstMatch(clean);
-    if (numbersMatch != null) {
-      return "${numbersMatch.group(1)}~${numbersMatch.group(2)}kcal";
-    }
-
-    // 5. 텍스트 안에 숫자가 섞여 있는 경우 최후의 수단으로 숫자들만 추출
+    // 2. 숫자 추출 (가장 유연하게)
     final allNumbers = RegExp(
       r'\d+',
     ).allMatches(clean).map((m) => m.group(0)!).toList();
+
     if (allNumbers.length >= 2) {
+      // 숫자 범위인 경우 (예: 600, 700)
       return "${allNumbers[0]}~${allNumbers[1]}kcal";
-    } else if (allNumbers.length == 1) {
+    } else if (allNumbers.isNotEmpty) {
+      // 단일 숫자인 경우 결과 조절
       final val = int.tryParse(allNumbers[0]) ?? 0;
-      return "${val - 50}~${val + 50}kcal";
+      if (val > 100) return "${val - 50}~${val + 50}kcal";
     }
 
     return "측정 불가";
