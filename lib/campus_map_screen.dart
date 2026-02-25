@@ -8,7 +8,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:share_plus/share_plus.dart';
@@ -1791,14 +1790,9 @@ class _CampusMapScreenState extends State<CampusMapScreen>
           ),
           children: [
             TileLayer(
-              // Thunderforest CycleMap: 녹지·건물·도로 색 구분 선명
-              // ※ 래스터 타일 특성상 서버에 구워진 텍스트는 제거 불가
               urlTemplate: isDark
-                  ? 'https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png'
-                        '?apikey=${dotenv.get('THUNDERFOREST_KEY', fallback: '')}'
-                  : 'https://{s}.tile.thunderforest.com/cycle/{z}/{x}/{y}.png'
-                        '?apikey=${dotenv.get('THUNDERFOREST_KEY', fallback: '')}',
-              subdomains: const ['a', 'b', 'c'],
+                  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                  : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.knue.knuemate',
             ),
             // 저장된 산책로
@@ -5215,9 +5209,9 @@ class _ScreenshotShareDialogState extends State<_ScreenshotShareDialog> {
                         children: [
                           TileLayer(
                             urlTemplate: isDark
-                                ? 'https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=${dotenv.get('THUNDERFOREST_KEY', fallback: '')}'
-                                : 'https://{s}.tile.thunderforest.com/cycle/{z}/{x}/{y}.png?apikey=${dotenv.get('THUNDERFOREST_KEY', fallback: '')}',
-                            subdomains: const ['a', 'b', 'c'],
+                                ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                                : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.knue.knuemate',
                           ),
                           PolylineLayer(
                             polylines: [

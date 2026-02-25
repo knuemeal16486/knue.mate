@@ -14,8 +14,15 @@ class GeminiService {
 
   // 모델 초기화
   static GenerativeModel get _model => GenerativeModel(
-    model: 'gemini-2.0-flash', // 최신 안정 버전 사용
+    model: 'gemini-2.0-flash',
     apiKey: apiKey,
+    // [추가] 음식 이름에 의한 불필요한 필터링 방지
+    safetySettings: [
+      SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
+      SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
+      SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
+      SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
+    ],
   );
 
   // 캐시를 위한 메모리 저장소
@@ -24,14 +31,16 @@ class GeminiService {
 
   // 메뉴 리스트로 칼로리 예상하기
   static Future<String> estimateCalories(List<String> menuItems) async {
-    if (apiKey.isEmpty) return "API 키 필요";
+    if (apiKey.isEmpty) return "키 없음";
     if (menuItems.isEmpty) return "";
 
     // "없음"이나 빈 항목 제거
     final validItems = menuItems.where((item) {
-      return item.trim().isNotEmpty &&
-          !item.contains("없음") &&
-          !item.contains("미운영");
+      final trimmed = item.trim();
+      return trimmed.isNotEmpty &&
+          !trimmed.contains("없음") &&
+          !trimmed.contains("미운영") &&
+          !trimmed.contains("정보가");
     }).toList();
 
     if (validItems.isEmpty) return "";
@@ -39,85 +48,114 @@ class GeminiService {
     // 캐시 키 생성
     final cacheKey = validItems.join('|');
 
-    // 캐시 확인 (1시간 유효)
+    // 캐시 확인 (6시간 유효로 연장)
     if (_cache.containsKey(cacheKey)) {
       final timestamp = _cacheTimestamps[cacheKey];
       if (timestamp != null &&
-          DateTime.now().difference(timestamp).inHours < 1) {
+          DateTime.now().difference(timestamp).inHours < 6) {
         return _cache[cacheKey]!;
       }
     }
 
     final prompt = _buildPrompt(validItems);
 
-    try {
-      final content = [Content.text(prompt)];
-      final response = await _model.generateContent(content);
-      final result = _normalizeCalorieResponse(response.text?.trim() ?? "");
+    // [개선] 일시적 오류 발생 시 1회 재시도
+    int retryCount = 0;
+    while (retryCount < 2) {
+      try {
+        final content = [Content.text(prompt)];
+        final response = await _model.generateContent(content);
+        final rawText = response.text?.trim() ?? "";
 
-      // 캐시에 저장
-      _cache[cacheKey] = result;
-      _cacheTimestamps[cacheKey] = DateTime.now();
+        if (rawText.isEmpty) {
+          retryCount++;
+          continue;
+        }
 
-      return result;
-    } catch (e) {
-      print("Gemini API 오류: $e");
-      return "측정불가";
+        final result = _normalizeCalorieResponse(rawText);
+
+        if (result != "측정 불가") {
+          // 캐시에 저장
+          _cache[cacheKey] = result;
+          _cacheTimestamps[cacheKey] = DateTime.now();
+        }
+
+        return result;
+      } catch (e) {
+        retryCount++;
+        print("Gemini API 오류 (시도 $retryCount): $e");
+        if (retryCount >= 2) break;
+        await Future.delayed(const Duration(milliseconds: 1000));
+      }
     }
+
+    return "측정 불가";
   }
 
   static String _buildPrompt(List<String> menuItems) {
     final menuString = menuItems.join(", ");
 
     return """
-    너는 대학교 학생 식당의 전문 영양사입니다.
-    아래 메뉴를 보고 20대 성인여성 1인분 기준으로 총 섭취 칼로리(kcal)를 추산해주세요.
+    학식 전문 영양사로서 다음 메뉴의 총 칼로리를 추산해줘.
     
     메뉴: $menuString
     
-    [중요 규칙]
-    1. 모든 메뉴를 포함해서 계산하세요.
-    2. 모르는 메뉴명이 있어도 비슷한 일반 음식으로 가정하고 계산하세요.
-    3. 결과는 최소값과 최대값 범위로 표시하세요 (예: 650~750kcal).
-    4. 칼로리의 예상 범위는 오차범위 30kcal 안에서 추산하세요.
-    5. 설명이나 추가 텍스트 없이 숫자 범위만 출력하세요.
-    6. 단위는 항상 "kcal"를 붙이세요.
-    
-    [출력 예시]
-    800~850kcal
+    [출력 규칙]
+    1. 20대 성인 기준 1인분 총 칼로리를 계산할 것.
+    2. 반드시 '숫자~숫자kcal' 형식으로만 대답할 것 (예: 600~700kcal).
+    3. 다른 미사여구나 설명은 절대 생략할 것.
+    4. 정확한 계산이 어려우면 가장 근접한 범위를 제시할 것.
     """;
   }
 
   static String _normalizeCalorieResponse(String rawResponse) {
-    if (rawResponse.isEmpty) return "측정불가";
+    // 1. 불필요한 특수문자 제거 (마크다운 등)
+    String clean = rawResponse.replaceAll('*', '').replaceAll('#', '').trim();
 
-    // 숫자와 kcal 패턴 찾기
-    final regex = RegExp(r'(\d+)[~\-](\d+)\s*kcal', caseSensitive: false);
-    final match = regex.firstMatch(rawResponse);
+    // 2. 숫자~숫자 kcal 패턴 (공백 허용)
+    final rangeRegex = RegExp(
+      r'(\d+)\s*[~-]\s*(\d+)\s*kcal',
+      caseSensitive: false,
+    );
+    final rangeMatch = rangeRegex.firstMatch(clean);
 
-    if (match != null) {
-      final min = match.group(1);
-      final max = match.group(2);
-      if (min != null && max != null) {
-        return "${min}~${max}kcal";
-      }
+    if (rangeMatch != null) {
+      return "${rangeMatch.group(1)}~${rangeMatch.group(2)}kcal";
     }
 
-    // 단일 숫자 찾기
+    // 3. 단일 숫자 kcal 패턴 -> 범위로 자동 변환
     final singleRegex = RegExp(r'(\d+)\s*kcal', caseSensitive: false);
-    final singleMatch = singleRegex.firstMatch(rawResponse);
+    final singleMatch = singleRegex.firstMatch(clean);
 
     if (singleMatch != null) {
-      final value = singleMatch.group(1);
-      if (value != null) {
-        final numValue = int.tryParse(value) ?? 0;
-        final min = numValue - 50;
-        final max = numValue + 50;
-        return "${min}~${max}kcal";
+      final value = int.tryParse(singleMatch.group(1)!) ?? 0;
+      if (value > 0) {
+        return "${value - 50}~${value + 50}kcal";
       }
     }
 
-    return "측정불가";
+    // 4. 숫자 범위만 있는 경우 (kcal 생략 시)
+    final numbersOnlyRegex = RegExp(
+      r'(\d+)\s*[~-]\s*(\d+)',
+      caseSensitive: false,
+    );
+    final numbersMatch = numbersOnlyRegex.firstMatch(clean);
+    if (numbersMatch != null) {
+      return "${numbersMatch.group(1)}~${numbersMatch.group(2)}kcal";
+    }
+
+    // 5. 텍스트 안에 숫자가 섞여 있는 경우 최후의 수단으로 숫자들만 추출
+    final allNumbers = RegExp(
+      r'\d+',
+    ).allMatches(clean).map((m) => m.group(0)!).toList();
+    if (allNumbers.length >= 2) {
+      return "${allNumbers[0]}~${allNumbers[1]}kcal";
+    } else if (allNumbers.length == 1) {
+      final val = int.tryParse(allNumbers[0]) ?? 0;
+      return "${val - 50}~${val + 50}kcal";
+    }
+
+    return "측정 불가";
   }
 
   // 캐시 초기화 (선택적)

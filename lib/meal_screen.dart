@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:home_widget/home_widget.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'constants.dart';
@@ -400,7 +398,6 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
     return ValueListenableBuilder<Color>(
       valueListenable: themeColor,
       builder: (context, primaryColor, child) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
           appBar: AppBar(
             backgroundColor: primaryColor,
@@ -2120,20 +2117,32 @@ class _MealDetailCardState extends State<_MealDetailCard> {
   bool _isCalorieLoading = false;
   Future<void> _fetchCalories() async {
     if (widget.items.isEmpty) return;
-    if (mounted) setState(() => _isCalorieLoading = true);
+    if (mounted) {
+      setState(() {
+        _isCalorieLoading = true;
+        _caloriesInfo = null; // 초기화하여 사용자에게 리트라이 상태를 알림
+      });
+    }
+
     try {
+      // 너무 빨리 끝나면 어색하므로 약간의 인위적인 지연 추가
+      await Future.delayed(const Duration(milliseconds: 500));
+
       String result = await GeminiService.estimateCalories(widget.items);
-      if (mounted)
+
+      if (mounted) {
         setState(() {
           _caloriesInfo = result;
           _isCalorieLoading = false;
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
-          _caloriesInfo = "측정 실패";
+          _caloriesInfo = "측정 불가";
           _isCalorieLoading = false;
         });
+      }
     }
   }
 
