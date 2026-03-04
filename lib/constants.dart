@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:html/parser.dart' as htmlParser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -15,20 +16,39 @@ import 'package:home_widget/home_widget.dart';
 const String kBaseUrl = "https://knue-meal-api.onrender.com";
 const String kHomeWidgetChannel = 'home_widget';
 
-final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.system);
+final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
+  ThemeMode.system,
+);
 final ValueNotifier<Color> themeColor = ValueNotifier(const Color(0xFF2563EB));
-final ValueNotifier<MealSource> defaultSourceNotifier = ValueNotifier(MealSource.a);
+final ValueNotifier<MealSource> defaultSourceNotifier = ValueNotifier(
+  MealSource.a,
+);
 
 final ValueNotifier<double> widgetTransparency = ValueNotifier(0.0);
 final ValueNotifier<ThemeMode> widgetTheme = ValueNotifier(ThemeMode.system);
 final ValueNotifier<MealSource> widgetSource = ValueNotifier(MealSource.a);
 
 const List<Color> kColorPalette = [
-  Color(0xFF2563EB), Color(0xFFEF5350), Color(0xFFEC407A), Color(0xFFAB47BC),
-  Color(0xFF7E57C2), Color(0xFF5C6BC0), Color(0xFF039BE5), Color(0xFF00ACC1),
-  Color(0xFF00897B), Color(0xFF43A047), Color(0xFF7CB342), Color(0xFFC0CA33),
-  Color(0xFFFDD835), Color(0xFFFFB300), Color(0xFFFB8C00), Color(0xFFF4511E),
-  Color(0xFF6D4C41), Color(0xFF757575), Color(0xFF546E7A), Color(0xFF000000),
+  Color(0xFF2563EB),
+  Color(0xFFEF5350),
+  Color(0xFFEC407A),
+  Color(0xFFAB47BC),
+  Color(0xFF7E57C2),
+  Color(0xFF5C6BC0),
+  Color(0xFF039BE5),
+  Color(0xFF00ACC1),
+  Color(0xFF00897B),
+  Color(0xFF43A047),
+  Color(0xFF7CB342),
+  Color(0xFFC0CA33),
+  Color(0xFFFDD835),
+  Color(0xFFFFB300),
+  Color(0xFFFB8C00),
+  Color(0xFFF4511E),
+  Color(0xFF6D4C41),
+  Color(0xFF757575),
+  Color(0xFF546E7A),
+  Color(0xFF000000),
 ];
 
 enum MealSource { a, b }
@@ -61,15 +81,33 @@ ServeStatus statusFor(MealType type, DateTime now, DateTime targetDate) {
   final times = type.timeRange.split("~");
   final startStr = times[0].trim().split(":");
   final endStr = times[1].trim().split(":");
-  final start = DateTime(now.year, now.month, now.day, int.parse(startStr[0]), int.parse(startStr[1]));
-  final end = DateTime(now.year, now.month, now.day, int.parse(endStr[0]), int.parse(endStr[1]));
-  
+  final start = DateTime(
+    now.year,
+    now.month,
+    now.day,
+    int.parse(startStr[0]),
+    int.parse(startStr[1]),
+  );
+  final end = DateTime(
+    now.year,
+    now.month,
+    now.day,
+    int.parse(endStr[0]),
+    int.parse(endStr[1]),
+  );
+
   if (now.isBefore(start)) return ServeStatus.waiting;
   if (now.isAfter(end)) return ServeStatus.closed;
   return ServeStatus.open;
 }
 
-Future<void> shareMenu(BuildContext context, DateTime date, MealSource source, MealType type, List<String>? items) async {
+Future<void> shareMenu(
+  BuildContext context,
+  DateTime date,
+  MealSource source,
+  MealType type,
+  List<String>? items,
+) async {
   if (items == null || items.isEmpty) return;
   final title = "${date.month}월 ${date.day}일 ${type.label} 메뉴";
   final content = items.join("\n");
@@ -92,70 +130,208 @@ void showToast(BuildContext context, String msg) {
 // [3] API 및 위젯 로직 (수정됨)
 String _weekdayToDayParam(DateTime d) {
   switch (d.weekday) {
-    case 1: return "mon"; case 2: return "tue"; case 3: return "wed";
-    case 4: return "thu"; case 5: return "fri"; case 6: return "sat";
-    default: return "sun";
+    case 1:
+      return "mon";
+    case 2:
+      return "tue";
+    case 3:
+      return "wed";
+    case 4:
+      return "thu";
+    case 5:
+      return "fri";
+    case 6:
+      return "sat";
+    default:
+      return "sun";
   }
 }
 
+/// KNUE \uc2dd\ub2f8 HTML \uc2a4\ud06c\ub798\ud37c
+/// \uc8fc\uac04 \uce98\ub9b0\ub354 \ud14c\uc774\ube14\uc5d0\uc11c \uc694\uccad\ub41c \ub0a0\uc9dc\uc758 \uc870\uc2dd/\uc911\uc2dd/\uc11d\uc2dd \uba54\ub274\ub97c \ucd94\ucd9c
 Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
-  late Uri uri;
-  if (source == MealSource.a) {
-    uri = Uri.parse("$kBaseUrl/meals-a?y=${date.year}&m=${date.month}&d=${date.day}");
-  } else {
-    uri = Uri.parse("$kBaseUrl/meals-b?day=${_weekdayToDayParam(date)}");
-  }
+  final url = source == MealSource.a
+      ? 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1959&siteSe=one'
+      : 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1960&siteSe=cafe';
 
   try {
-    // [수정] 타임아웃 30초로 증가 (무료 서버 수면 모드 대비)
-    final response = await http.get(uri).timeout(const Duration(seconds: 30));
-    
+    final response = await http
+        .get(
+          Uri.parse(url),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36',
+            'Accept': 'text/html,*/*',
+          },
+        )
+        .timeout(const Duration(seconds: 30));
+
     if (response.statusCode == 200) {
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-      
-      // 날짜가 오늘인 경우에만 위젯 업데이트 시도
+      final html = utf8.decode(response.bodyBytes, allowMalformed: true);
+      final result = source == MealSource.a
+          ? _parseSadoHtml(html, date)
+          : _parseCafeHtml(html, date);
       if (DateUtils.isSameDay(date, DateTime.now())) {
-         await _updateWidgetDataInternal(decoded, source);
+        await _updateWidgetDataInternal(result, source);
       }
-      return decoded;
+      return result;
     }
   } catch (e) {
-    print("Fetch Error: $e");
+    print('fetchMealApi error: $e');
   }
-  return {"meals": {"breakfast": [], "lunch": [], "dinner": []}};
+  return _emptyMeals();
+}
+
+Map<String, dynamic> _emptyMeals() => {
+  'meals': {'breakfast': <String>[], 'lunch': <String>[], 'dinner': <String>[]},
+};
+
+/// \uc0ac\ub3c4\uad50\uc721\uc6d0 \uc2dd\ub2f9 HTML \ud30c\uc11c
+Map<String, dynamic> _parseSadoHtml(String html, DateTime date) {
+  final doc = htmlParser.parse(html);
+  final table = doc.querySelector('table.p-calendar-list');
+  if (table == null) return _emptyMeals();
+
+  // \ud5e4\ub354\uc5d0\uc11c \ub0a0\uc9dc \ub9e4\ub9e4: th[data-day=N] \u2192 \uc624\ub298\uc5d0 \uc77c\uce58\ud558\ub294 \uc778\ub371\uc2a4 \ucc3e\uae30
+  int? targetDay;
+  for (final th in table.querySelectorAll('thead th[data-day]')) {
+    final dayIdx = th.attributes['data-day'];
+    final spanText = th.querySelector('span')?.text.trim() ?? '';
+    final datePart = spanText.split('\n').first.trim(); // \"MM/DD\"
+    final parts = datePart.split('/');
+    if (parts.length == 2) {
+      final m = int.tryParse(parts[0]);
+      final d = int.tryParse(parts[1]);
+      if (m == date.month && d == date.day) {
+        targetDay = int.tryParse(dayIdx ?? '');
+        break;
+      }
+    }
+  }
+  if (targetDay == null) return _emptyMeals();
+
+  final rows = table.querySelectorAll('tbody tr');
+  final mealKeys = ['breakfast', 'lunch', 'dinner'];
+  final meals = <String, List<String>>{
+    'breakfast': [],
+    'lunch': [],
+    'dinner': [],
+  };
+
+  for (int i = 0; i < rows.length && i < mealKeys.length; i++) {
+    final td = rows[i].querySelector('td[data-day="$targetDay"]');
+    if (td == null) continue;
+    for (final li in td.querySelectorAll('ul.menu_list li')) {
+      final items = li.text
+          .split(RegExp(r'[\n\r]'))
+          .map((s) => s.trim().replaceAll('&amp;', '&'))
+          .where((s) => s.isNotEmpty)
+          .toList();
+      meals[mealKeys[i]]!.addAll(items);
+    }
+  }
+  return {'meals': meals};
+}
+
+/// \uad50\uc9c1\uc6d0\uc2dd\ub2f9 HTML \ud30c\uc11c (\uc870\uc2dd\uc5c6\uc74c, \uc810\uc2ec/\uc800\ub141)
+Map<String, dynamic> _parseCafeHtml(String html, DateTime date) {
+  final doc = htmlParser.parse(html);
+  final table = doc.querySelector('table.p-calendar-list');
+  if (table == null) return _emptyMeals();
+
+  int? targetDay;
+  for (final th in table.querySelectorAll('thead th[data-day]')) {
+    final dayIdx = th.attributes['data-day'];
+    final spanText = th.querySelector('span')?.text.trim() ?? '';
+    final datePart = spanText.split('\n').first.trim();
+    final parts = datePart.split('/');
+    if (parts.length == 2) {
+      final m = int.tryParse(parts[0]);
+      final d = int.tryParse(parts[1]);
+      if (m == date.month && d == date.day) {
+        targetDay = int.tryParse(dayIdx ?? '');
+        break;
+      }
+    }
+  }
+  if (targetDay == null) return _emptyMeals();
+
+  final rows = table.querySelectorAll('tbody tr');
+  // \uad50\uc9c1\uc6d0\uc2dd\ub2f9: \uccab \ud589=\uc810\uc2ec, \ub450 \ubc88\uc9f8 \ud589=\uc800\ub141 (\uc870\uc2dd \uc5c6\uc74c)
+  final mealKeys = ['lunch', 'dinner'];
+  final meals = <String, List<String>>{
+    'breakfast': [],
+    'lunch': [],
+    'dinner': [],
+  };
+
+  for (int i = 0; i < rows.length && i < mealKeys.length; i++) {
+    final td = rows[i].querySelector('td[data-day="$targetDay"]');
+    if (td == null) continue;
+    for (final li in td.querySelectorAll('ul.menu_list li')) {
+      final text = li.text.trim();
+      if (text.isEmpty) continue;
+      final items = text
+          .split(RegExp(r'[\n\r]'))
+          .map((s) => s.trim().replaceAll('&amp;', '&'))
+          .where(
+            (s) =>
+                s.isNotEmpty &&
+                !s.startsWith(
+                  '[',
+                ) && // \uc2dc\uac04\ub300 \ud0dc\uadf8 \uc81c\uc678
+                !s.startsWith(
+                  '\uc0bc\uc77c\uc808',
+                ) && // \ud734\uc77c \uac00\ub2a5\uc131 \uc81c\uc678
+                !s.startsWith('\uc149'),
+          )
+          .toList();
+      meals[mealKeys[i]]!.addAll(items);
+    }
+  }
+  return {'meals': meals};
 }
 
 // [핵심] 위젯 데이터 가공 및 저장
-Future<void> _updateWidgetDataInternal(Map<String, dynamic> data, MealSource source) async {
+Future<void> _updateWidgetDataInternal(
+  Map<String, dynamic> data,
+  MealSource source,
+) async {
   try {
     final now = DateTime.now();
     final hour = now.hour;
-    
+
     String timeText = "";
     String mealKey = "";
     String sourceName = source == MealSource.a ? "기숙사 식당" : "학생회관 식당";
 
     // 시간대 로직 (요구사항 반영)
-    if (source == MealSource.a) { // 기숙사
+    if (source == MealSource.a) {
+      // 기숙사
       if (hour < 9) {
-        timeText = "오늘 아침"; mealKey = "breakfast";
+        timeText = "오늘 아침";
+        mealKey = "breakfast";
       } else if (hour < 14) {
-        timeText = "오늘 점심"; mealKey = "lunch";
+        timeText = "오늘 점심";
+        mealKey = "lunch";
       } else {
-        timeText = "오늘 저녁"; mealKey = "dinner";
+        timeText = "오늘 저녁";
+        mealKey = "dinner";
       }
-    } else { // 학생회관
+    } else {
+      // 학생회관
       if (hour < 14) {
-        timeText = "오늘 점심"; mealKey = "lunch";
+        timeText = "오늘 점심";
+        mealKey = "lunch";
       } else {
-        timeText = "오늘 저녁"; mealKey = "dinner";
+        timeText = "오늘 저녁";
+        mealKey = "dinner";
       }
     }
 
     // 데이터 파싱
     final meals = data['meals'] ?? {};
     dynamic targetList;
-    
+
     // 키 매핑 (API 응답 유연성 확보)
     if (mealKey == 'breakfast') {
       targetList = meals['조식'] ?? meals['아침'] ?? meals['breakfast'];
@@ -164,20 +340,23 @@ Future<void> _updateWidgetDataInternal(Map<String, dynamic> data, MealSource sou
     } else {
       targetList = meals['석식'] ?? meals['저녁'] ?? meals['dinner'];
     }
-    
+
     List<String> menuItems = asStringList(targetList ?? []);
-    String menuText = menuItems.isNotEmpty 
-        ? menuItems.map((e) => "· ${e.trim()}").join("\n") 
+    String menuText = menuItems.isNotEmpty
+        ? menuItems.map((e) => "· ${e.trim()}").join("\n")
         : "등록된 메뉴가 없습니다.";
 
     // 데이터 저장
     await HomeWidget.saveWidgetData<String>('widget_title', sourceName);
     await HomeWidget.saveWidgetData<String>('widget_time', timeText);
     await HomeWidget.saveWidgetData<String>('widget_menu', menuText);
-    
+
     // 설정 저장
     await HomeWidget.saveWidgetData<int>('themeMode', widgetTheme.value.index);
-    await HomeWidget.saveWidgetData<String>('transparency', widgetTransparency.value.toString());
+    await HomeWidget.saveWidgetData<String>(
+      'transparency',
+      widgetTransparency.value.toString(),
+    );
 
     // [수정] 위젯 업데이트 시 전체 패키지명 사용 (가장 확실한 방법)
     await HomeWidget.updateWidget(
@@ -185,9 +364,8 @@ Future<void> _updateWidgetDataInternal(Map<String, dynamic> data, MealSource sou
       androidName: 'MealWidgetProvider',
       qualifiedAndroidName: 'com.knue.knuemate.MealWidgetProvider',
     );
-    
+
     print("위젯 업데이트 요청 완료: $sourceName / $timeText");
-    
   } catch (e) {
     print("위젯 내부 업데이트 실패: $e");
   }
@@ -195,8 +373,11 @@ Future<void> _updateWidgetDataInternal(Map<String, dynamic> data, MealSource sou
 
 // [4] 설정 저장 및 강제 업데이트
 Future<void> saveWidgetSettingsAndUpdate(
-    double trans, ThemeMode theme, MealSource source, BuildContext context) async {
-  
+  double trans,
+  ThemeMode theme,
+  MealSource source,
+  BuildContext context,
+) async {
   widgetTransparency.value = trans;
   widgetTheme.value = theme;
   widgetSource.value = source;
@@ -205,12 +386,18 @@ Future<void> saveWidgetSettingsAndUpdate(
 
   try {
     // 로딩 상태 먼저 표시
-    await HomeWidget.saveWidgetData<String>('widget_menu', "데이터를 불러오는 중...\n(최대 30초 소요)");
-    await HomeWidget.updateWidget(name: 'MealWidgetProvider', androidName: 'MealWidgetProvider');
+    await HomeWidget.saveWidgetData<String>(
+      'widget_menu',
+      "데이터를 불러오는 중...\n(최대 30초 소요)",
+    );
+    await HomeWidget.updateWidget(
+      name: 'MealWidgetProvider',
+      androidName: 'MealWidgetProvider',
+    );
 
     // 실제 데이터 호출
     await fetchMealApi(DateTime.now(), source);
-    
+
     if (context.mounted) showToast(context, "위젯 설정이 적용되었습니다.");
   } catch (e) {
     if (context.mounted) showToast(context, "데이터 갱신 실패");
@@ -226,8 +413,14 @@ Future<void> testBasicWidgetFunction() async {
   // 테스트용 함수
   await HomeWidget.saveWidgetData<String>('widget_title', '테스트 식당');
   await HomeWidget.saveWidgetData<String>('widget_time', '테스트 시간');
-  await HomeWidget.saveWidgetData<String>('widget_menu', '· 쌀밥\n· 김치찌개\n· 계란말이\n· 깍두기');
-  await HomeWidget.updateWidget(name: 'MealWidgetProvider', androidName: 'MealWidgetProvider');
+  await HomeWidget.saveWidgetData<String>(
+    'widget_menu',
+    '· 쌀밥\n· 김치찌개\n· 계란말이\n· 깍두기',
+  );
+  await HomeWidget.updateWidget(
+    name: 'MealWidgetProvider',
+    androidName: 'MealWidgetProvider',
+  );
 }
 
 // [5] 설정 저장 서비스
@@ -244,9 +437,11 @@ class PreferencesService {
     final int? colorValue = prefs.getInt(keyThemeColor);
     if (colorValue != null) themeColor.value = Color(colorValue);
     final int? modeIndex = prefs.getInt(keyThemeMode);
-    if (modeIndex != null) themeModeNotifier.value = ThemeMode.values[modeIndex];
+    if (modeIndex != null)
+      themeModeNotifier.value = ThemeMode.values[modeIndex];
     final int? sourceIndex = prefs.getInt(keyMealSource);
-    if (sourceIndex != null) defaultSourceNotifier.value = MealSource.values[sourceIndex];
+    if (sourceIndex != null)
+      defaultSourceNotifier.value = MealSource.values[sourceIndex];
 
     widgetTransparency.value = prefs.getDouble(keyWidgetTrans) ?? 0.0;
     final int? wTheme = prefs.getInt(keyWidgetTheme);
@@ -270,7 +465,11 @@ class PreferencesService {
     await prefs.setInt(keyMealSource, source.index);
   }
 
-  static Future<void> saveWidgetSettings(double trans, ThemeMode theme, MealSource source) async {
+  static Future<void> saveWidgetSettings(
+    double trans,
+    ThemeMode theme,
+    MealSource source,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(keyWidgetTrans, trans);
     await prefs.setInt(keyWidgetTheme, theme.index);
@@ -297,12 +496,15 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
     if (!Platform.isAndroid && !Platform.isIOS) return;
     tz.initializeTimeZones();
-    try { tz.setLocalLocation(tz.getLocation('Asia/Seoul')); } catch (_) {}
+    try {
+      tz.setLocalLocation(tz.getLocation('Asia/Seoul'));
+    } catch (_) {}
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const ios = DarwinInitializationSettings();
@@ -313,28 +515,49 @@ class NotificationService {
 
   Future<void> requestPermissions() async {
     if (Platform.isAndroid) {
-      await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.requestNotificationsPermission();
     } else if (Platform.isIOS) {
-      await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()?.requestPermissions(alert: true, badge: true, sound: true);
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
     }
   }
 
-  Future<void> cancelAll() async => await flutterLocalNotificationsPlugin.cancelAll();
+  Future<void> cancelAll() async =>
+      await flutterLocalNotificationsPlugin.cancelAll();
 
-  Future<void> scheduleAlarm({required int id, required String title, required String body, required DateTime scheduledTime}) async {
+  Future<void> scheduleAlarm({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime scheduledTime,
+  }) async {
     if (scheduledTime.isBefore(DateTime.now())) {
       scheduledTime = scheduledTime.add(const Duration(days: 1));
     }
     try {
       await flutterLocalNotificationsPlugin.zonedSchedule(
-        id, title, body,
+        id,
+        title,
+        body,
         tz.TZDateTime.from(scheduledTime, tz.local),
         const NotificationDetails(
-          android: AndroidNotificationDetails('meal_alarm_channel', '식단 알림', importance: Importance.max),
+          android: AndroidNotificationDetails(
+            'meal_alarm_channel',
+            '식단 알림',
+            importance: Importance.max,
+          ),
           iOS: DarwinNotificationDetails(),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {

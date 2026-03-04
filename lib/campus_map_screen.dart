@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -180,6 +180,10 @@ class BuildingData {
     required this.color,
     required this.floors,
   });
+
+  /// 지상층 수만 반환 (floor 값이 양수 int인 층만 계산)
+  int get aboveGroundFloorCount =>
+      floors.where((f) => f.floor is int && (f.floor as int) > 0).length;
 }
 
 // ─────────────────────────────────────────────────── 정적 데이터 ──
@@ -1670,6 +1674,18 @@ final List<BuildingData> kBuildings = [
       FloorData(floor: 1, rooms: ['공동현관', '관리실']),
     ],
   ),
+  BuildingData(
+    name: '교양학관',
+    shortName: '교양학관',
+    description: '교양 강의 및 특수교육과',
+    position: const LatLng(36.609372, 127.360774),
+    color: Colors.teal,
+    floors: [
+      FloorData(floor: 1, rooms: ['강의실', '특수교육과 사무실']),
+      FloorData(floor: 2, rooms: ['특수교육과 사무실(216호)', '강의실']),
+      FloorData(floor: 3, rooms: ['강의실', '세미나실']),
+    ],
+  ),
 ];
 
 final List<MapFacility> kFacilities = [
@@ -2374,6 +2390,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                     Tab(text: '부속시설', height: 32),
                     Tab(text: '산책로', height: 32),
                     Tab(text: '과 사무실', height: 32),
+                    Tab(text: '강의실', height: 32),
                   ],
                 ),
               ],
@@ -3403,7 +3420,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     return Column(
       children: [
         SizedBox(
-          height: MediaQuery.of(context).padding.top + 104,
+          height: MediaQuery.of(context).padding.top + 96,
         ), // padding for the new floating app bar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -3741,34 +3758,41 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
   Widget _buildTrailTab(Color primary, bool isDark) {
     if (_savedTrails.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.route_rounded,
-              size: 56,
-              color: isDark ? Colors.white24 : Colors.black12,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '저장된 산책로가 없습니다',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white38 : Colors.black38,
+      return Column(
+        children: [
+          SizedBox(height: MediaQuery.of(context).padding.top + 96),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.route_rounded,
+                    size: 56,
+                    color: isDark ? Colors.white24 : Colors.black12,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '저장된 산책로가 없습니다',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '지도 탭에서 🛤️ 버튼을 눌러 산책로를 그려보세요',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white24 : Colors.black26,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              '지도 탭에서 🛤️ 버튼을 눌러 산책로를 그려보세요',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? Colors.white24 : Colors.black26,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       );
     }
     return Column(
@@ -4063,24 +4087,152 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   // ─── 과 사무실 탭 ───
 
   String _classroomSearchQuery = '';
+  BuildingData? _selectedClassroomBuilding;
 
   Widget _buildClassroomSearchTab(Color primary, bool isDark) {
     return StatefulBuilder(
       builder: (context, setLocalState) {
-        final query = _classroomSearchQuery.trim().toLowerCase();
+        final selectedBuilding = _selectedClassroomBuilding;
 
-        // 검색 수행
-        List<Map<String, dynamic>> results = [];
-        if (query.isNotEmpty) {
-          for (final b in kBuildings) {
-            for (final f in b.floors) {
-              for (final room in f.rooms) {
-                final lowerRoom = room.toLowerCase();
-                if (lowerRoom.contains(query) ||
-                    b.name.toLowerCase().contains(query) ||
-                    b.shortName.toLowerCase().contains(query)) {
-                  results.add({'building': b, 'floor': f.floor, 'room': room});
-                }
+        // ── 1단계: 건물 선택 ──
+        if (selectedBuilding == null) {
+          final buildingsWithFloors = kBuildings
+              .where((b) => b.floors.isNotEmpty)
+              .toList();
+          return Column(
+            children: [
+              SizedBox(height: MediaQuery.of(context).padding.top + 96),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.apartment_rounded, size: 16, color: primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      '건물을 선택하세요',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 2.4,
+                  ),
+                  itemCount: buildingsWithFloors.length,
+                  itemBuilder: (ctx, i) {
+                    final b = buildingsWithFloors[i];
+                    return GestureDetector(
+                      onTap: () => setLocalState(() {
+                        _selectedClassroomBuilding = b;
+                        _classroomSearchQuery = '';
+                      }),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF1E1E2E)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: b.color.withValues(alpha: 0.25),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: b.color.withValues(alpha: 0.06),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: b.color.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  b.shortName.length > 2
+                                      ? b.shortName.substring(0, 2)
+                                      : b.shortName,
+                                  style: TextStyle(
+                                    color: b.color,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    b.name,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black87,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    '\uc9c0\uc0c1 ${b.aboveGroundFloorCount}\uce35'
+                                    '${b.floors.any((f) => f.floor is int && (f.floor as int) < 0) ? " / B${b.floors.where((f) => f.floor is int && (f.floor as int) < 0).length}\uc9c0\ud558" : ""}',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isDark
+                                          ? Colors.white38
+                                          : Colors.black38,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        }
+
+        // ── 2단계: 강의실 검색 ──
+        final query = _classroomSearchQuery.trim().toLowerCase();
+        final List<Map<String, dynamic>> results = [];
+        if (query.isEmpty) {
+          for (final f in selectedBuilding.floors) {
+            for (final room in f.rooms) {
+              results.add({'floor': f.floor, 'room': room});
+            }
+          }
+        } else {
+          for (final f in selectedBuilding.floors) {
+            for (final room in f.rooms) {
+              if (room.toLowerCase().contains(query) ||
+                  f.floor.toString().contains(query)) {
+                results.add({'floor': f.floor, 'room': room});
               }
             }
           }
@@ -4088,9 +4240,101 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
         return Column(
           children: [
-            SizedBox(height: MediaQuery.of(context).padding.top + 104),
+            SizedBox(height: MediaQuery.of(context).padding.top + 96),
+            // 헤더: 뒤로가기 + 건물 이름
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(4, 6, 16, 2),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => setLocalState(() {
+                      _selectedClassroomBuilding = null;
+                      _classroomSearchQuery = '';
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 16,
+                        color: isDark ? Colors.white60 : Colors.black54,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: selectedBuilding.color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Center(
+                      child: Text(
+                        selectedBuilding.shortName.length > 2
+                            ? selectedBuilding.shortName.substring(0, 2)
+                            : selectedBuilding.shortName,
+                        style: TextStyle(
+                          color: selectedBuilding.color,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      selectedBuilding.name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      _tabController.animateTo(0);
+                      Future.delayed(
+                        const Duration(milliseconds: 200),
+                        () => _animatedMove(selectedBuilding.position, 18.0),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selectedBuilding.color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.near_me_rounded,
+                            size: 11,
+                            color: selectedBuilding.color,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '지도',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: selectedBuilding.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // 검색창
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
@@ -4115,7 +4359,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                         onChanged: (v) =>
                             setLocalState(() => _classroomSearchQuery = v),
                         decoration: InputDecoration(
-                          hintText: '강의실 이름, 호수, 건물명 검색...',
+                          hintText: '강의실 호수, 이름 검색...',
                           hintStyle: TextStyle(
                             fontSize: 13,
                             color: isDark ? Colors.white38 : Colors.black38,
@@ -4135,30 +4379,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                 ),
               ),
             ),
-            if (query.isEmpty)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.class_rounded,
-                        size: 48,
-                        color: isDark ? Colors.white24 : Colors.black12,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '강의실 이름이나 호수를 검색해보세요',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isDark ? Colors.white38 : Colors.black38,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (results.isEmpty)
+            if (results.isEmpty)
               Expanded(
                 child: Center(
                   child: Text(
@@ -4173,39 +4394,47 @@ class _CampusMapScreenState extends State<CampusMapScreen>
             else
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.only(top: 8, bottom: 24),
+                  padding: const EdgeInsets.only(top: 4, bottom: 24),
                   itemCount: results.length,
                   itemBuilder: (ctx, i) {
                     final r = results[i];
-                    final BuildingData b = r['building'];
                     final floor = r['floor'];
                     final String room = r['room'];
+                    final floorLabel = floor is int
+                        ? (floor < 0 ? 'B${floor.abs()}' : '${floor}F')
+                        : floor.toString();
                     return Container(
                       margin: const EdgeInsets.symmetric(
                         horizontal: 16,
-                        vertical: 6,
+                        vertical: 4,
                       ),
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: b.color.withValues(alpha: 0.15),
+                          color: selectedBuilding.color.withValues(alpha: 0.15),
                         ),
                       ),
                       child: ListTile(
-                        contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        dense: true,
+                        contentPadding: const EdgeInsets.fromLTRB(14, 4, 12, 4),
                         leading: Container(
-                          width: 40,
-                          height: 40,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
-                            color: b.color.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
+                            color: selectedBuilding.color.withValues(
+                              alpha: 0.12,
+                            ),
+                            borderRadius: BorderRadius.circular(9),
                           ),
                           child: Center(
-                            child: Icon(
-                              Icons.meeting_room_rounded,
-                              color: b.color,
-                              size: 20,
+                            child: Text(
+                              floorLabel,
+                              style: TextStyle(
+                                color: selectedBuilding.color,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ),
@@ -4213,19 +4442,15 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                           room,
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                            fontSize: 13,
                             color: isDark ? Colors.white : Colors.black87,
                           ),
                         ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            '${b.name}  ·  ${floor}${floor is int && floor > 0 ? "F" : ""}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? Colors.white54 : Colors.black54,
-                              fontWeight: FontWeight.w500,
-                            ),
+                        subtitle: Text(
+                          '${selectedBuilding.name} $floorLabel',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.white54 : Colors.black54,
                           ),
                         ),
                         trailing: Icon(
@@ -4236,11 +4461,12 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                           _tabController.animateTo(0);
                           Future.delayed(
                             const Duration(milliseconds: 200),
-                            () => _animatedMove(b.position, 18.0),
+                            () =>
+                                _animatedMove(selectedBuilding.position, 18.0),
                           );
                           Future.delayed(
                             const Duration(milliseconds: 400),
-                            () => _showBuildingDetail(b),
+                            () => _showBuildingDetail(selectedBuilding),
                           );
                         },
                       ),
@@ -4397,8 +4623,132 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                   final phoneNum = p.trim();
                   return GestureDetector(
                     onTap: () async {
-                      final uri = Uri.parse('tel:$phoneNum');
-                      if (await canLaunchUrl(uri)) launchUrl(uri);
+                      final now = TimeOfDay.now();
+                      final isLunch =
+                          now.hour == 12 ||
+                          (now.hour == 11 && now.minute >= 55);
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (c) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          backgroundColor: isDark
+                              ? const Color(0xFF1C1C2E)
+                              : Colors.white,
+                          title: Row(
+                            children: [
+                              Icon(Icons.phone_rounded, color: color, size: 20),
+                              const SizedBox(width: 8),
+                              const Text(
+                                '\uc804\ud654 \uc2dc \ub9e4\ub108',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (isLunch)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.orange.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Colors.orange,
+                                        size: 16,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          '\uc810\uc2ec\uc2dc\uac04(12:00~13:00)\uc785\ub2c8\ub2e4.\n\uc5f0\uacb0\uc774 \uc548 \ub420 \uc218 \uc788\uc5b4\uc694.',
+                                          style: TextStyle(
+                                            color: Colors.orange,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Text(
+                                  '\uc5f0\uacb0 \ud6c4 \ub2e4\uc74c \uc21c\uc11c\ub85c \ub9d0\ud574\uc8fc\uc138\uc694:\n\n'
+                                  '\u2460 \ud559\uacfc(\uc2e0\ub958) + \ud559\ubc88\n'
+                                  '\u2461 \uc774\ub984\n'
+                                  '\u2462 \uc6a9\uac74',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    height: 1.7,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                phoneNum,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: color,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(c, false),
+                              child: Text(
+                                '\ucde8\uc18c',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.black45,
+                                ),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => Navigator.pop(c, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: color,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              icon: const Icon(Icons.call_rounded, size: 16),
+                              label: const Text('\uc804\ud654\ud558\uae30'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        final uri = Uri.parse('tel:$phoneNum');
+                        if (await canLaunchUrl(uri)) launchUrl(uri);
+                      }
                     },
                     child: Container(
                       margin: const EdgeInsets.only(left: 6),
@@ -5978,7 +6328,7 @@ class _BuildingCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 3),
                       Text(
-                        '${building.floors.length}층',
+                        '지상 ${building.aboveGroundFloorCount}층',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -5987,6 +6337,26 @@ class _BuildingCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (building.floors.any(
+                    (f) => f.floor is int && (f.floor as int) < 0,
+                  ))
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.arrow_downward_rounded,
+                          size: 11,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          'B${building.floors.where((f) => f.floor is int && (f.floor as int) < 0).length} 지하층 있음',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isDark ? Colors.white38 : Colors.black38,
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),

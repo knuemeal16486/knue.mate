@@ -49,6 +49,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     Classroom("국제연수관", 36.613622, 127.357594),
     Classroom("함덕당", 36.611697, 127.357418),
     Classroom("교원연수관", 36.612346, 127.357202),
+    Classroom("교양학관", 36.609372, 127.360774),
   ];
 
   final Set<String> _favoriteNames = {"한국교원대 정문", "버스정류장"};
