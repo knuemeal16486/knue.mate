@@ -4096,39 +4096,35 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
         // ── 1단계: 건물 선택 ──
         if (selectedBuilding == null) {
-          final buildingsWithFloors = kBuildings
-              .where((b) => b.floors.isNotEmpty)
-              .toList();
+          final buildingsWithFloors =
+              kBuildings.where((b) => b.floors.isNotEmpty).toList()
+                ..sort((a, b) => a.name.compareTo(b.name));
+
           return Column(
             children: [
-              SizedBox(height: MediaQuery.of(context).padding.top + 96),
+              SizedBox(height: MediaQuery.of(context).padding.top + 70),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Row(
                   children: [
-                    Icon(Icons.apartment_rounded, size: 16, color: primary),
-                    const SizedBox(width: 6),
+                    Icon(Icons.apartment_rounded, size: 18, color: primary),
+                    const SizedBox(width: 8),
                     Text(
                       '건물을 선택하세요',
                       style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: isDark ? Colors.white70 : Colors.black87,
                       ),
                     ),
                   ],
                 ),
               ),
               Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                    childAspectRatio: 2.4,
-                  ),
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                   itemCount: buildingsWithFloors.length,
+                  separatorBuilder: (ctx, i) => const SizedBox(height: 10),
                   itemBuilder: (ctx, i) {
                     final b = buildingsWithFloors[i];
                     return GestureDetector(
@@ -4137,31 +4133,34 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                         _classroomSearchQuery = '';
                       }),
                       child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 14,
+                        ),
                         decoration: BoxDecoration(
                           color: isDark
                               ? const Color(0xFF1E1E2E)
                               : Colors.white,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: b.color.withValues(alpha: 0.25),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: b.color.withValues(alpha: 0.06),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                              color: b.color.withValues(alpha: 0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
                             ),
                           ],
                         ),
                         child: Row(
                           children: [
-                            const SizedBox(width: 12),
                             Container(
-                              width: 32,
-                              height: 32,
+                              width: 40,
+                              height: 40,
                               decoration: BoxDecoration(
                                 color: b.color.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(10),
                               ),
                               child: Center(
                                 child: Text(
@@ -4171,22 +4170,21 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                   style: TextStyle(
                                     color: b.color,
                                     fontWeight: FontWeight.w900,
-                                    fontSize: 11,
+                                    fontSize: 13,
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 14),
                             Expanded(
                               child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     b.name,
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
-                                      fontSize: 12,
+                                      fontSize: 14,
                                       color: isDark
                                           ? Colors.white
                                           : Colors.black87,
@@ -4194,18 +4192,24 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
+                                  const SizedBox(height: 2),
                                   Text(
                                     '\uc9c0\uc0c1 ${b.aboveGroundFloorCount}\uce35'
                                     '${b.floors.any((f) => f.floor is int && (f.floor as int) < 0) ? " / B${b.floors.where((f) => f.floor is int && (f.floor as int) < 0).length}\uc9c0\ud558" : ""}',
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
                                       color: isDark
-                                          ? Colors.white38
-                                          : Colors.black38,
+                                          ? Colors.white54
+                                          : Colors.black54,
                                     ),
                                   ),
                                 ],
                               ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: isDark ? Colors.white24 : Colors.black26,
                             ),
                           ],
                         ),
@@ -4690,21 +4694,87 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                   ),
                                 ),
                               Container(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Text(
-                                  '\uc5f0\uacb0 \ud6c4 \ub2e4\uc74c \uc21c\uc11c\ub85c \ub9d0\ud574\uc8fc\uc138\uc694:\n\n'
-                                  '\u2460 \ud559\uacfc(\uc2e0\ub958) + \ud559\ubc88\n'
-                                  '\u2461 \uc774\ub984\n'
-                                  '\u2462 \uc6a9\uac74',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    height: 1.7,
-                                    fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? const Color(0xFF2A2A3D)
+                                      : const Color(0xFFF8F9FA),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.3),
+                                    width: 1.5,
                                   ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: color.withValues(alpha: 0.1),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.format_quote_rounded,
+                                          color: color,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '이렇게 말해보세요',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: color,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    RichText(
+                                      text: TextSpan(
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          height: 1.6,
+                                          color: isDark
+                                              ? Colors.white
+                                              : Colors.black87,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        children: [
+                                          const TextSpan(text: '"안녕하세요, '),
+                                          TextSpan(
+                                            text: 'O교육과 21학번 김청람',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: color,
+                                              backgroundColor: color.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                            ),
+                                          ),
+                                          const TextSpan(text: '입니다.\n'),
+                                          const TextSpan(text: '다름이 아니라 '),
+                                          TextSpan(
+                                            text: '[용건]',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: color,
+                                              backgroundColor: color.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                            ),
+                                          ),
+                                          const TextSpan(
+                                            text: ' 때문에 연락드렸습니다."',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(height: 10),
@@ -5425,13 +5495,49 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Text(
-                              f.rooms.join('  ·  '),
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? Colors.white70 : Colors.black87,
-                                fontWeight: FontWeight.w500,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: f.rooms
+                                  .map(
+                                    (r) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 4.0,
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            margin: const EdgeInsets.only(
+                                              top: 6,
+                                              right: 8,
+                                            ),
+                                            width: 4,
+                                            height: 4,
+                                            decoration: BoxDecoration(
+                                              color: b.color.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: Text(
+                                              r,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: isDark
+                                                    ? Colors.white70
+                                                    : Colors.black87,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
                             ),
                           ),
                         ],

@@ -256,8 +256,8 @@ Map<String, dynamic> _parseCafeHtml(String html, DateTime date) {
   if (targetDay == null) return _emptyMeals();
 
   final rows = table.querySelectorAll('tbody tr');
-  // \uad50\uc9c1\uc6d0\uc2dd\ub2f9: \uccab \ud589=\uc810\uc2ec, \ub450 \ubc88\uc9f8 \ud589=\uc800\ub141 (\uc870\uc2dd \uc5c6\uc74c)
-  final mealKeys = ['lunch', 'dinner'];
+  // 학생회관 식당: 첫 행=조식, 두 번째 행=중식, 세 번째 행=석식
+  final mealKeys = ['breakfast', 'lunch', 'dinner'];
   final meals = <String, List<String>>{
     'breakfast': [],
     'lunch': [],

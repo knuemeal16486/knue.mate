@@ -1125,6 +1125,23 @@ class _BusAppScreenState extends State<BusAppScreen>
                                 : null,
                           ),
                         ),
+                        if (!passed) ...[
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => _showAlarmDialog(time, busMinutes),
+                            child: Icon(
+                              Icons.notifications_active_rounded,
+                              size: 22,
+                              color: isNext
+                                  ? (isDark
+                                        ? Colors.white70
+                                        : primary.withOpacity(0.7))
+                                  : (isDark
+                                        ? Colors.white38
+                                        : Colors.grey.shade400),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     if (isNext)
@@ -1163,6 +1180,136 @@ class _BusAppScreenState extends State<BusAppScreen>
         ),
       ],
     );
+  }
+
+  void _showAlarmDialog(String timeStr, int busMinutes) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(
+              Icons.alarm_add_rounded,
+              color: Theme.of(context).primaryColor,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '$_selectedBus번 알람 설정 ($timeStr)',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('몇 분 전에 알려드릴까요?', style: TextStyle(fontSize: 15)),
+            const SizedBox(height: 16),
+            ...[5, 10, 15].map(
+              (min) => Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: Theme.of(
+                      context,
+                    ).primaryColor.withOpacity(0.1),
+                    foregroundColor: Theme.of(context).primaryColor,
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _scheduleBusAlarm(timeStr, busMinutes, min);
+                  },
+                  child: Text(
+                    '$min분 전',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('취소', style: TextStyle(color: Colors.grey)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _scheduleBusAlarm(
+    String timeStr,
+    int busMinutes,
+    int minutesBefore,
+  ) async {
+    final now = DateTime.now();
+    final parts = timeStr.split(':');
+    if (parts.length != 2) return;
+
+    int hour = int.tryParse(parts[0]) ?? 0;
+    int minute = int.tryParse(parts[1]) ?? 0;
+
+    DateTime scheduledTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
+
+    if (scheduledTime.isBefore(now)) {
+      if (hour < 4 && now.hour > 18) {
+        scheduledTime = scheduledTime.add(const Duration(days: 1));
+      } else if (scheduledTime.difference(now).inMinutes < -1) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('이미 지난 시간입니다.')));
+        return;
+      }
+    }
+
+    DateTime alarmTime = scheduledTime.subtract(
+      Duration(minutes: minutesBefore),
+    );
+
+    if (alarmTime.isBefore(now)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('설정하려는 알람 시간이 이미 지났습니다.')));
+      return;
+    }
+
+    final formattedAlarmTime =
+        '${alarmTime.hour.toString().padLeft(2, '0')}:${alarmTime.minute.toString().padLeft(2, '0')}';
+    final id = now.millisecondsSinceEpoch % 100000;
+
+    await NotificationService().scheduleAlarm(
+      id: id,
+      title: '청람버스 알람',
+      body: '$_selectedBus번 버스가 $minutesBefore분 뒤(${timeStr}) 출발합니다.',
+      scheduledTime: alarmTime,
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$formattedAlarmTime에 알람이 울립니다. ($minutesBefore분 전)'),
+          backgroundColor: Colors.green.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildDirectionToggle(
