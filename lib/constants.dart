@@ -47,7 +47,7 @@ const List<Color> kColorPalette = [
   Color(0xFFF4511E),
   Color(0xFF6D4C41),
   Color(0xFF757575),
-  Color(0xFF546E7A),
+  Color.fromARGB(255, 199, 122, 211),
   Color(0xFF000000),
 ];
 
@@ -531,6 +531,9 @@ class NotificationService {
 
   Future<void> cancelAll() async =>
       await flutterLocalNotificationsPlugin.cancelAll();
+
+  Future<void> cancelAlarm(int id) async =>
+      await flutterLocalNotificationsPlugin.cancel(id);
 
   Future<void> scheduleAlarm({
     required int id,

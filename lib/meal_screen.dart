@@ -276,6 +276,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
             const SizedBox(height: 16),
             _MealTabs(
               selected: _selected,
+              source: _source,
               onSelect: (t) => setState(() => _selected = t),
             ),
             const SizedBox(height: 16),
@@ -292,7 +293,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
               _ErrorCard(message: _error!)
             else
               AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
+                duration: const Duration(milliseconds: 200),
                 child: _MealDetailCard(
                   key: ValueKey("$_date-$_selected-$_source"),
                   status: statusFor(_selected, DateTime.now(), _date),
@@ -585,6 +586,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
             const SizedBox(height: 24),
             _MealTabs(
               selected: _selectedType,
+              source: _source,
               onSelect: (t) => setState(() => _selectedType = t),
             ),
             const SizedBox(height: 16),
@@ -1910,76 +1912,17 @@ class _ColorPickerItem extends StatelessWidget {
   );
 }
 
-class _AppSwitchOption extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final Color color; // [NEW] 아이콘 고유 색상
-  final VoidCallback onTap;
-
-  const _AppSwitchOption({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.color, // [NEW] 생성자에서 색상 받기
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeColor = color; // [NEW] 해당 앱의 고유 색상 사용
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? activeColor.withOpacity(0.1) // [NEW] 선택 시 해당 색상의 연한 배경
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected
-                ? activeColor
-                : Colors.grey.withOpacity(0.2), // [NEW] 선택 시 해당 색상 테두리
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            // [NEW] 아이콘 배경 컨테이너
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: activeColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: activeColor, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            const Spacer(),
-            if (isSelected)
-              Icon(Icons.check_circle_rounded, color: activeColor),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// 공용 AppSwitchOption은 파일 끝에 정의되어 있습니다.
 
 class _MealTabs extends StatelessWidget {
   final MealType selected;
+  final MealSource source;
   final ValueChanged<MealType> onSelect;
-  const _MealTabs({required this.selected, required this.onSelect});
+  const _MealTabs({
+    required this.selected,
+    required this.source,
+    required this.onSelect,
+  });
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1997,41 +1940,48 @@ class _MealTabs extends StatelessWidget {
           ],
         ),
         child: Row(
-          children: MealType.values.map((t) {
-            final isSel = t == selected;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () => onSelect(t),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isSel ? primary : Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  alignment: Alignment.center,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        t.icon,
-                        size: 18,
-                        color: isSel ? Colors.white : Colors.grey,
+          children: MealType.values
+              .where((t) {
+                if (source == MealSource.b && t == MealType.breakfast)
+                  return false;
+                return true;
+              })
+              .map((t) {
+                final isSel = t == selected;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => onSelect(t),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSel ? primary : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        t.label,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isSel ? Colors.white : Colors.grey,
-                        ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            t.icon,
+                            size: 18,
+                            color: isSel ? Colors.white : Colors.grey,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            t.label,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isSel ? Colors.white : Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-            );
-          }).toList(),
+                );
+              })
+              .toList(),
         ),
       ),
     );
@@ -2190,7 +2140,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     final timeLeft = _getTimeLeft();
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -2629,7 +2579,7 @@ class _Header extends StatelessWidget {
           Row(
             children: [
               GestureDetector(
-                onTap: () => _showAppSwitch(context),
+                onTap: () => showAppSwitchDialog(context, "청람밥상"),
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -2750,80 +2700,6 @@ class _Header extends StatelessWidget {
     );
   }
 
-  void _showAppSwitch(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "앱 바로가기",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 20),
-              _AppSwitchOption(
-                icon: Icons.restaurant_menu,
-                label: "청람밥상",
-                isSelected: true,
-                color: Colors.orange, // [NEW] 청람밥상 - 오렌지색
-                onTap: () => Navigator.pop(ctx),
-              ),
-              const SizedBox(height: 12),
-              _AppSwitchOption(
-                icon: Icons.directions_bus,
-                label: "청람버스",
-                isSelected: false,
-                color: Colors.blue, // [NEW] 청람버스 - 파란색
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (c) => const BusAppScreen()),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              _AppSwitchOption(
-                icon: Icons.directions_run,
-                label: "캠퍼스런",
-                isSelected: false,
-                color: Colors.green,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (c) => const CampusRunScreen()),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              _AppSwitchOption(
-                icon: Icons.map_rounded,
-                label: "캠퍼스맵",
-                isSelected: false,
-                color: Colors.deepPurple,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (c) => const CampusMapScreen()),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildSegmentBtn(String title, MealSource val) {
     final isSel = source == val;
     return Expanded(
@@ -2844,6 +2720,167 @@ class _Header extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+void showAppSwitchDialog(BuildContext context, String currentLabel) {
+  showDialog(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: Theme.of(context).cardColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "앱 바로가기",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 20),
+            AppSwitchOption(
+              icon: Icons.restaurant_menu,
+              label: "청람밥상",
+              isSelected: currentLabel == "청람밥상",
+              color: Colors.orange,
+              onTap: () {
+                if (currentLabel == "청람밥상") {
+                  Navigator.pop(ctx);
+                  return;
+                }
+                Navigator.pop(ctx);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (c) => const MealMainScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            AppSwitchOption(
+              icon: Icons.directions_bus,
+              label: "청람버스",
+              color: Colors.blue,
+              isSelected: currentLabel == "청람버스",
+              onTap: () {
+                if (currentLabel == "청람버스") {
+                  Navigator.pop(ctx);
+                  return;
+                }
+                Navigator.pop(ctx);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (c) => const BusAppScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            AppSwitchOption(
+              icon: Icons.directions_run,
+              label: "캠퍼스런",
+              color: Colors.green,
+              isSelected: currentLabel == "캠퍼스런",
+              onTap: () {
+                if (currentLabel == "캠퍼스런") {
+                  Navigator.pop(ctx);
+                  return;
+                }
+                Navigator.pop(ctx);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (c) => const CampusRunScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            AppSwitchOption(
+              icon: Icons.map_rounded,
+              label: "캠퍼스맵",
+              color: Colors.deepPurple,
+              isSelected: currentLabel == "캠퍼스맵",
+              onTap: () {
+                if (currentLabel == "캠퍼스맵") {
+                  Navigator.pop(ctx);
+                  return;
+                }
+                Navigator.pop(ctx);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (c) => const CampusMapScreen()),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class AppSwitchOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final Color color;
+  final VoidCallback onTap;
+
+  const AppSwitchOption({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = color;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? activeColor.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? activeColor : Colors.grey.withOpacity(0.2),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: activeColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: activeColor, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const Spacer(),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: activeColor),
+          ],
         ),
       ),
     );

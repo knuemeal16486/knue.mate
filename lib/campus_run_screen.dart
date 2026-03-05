@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'constants.dart';
+import 'meal_screen.dart';
 
 class Classroom {
   final String name;
@@ -416,8 +417,8 @@ class _CampusRunScreenState extends State<CampusRunScreen>
             backgroundColor: bgDark,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: textWhite),
-              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.menu, color: textWhite),
+              onPressed: () => showAppSwitchDialog(context, "캠퍼스런"),
             ),
             title: const Text(
               "CAMPUS RUN",

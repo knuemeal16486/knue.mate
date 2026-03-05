@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart';
 import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_card.dart';
-import 'campus_run_screen.dart';
-import 'campus_map_screen.dart';
+import 'meal_screen.dart';
 
 class BusAppScreen extends StatefulWidget {
   const BusAppScreen({super.key});
@@ -321,6 +322,27 @@ class _BusAppScreenState extends State<BusAppScreen>
     "518": {"오송역": 10, "만수공원": 5, "오송119안전센터": 3},
   };
 
+  // [알람 상태 관리] -> key: "bus:direction:day:time", value: notificationId
+  Map<String, int> _scheduledAlarms = {};
+
+  Future<void> _loadAlarms() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString('bus_scheduled_alarms');
+    if (data != null) {
+      setState(() {
+        _scheduledAlarms = Map<String, int>.from(json.decode(data));
+      });
+    }
+  }
+
+  Future<void> _saveAlarms() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'bus_scheduled_alarms',
+      json.encode(_scheduledAlarms),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -330,9 +352,10 @@ class _BusAppScreenState extends State<BusAppScreen>
     final weekday = DateTime.now().weekday;
     _isWeekend = (weekday == 6 || weekday == 7);
 
-    // 초기 데이터 로드 및 타이머 시작
+    // 초기 데이터 로드 및 알람 로드
     _fetchBusData();
     _startAutoRefresh();
+    _loadAlarms();
   }
 
   @override
@@ -455,86 +478,7 @@ class _BusAppScreenState extends State<BusAppScreen>
             leading: Builder(
               builder: (context) => IconButton(
                 icon: const Icon(Icons.menu),
-                onPressed: () => showDialog(
-                  context: context,
-                  builder: (dialogContext) => Dialog(
-                    backgroundColor: Theme.of(context).cardColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "앱 바로가기",
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          _AppSwitchOption(
-                            icon: Icons.restaurant_menu,
-                            label: "청람밥상",
-                            isSelected: false,
-                            color: Colors.orange,
-                            onTap: () {
-                              Navigator.pop(dialogContext);
-                              Navigator.pop(context);
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          _AppSwitchOption(
-                            icon: Icons.directions_bus,
-                            label: "청람버스",
-                            isSelected: true,
-                            color: Colors.blue,
-                            onTap: () {
-                              Navigator.pop(dialogContext);
-                              _fetchBusData();
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          _AppSwitchOption(
-                            icon: Icons.directions_run,
-                            label: "캠퍼스런",
-                            isSelected: false,
-                            color: Colors.green,
-                            onTap: () {
-                              Navigator.pop(dialogContext);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const CampusRunScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          _AppSwitchOption(
-                            icon: Icons.map_rounded,
-                            label: "캠퍼스맵",
-                            isSelected: false,
-                            color: Colors.deepPurple,
-                            onTap: () {
-                              Navigator.pop(dialogContext);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const CampusMapScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                onPressed: () => showAppSwitchDialog(context, "청람버스"),
               ),
             ),
             actions: [
@@ -1127,19 +1071,33 @@ class _BusAppScreenState extends State<BusAppScreen>
                         ),
                         if (!passed) ...[
                           const SizedBox(width: 12),
-                          GestureDetector(
-                            onTap: () => _showAlarmDialog(time, busMinutes),
-                            child: Icon(
-                              Icons.notifications_active_rounded,
-                              size: 22,
-                              color: isNext
-                                  ? (isDark
-                                        ? Colors.white70
-                                        : primary.withOpacity(0.7))
-                                  : (isDark
-                                        ? Colors.white38
-                                        : Colors.grey.shade400),
-                            ),
+                          Builder(
+                            builder: (context) {
+                              final alarmKey =
+                                  "${_selectedBus}:${_isToSchool ? 'in' : 'out'}:${_isWeekend ? 'hol' : 'wkd'}:$time";
+                              final isAlarmSet = _scheduledAlarms.containsKey(
+                                alarmKey,
+                              );
+
+                              return GestureDetector(
+                                onTap: () => _showAlarmDialog(time, busMinutes),
+                                child: Icon(
+                                  isAlarmSet
+                                      ? Icons.notifications_active_rounded
+                                      : Icons.notifications_none_rounded,
+                                  size: 22,
+                                  color: isAlarmSet
+                                      ? Colors.orangeAccent
+                                      : (isNext
+                                            ? (isDark
+                                                  ? Colors.white70
+                                                  : primary.withOpacity(0.7))
+                                            : (isDark
+                                                  ? Colors.white38
+                                                  : Colors.grey.shade400)),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ],
@@ -1183,6 +1141,10 @@ class _BusAppScreenState extends State<BusAppScreen>
   }
 
   void _showAlarmDialog(String timeStr, int busMinutes) {
+    final alarmKey =
+        "${_selectedBus}:${_isToSchool ? 'in' : 'out'}:${_isWeekend ? 'hol' : 'wkd'}:$timeStr";
+    final isAlarmSet = _scheduledAlarms.containsKey(alarmKey);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1190,12 +1152,18 @@ class _BusAppScreenState extends State<BusAppScreen>
         title: Row(
           children: [
             Icon(
-              Icons.alarm_add_rounded,
-              color: Theme.of(context).primaryColor,
+              isAlarmSet
+                  ? Icons.notifications_active_rounded
+                  : Icons.alarm_add_rounded,
+              color: isAlarmSet
+                  ? Colors.orangeAccent
+                  : Theme.of(context).primaryColor,
             ),
             const SizedBox(width: 10),
             Text(
-              '$_selectedBus번 알람 설정 ($timeStr)',
+              isAlarmSet
+                  ? '설정된 알람 ($timeStr)'
+                  : '$_selectedBus번 알람 설정 ($timeStr)',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ],
@@ -1204,40 +1172,64 @@ class _BusAppScreenState extends State<BusAppScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('몇 분 전에 알려드릴까요?', style: TextStyle(fontSize: 15)),
-            const SizedBox(height: 16),
-            ...[5, 10, 15].map(
-              (min) => Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    backgroundColor: Theme.of(
-                      context,
-                    ).primaryColor.withOpacity(0.1),
-                    foregroundColor: Theme.of(context).primaryColor,
-                    elevation: 0,
+            if (isAlarmSet) ...[
+              const Text('이미 알람이 설정되어 있습니다.', style: TextStyle(fontSize: 15)),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _scheduleBusAlarm(timeStr, busMinutes, min);
-                  },
-                  child: Text(
-                    '$min분 전',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _cancelBusAlarm(alarmKey);
+                },
+                child: const Text(
+                  '알람 취소하기',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ] else ...[
+              const Text('몇 분 전에 알려드릴까요?', style: TextStyle(fontSize: 15)),
+              const SizedBox(height: 16),
+              ...[5, 10, 15].map(
+                (min) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: Theme.of(
+                        context,
+                      ).primaryColor.withOpacity(0.1),
+                      foregroundColor: Theme.of(context).primaryColor,
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _scheduleBusAlarm(timeStr, busMinutes, min);
+                    },
+                    child: Text(
+                      '$min분 전',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
+            ],
+            const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('취소', style: TextStyle(color: Colors.grey)),
+              child: const Text('닫기', style: TextStyle(color: Colors.grey)),
             ),
           ],
         ),
@@ -1245,11 +1237,34 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
+  void _cancelBusAlarm(String alarmKey) async {
+    final notificationId = _scheduledAlarms[alarmKey];
+    if (notificationId != null) {
+      await NotificationService().cancelAlarm(notificationId);
+      setState(() {
+        _scheduledAlarms.remove(alarmKey);
+      });
+      _saveAlarms();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('알람이 취소되었습니다.'),
+            showCloseIcon: true,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   void _scheduleBusAlarm(
     String timeStr,
     int busMinutes,
     int minutesBefore,
   ) async {
+    final alarmKey =
+        "${_selectedBus}:${_isToSchool ? 'in' : 'out'}:${_isWeekend ? 'hol' : 'wkd'}:$timeStr";
     final now = DateTime.now();
     final parts = timeStr.split(':');
     if (parts.length != 2) return;
@@ -1297,6 +1312,11 @@ class _BusAppScreenState extends State<BusAppScreen>
       body: '$_selectedBus번 버스가 $minutesBefore분 뒤(${timeStr}) 출발합니다.',
       scheduledTime: alarmTime,
     );
+
+    setState(() {
+      _scheduledAlarms[alarmKey] = id;
+    });
+    _saveAlarms();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1381,63 +1401,3 @@ class _BusAppScreenState extends State<BusAppScreen>
 }
 
 // _AppSwitchOption 클래스 (기존 디자인 유지)
-class _AppSwitchOption extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _AppSwitchOption({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeColor = color;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? activeColor.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? activeColor : Colors.grey.withOpacity(0.2),
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: activeColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: activeColor, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            const Spacer(),
-            if (isSelected)
-              Icon(Icons.check_circle_rounded, color: activeColor),
-          ],
-        ),
-      ),
-    );
-  }
-}

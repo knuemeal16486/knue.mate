@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'constants.dart';
+import 'meal_screen.dart';
 
 // ─────────────────────────────────────────────────── 데이터 모델 ──
 
@@ -2299,10 +2300,10 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                   child: Row(
                     children: [
                       _TopBarBtn(
-                        icon: Icons.arrow_back_ios_new_rounded,
+                        icon: Icons.menu,
                         active: false,
                         isDark: isDark,
-                        onTap: () => Navigator.of(context).maybePop(),
+                        onTap: () => showAppSwitchDialog(context, "캠퍼스맵"),
                       ),
                       Text(
                         '캠퍼스맵',
@@ -2758,6 +2759,23 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                     )
                     .toList(),
               ),
+
+            // 내 위치 마커
+            if (_userPosition != null)
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: LatLng(
+                      _userPosition!.latitude,
+                      _userPosition!.longitude,
+                    ),
+                    width: 60,
+                    height: 60,
+                    alignment: Alignment.center,
+                    child: _UserLocationMarker(primary: primary),
+                  ),
+                ],
+              ),
           ],
         ),
 
@@ -3045,6 +3063,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                       17.5,
                     );
                   } else {
+                    _startLocationTracking();
                     _animatedMove(_knueCenter, 16.5);
                   }
                 },
@@ -4102,7 +4121,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
           return Column(
             children: [
-              SizedBox(height: MediaQuery.of(context).padding.top + 70),
+              SizedBox(height: MediaQuery.of(context).padding.top + 20),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Row(
@@ -4121,10 +4140,15 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                 ),
               ),
               Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 2, 16, 40),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 2.15,
+                  ),
                   itemCount: buildingsWithFloors.length,
-                  separatorBuilder: (ctx, i) => const SizedBox(height: 10),
                   itemBuilder: (ctx, i) {
                     final b = buildingsWithFloors[i];
                     return GestureDetector(
@@ -4133,22 +4157,22 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                         _classroomSearchQuery = '';
                       }),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 14,
-                        ),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: isDark
                               ? const Color(0xFF1E1E2E)
                               : Colors.white,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                             color: b.color.withValues(alpha: 0.25),
+                            width: 1,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: b.color.withValues(alpha: 0.05),
-                              blurRadius: 10,
+                              color: b.color.withValues(
+                                alpha: isDark ? 0.2 : 0.05,
+                              ),
+                              blurRadius: 8,
                               offset: const Offset(0, 3),
                             ),
                           ],
@@ -4156,10 +4180,10 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                         child: Row(
                           children: [
                             Container(
-                              width: 40,
-                              height: 40,
+                              width: 38,
+                              height: 38,
                               decoration: BoxDecoration(
-                                color: b.color.withValues(alpha: 0.15),
+                                color: b.color.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Center(
@@ -4168,48 +4192,44 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                       ? b.shortName.substring(0, 2)
                                       : b.shortName,
                                   style: TextStyle(
-                                    color: b.color,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w900,
-                                    fontSize: 13,
+                                    color: b.color,
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 14),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     b.name,
                                     style: TextStyle(
+                                      fontSize: 13,
                                       fontWeight: FontWeight.w700,
-                                      fontSize: 14,
                                       color: isDark
                                           ? Colors.white
                                           : Colors.black87,
+                                      letterSpacing: -0.5,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(height: 2),
                                   Text(
-                                    '\uc9c0\uc0c1 ${b.aboveGroundFloorCount}\uce35'
-                                    '${b.floors.any((f) => f.floor is int && (f.floor as int) < 0) ? " / B${b.floors.where((f) => f.floor is int && (f.floor as int) < 0).length}\uc9c0\ud558" : ""}',
+                                    '${b.aboveGroundFloorCount}\uce35',
                                     style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
+                                      fontSize: 10,
                                       color: isDark
-                                          ? Colors.white54
-                                          : Colors.black54,
+                                          ? Colors.white38
+                                          : Colors.black38,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                            Icon(
-                              Icons.chevron_right_rounded,
-                              color: isDark ? Colors.white24 : Colors.black26,
                             ),
                           ],
                         ),
@@ -4734,8 +4754,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                       ],
                                     ),
                                     const SizedBox(height: 12),
-                                    RichText(
-                                      text: TextSpan(
+                                    Text.rich(
+                                      TextSpan(
                                         style: TextStyle(
                                           fontSize: 14,
                                           height: 1.6,
@@ -4747,7 +4767,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                         children: [
                                           const TextSpan(text: '"안녕하세요, '),
                                           TextSpan(
-                                            text: 'O교육과 21학번 김청람',
+                                            text: 'OO교육과\u00A026학번\u00A0김청람',
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               color: color,
@@ -4769,7 +4789,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                             ),
                                           ),
                                           const TextSpan(
-                                            text: ' 때문에 연락드렸습니다."',
+                                            text: ' 때문에\u00A0연락드렸습니다."',
                                           ),
                                         ],
                                       ),
@@ -4777,13 +4797,37 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                phoneNum,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: color,
-                                  fontWeight: FontWeight.w700,
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.15),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.access_time_rounded,
+                                      size: 14,
+                                      color: color,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '운영시간 09:00~17:00 (점심 12:00~13:00)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: color.withValues(alpha: 0.8),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -5495,45 +5539,38 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
                               children: f.rooms
                                   .map(
-                                    (r) => Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 4.0,
+                                    (r) => Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
                                       ),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Container(
-                                            margin: const EdgeInsets.only(
-                                              top: 6,
-                                              right: 8,
-                                            ),
-                                            width: 4,
-                                            height: 4,
-                                            decoration: BoxDecoration(
-                                              color: b.color.withValues(
-                                                alpha: 0.5,
-                                              ),
-                                              shape: BoxShape.circle,
-                                            ),
+                                      decoration: BoxDecoration(
+                                        color: b.color.withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: b.color.withValues(
+                                            alpha: 0.15,
                                           ),
-                                          Expanded(
-                                            child: Text(
-                                              r,
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: isDark
-                                                    ? Colors.white70
-                                                    : Colors.black87,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
+                                        ),
+                                      ),
+                                      child: Text(
+                                        r,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.9,
+                                                )
+                                              : Colors.black.withValues(
+                                                  alpha: 0.8,
+                                                ),
+                                        ),
                                       ),
                                     ),
                                   )
@@ -6749,6 +6786,78 @@ class _ScreenshotShareDialogState extends State<_ScreenshotShareDialog> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _UserLocationMarker extends StatefulWidget {
+  final Color primary;
+  const _UserLocationMarker({required this.primary});
+
+  @override
+  State<_UserLocationMarker> createState() => _UserLocationMarkerState();
+}
+
+class _UserLocationMarkerState extends State<_UserLocationMarker>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final double pulse = _controller.value;
+        const markerColor = Colors.pinkAccent; // 고채도 핑크레드로 가시성 극대화
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            // 외각 파동 효과
+            Container(
+              width: 24 + (40 * pulse),
+              height: 24 + (40 * pulse),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: markerColor.withValues(alpha: 0.4 * (1 - pulse)),
+              ),
+            ),
+            // 메인 고양이 캐릭터
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: markerColor.withValues(alpha: 0.5),
+                    blurRadius: 15,
+                    spreadRadius: 3,
+                  ),
+                ],
+                border: Border.all(color: markerColor, width: 2.5),
+              ),
+              alignment: Alignment.center,
+              child: Icon(Icons.pets_rounded, color: markerColor, size: 20),
+            ),
+          ],
+        );
+      },
     );
   }
 }
