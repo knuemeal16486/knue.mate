@@ -1312,7 +1312,7 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
       path: developerEmail,
       query: _encodeQueryParameters(<String, String>{
         'subject': subject,
-        'body': '내용:\n$body\n\n----------------------------\n(  )',
+        'body': '내용:\n$body\n\n----------------------------',
       }),
     );
 

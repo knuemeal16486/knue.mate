@@ -4820,7 +4820,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      '운영시간 09:00~17:00 (점심 12:00~13:00)',
+                                      '운영시간 09:00~17:30 (점심 12:00~13:00)',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
