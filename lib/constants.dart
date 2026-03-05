@@ -150,9 +150,14 @@ String _weekdayToDayParam(DateTime d) {
 /// KNUE \uc2dd\ub2f8 HTML \uc2a4\ud06c\ub798\ud37c
 /// \uc8fc\uac04 \uce98\ub9b0\ub354 \ud14c\uc774\ube14\uc5d0\uc11c \uc694\uccad\ub41c \ub0a0\uc9dc\uc758 \uc870\uc2dd/\uc911\uc2dd/\uc11d\uc2dd \uba54\ub274\ub97c \ucd94\ucd9c
 Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
-  final url = source == MealSource.a
+  final monday = date.subtract(Duration(days: date.weekday - 1));
+  final dateStr =
+      "${monday.year}${monday.month.toString().padLeft(2, '0')}${monday.day.toString().padLeft(2, '0')}";
+
+  final baseUrl = source == MealSource.a
       ? 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1959&siteSe=one'
       : 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1960&siteSe=cafe';
+  final url = "$baseUrl&searchStdde=$dateStr";
 
   try {
     final response = await http

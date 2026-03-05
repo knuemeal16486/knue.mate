@@ -357,9 +357,13 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
         final meals = res["meals"];
         if (meals is Map) {
           _meals = {
-            "breakfast": asStringList(meals["조식"] ?? meals["아침"]),
-            "lunch": asStringList(meals["중식"] ?? meals["점심"]),
-            "dinner": asStringList(meals["석식"] ?? meals["저녁"]),
+            "breakfast": asStringList(
+              meals["조식"] ?? meals["아침"] ?? meals["breakfast"],
+            ),
+            "lunch": asStringList(meals["중식"] ?? meals["점심"] ?? meals["lunch"]),
+            "dinner": asStringList(
+              meals["석식"] ?? meals["저녁"] ?? meals["dinner"],
+            ),
           };
         }
       }
