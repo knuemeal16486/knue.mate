@@ -5,9 +5,13 @@ import 'package:home_widget/home_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'constants.dart';
 import 'meal_screen.dart';
+import 'building_data.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // JSON 건물 데이터 로드
+  await loadBuildingData();
 
   // 디버그 모드 설정
   debugPrint = (String? message, {int? wrapWidth}) {

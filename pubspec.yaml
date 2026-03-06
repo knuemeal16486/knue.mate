@@ -91,6 +91,7 @@ flutter:
   # 주석(#)을 지우고 아래와 같이 정확한 간격으로 맞춰주세요.
   assets:
     - .env
+    - assets/buildings/knue_buildings.json
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
