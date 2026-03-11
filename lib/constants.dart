@@ -154,10 +154,9 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
   final dateStr =
       "${monday.year}${monday.month.toString().padLeft(2, '0')}${monday.day.toString().padLeft(2, '0')}";
 
-  final baseUrl = source == MealSource.a
-      ? 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1959&siteSe=one'
-      : 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1960&siteSe=cafe';
-  final url = "$baseUrl&searchStdde=$dateStr";
+  final url = source == MealSource.a
+      ? 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1959&siteSe=one&searchStdde=$dateStr'
+      : 'https://pot.knue.ac.kr/enview/knue/mobileMenu.html#';
 
   try {
     final response = await http
@@ -237,31 +236,44 @@ Map<String, dynamic> _parseSadoHtml(String html, DateTime date) {
   return {'meals': meals};
 }
 
-/// \uad50\uc9c1\uc6d0\uc2dd\ub2f9 HTML \ud30c\uc11c (\uc870\uc2dd\uc5c6\uc74c, \uc810\uc2ec/\uc800\ub141)
 Map<String, dynamic> _parseCafeHtml(String html, DateTime date) {
   final doc = htmlParser.parse(html);
-  final table = doc.querySelector('table.p-calendar-list');
-  if (table == null) return _emptyMeals();
 
-  int? targetDay;
-  for (final th in table.querySelectorAll('thead th[data-day]')) {
-    final dayIdx = th.attributes['data-day'];
-    final spanText = th.querySelector('span')?.text.trim() ?? '';
-    final datePart = spanText.split('\n').first.trim();
-    final parts = datePart.split('/');
-    if (parts.length == 2) {
-      final m = int.tryParse(parts[0]);
-      final d = int.tryParse(parts[1]);
-      if (m == date.month && d == date.day) {
-        targetDay = int.tryParse(dayIdx ?? '');
-        break;
-      }
-    }
+  String dayId;
+  switch (date.weekday) {
+    case 1:
+      dayId = 'mon_list';
+      break;
+    case 2:
+      dayId = 'tue_list';
+      break;
+    case 3:
+      dayId = 'wed_list';
+      break;
+    case 4:
+      dayId = 'thu_list';
+      break;
+    case 5:
+      dayId = 'fri_list';
+      break;
+    case 6:
+      dayId = 'sat_list';
+      break;
+    case 7:
+      dayId = 'sun_list';
+      break;
+    default:
+      dayId = 'mon_list';
   }
-  if (targetDay == null) return _emptyMeals();
 
+  final contentDiv = doc.querySelector('#$dayId');
+  if (contentDiv == null) return _emptyMeals();
+
+  final tables = contentDiv.querySelectorAll('table.tbl_4');
+  if (tables.isEmpty) return _emptyMeals();
+
+  final table = tables.first;
   final rows = table.querySelectorAll('tbody tr');
-  // 학생회관 식당: 첫 행=조식, 두 번째 행=중식, 세 번째 행=석식
   final mealKeys = ['breakfast', 'lunch', 'dinner'];
   final meals = <String, List<String>>{
     'breakfast': [],
@@ -270,28 +282,23 @@ Map<String, dynamic> _parseCafeHtml(String html, DateTime date) {
   };
 
   for (int i = 0; i < rows.length && i < mealKeys.length; i++) {
-    final td = rows[i].querySelector('td[data-day="$targetDay"]');
-    if (td == null) continue;
-    for (final li in td.querySelectorAll('ul.menu_list li')) {
-      final text = li.text.trim();
-      if (text.isEmpty) continue;
-      final items = text
-          .split(RegExp(r'[\n\r]'))
-          .map((s) => s.trim().replaceAll('&amp;', '&'))
-          .where(
-            (s) =>
-                s.isNotEmpty &&
-                !s.startsWith(
-                  '[',
-                ) && // \uc2dc\uac04\ub300 \ud0dc\uadf8 \uc81c\uc678
-                !s.startsWith(
-                  '\uc0bc\uc77c\uc808',
-                ) && // \ud734\uc77c \uac00\ub2a5\uc131 \uc81c\uc678
-                !s.startsWith('\uc149'),
-          )
-          .toList();
-      meals[mealKeys[i]]!.addAll(items);
-    }
+    final tds = rows[i].querySelectorAll('td');
+    if (tds.isEmpty) continue;
+    final td = tds.first;
+    final text = td.text.trim();
+    if (text.isEmpty) continue;
+    final items = text
+        .split(RegExp(r'[\n\r]'))
+        .map((s) => s.trim().replaceAll('&amp;', '&'))
+        .where(
+          (s) =>
+              s.isNotEmpty &&
+              !s.startsWith('[') &&
+              !s.startsWith('삼일절') &&
+              !s.startsWith('석'),
+        )
+        .toList();
+    meals[mealKeys[i]]!.addAll(items);
   }
   return {'meals': meals};
 }
