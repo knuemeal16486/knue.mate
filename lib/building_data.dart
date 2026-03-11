@@ -260,20 +260,36 @@ List<BuildingData> kBuildings = [];
 
 Future<void> loadBuildingData() async {
   try {
+    // 1. 모든 메타데이터를 기반으로 기본 건물 리스트 생성 (먼저 모든 건물이 표시되도록 함)
+    final List<BuildingData> allBuildings = [];
+    _kBuildingMetadata.forEach((name, meta) {
+      allBuildings.add(
+        BuildingData(
+          name: name,
+          shortName: meta.shortName,
+          description: meta.description,
+          position: meta.position,
+          color: meta.color,
+          floors: [], // 기본값은 층 정보 없음
+        ),
+      );
+    });
+
+    // 2. JSON 파일 로드
     final String jsonString = await rootBundle.loadString(
       'assets/buildings/knue_buildings.json',
     );
     final Map<String, dynamic> jsonData = json.decode(jsonString);
     final List<dynamic> buildingsJson = jsonData['buildings'];
 
-    final List<BuildingData> loadedBuildings = [];
-
+    // 3. JSON 데이터가 있는 건물에 대해 정보 업데이트
     for (var bJson in buildingsJson) {
       final String name = bJson['name'];
-      final meta = _kBuildingMetadata[name];
 
-      if (meta == null) {
-        debugPrint('Metadata not found for building: $name');
+      // JSON의 건물명과 메타데이터의 건물명이 일치하는지 확인
+      final int targetIdx = allBuildings.indexWhere((b) => b.name == name);
+      if (targetIdx == -1) {
+        debugPrint('Metadata not found for building in JSON: $name');
         continue;
       }
 
@@ -293,21 +309,38 @@ Future<void> loadBuildingData() async {
         return FloorData(floor: fJson['floor'], rooms: rooms);
       }).toList();
 
-      loadedBuildings.add(
-        BuildingData(
-          name: name,
-          shortName: meta.shortName,
-          description: meta.description,
-          position: meta.position,
-          color: meta.color,
-          floors: floors,
-        ),
+      // 층 정보가 있는 경우 보강
+      final meta = allBuildings[targetIdx];
+      allBuildings[targetIdx] = BuildingData(
+        name: meta.name,
+        shortName: meta.shortName,
+        description: meta.description,
+        position: meta.position,
+        color: meta.color,
+        floors: floors,
       );
     }
 
-    kBuildings = loadedBuildings;
-    debugPrint('Successfully loaded ${kBuildings.length} buildings from JSON');
+    kBuildings = allBuildings;
+    debugPrint(
+      'Successfully loaded ${kBuildings.length} buildings (JSON updated: ${buildingsJson.length})',
+    );
   } catch (e) {
-    debugPrint('Error loading building data from JSON: $e');
+    debugPrint('Error loading building data: $e');
+    // 오류 시에도 메타데이터만으로라도 채우기 시도
+    if (kBuildings.isEmpty) {
+      _kBuildingMetadata.forEach((name, meta) {
+        kBuildings.add(
+          BuildingData(
+            name: name,
+            shortName: meta.shortName,
+            description: meta.description,
+            position: meta.position,
+            color: meta.color,
+            floors: [],
+          ),
+        );
+      });
+    }
   }
 }

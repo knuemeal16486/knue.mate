@@ -634,8 +634,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   List<String> _trailNames = [];
 
   // 건물/시설/카테고리 순서 상태 (null이면 기본 순서)
-  late List<int> _buildingOrder;
-  late List<int> _facilityOrder;
+  List<int> _buildingOrder = [];
+  List<int> _facilityOrder = [];
   List<String> _categoryOrder = ['교육', '편의', '이동', '시설'];
 
   // 숨김 목록
@@ -652,6 +652,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   Map<int, String> _customFacilityNames = {};
   List<String> _favoriteDepts = [];
   List<String> _favoriteAdmins = [];
+  String deptSearchQuery = '';
   String adminSearchQuery = '';
 
   // 위치 관련
@@ -664,9 +665,9 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   void initState() {
     super.initState();
     _mapController = MapController();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
 
-    // 학생들이 많이 이용하는 건물 우선 배치 (학부생 위주 정렬)
+    // 학생들이 많이 이용하는 건물 우선 배치 (학부생 위주 정렬) - 실제 존재하는 인덱스만 필터링
     final pop = [
       18,
       21,
@@ -688,7 +689,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
       4,
       19,
       20,
-    ];
+    ].where((idx) => idx < kBuildings.length).toList();
+
     final rest = List.generate(
       kBuildings.length,
       (i) => i,
@@ -790,6 +792,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   }
 
   Future<void> _startLocationTracking() async {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
     try {
       var status = await Geolocator.checkPermission();
       if (status == LocationPermission.denied) {
@@ -960,6 +963,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                 _buildFacilityTab(primary, isDark),
                 _buildTrailTab(primary, isDark),
                 _buildDeptOfficeTab(isDark),
+                _buildAdminOfficeTab(isDark),
                 _buildClassroomSearchTab(primary, isDark),
               ],
             ),
@@ -975,7 +979,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   Widget _buildTopBar(Color primary, bool isDark) {
     return ClipRRect(
       child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
         child: Container(
           decoration: BoxDecoration(
             color: isDark
@@ -3206,7 +3210,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   }
 
   Widget _buildDeptOfficeTab(bool isDark) {
-    final colleges = ['제1대학', '제2대학', '제3대학', '제4대학'];
+    const colleges = ['제1대학', '제2대학', '제3대학', '제4대학'];
     final collegeColors = [
       Colors.blue,
       Colors.orange,
@@ -3219,7 +3223,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
       Icons.science_rounded,
       Icons.palette_rounded,
     ];
-    String deptSearchQuery = '';
 
     return StatefulBuilder(
       builder: (ctx, setLocal) {
@@ -3366,7 +3369,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                               Icon(Icons.phone_rounded, color: color, size: 20),
                               const SizedBox(width: 8),
                               const Text(
-                                '\uc804\ud654 \uc2dc \ub9e4\ub108',
+                                '전화 시 매너',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w800,
@@ -3403,7 +3406,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                       SizedBox(width: 6),
                                       Expanded(
                                         child: Text(
-                                          '\uc810\uc2ec\uc2dc\uac04(12:00~13:00)\uc785\ub2c8\ub2e4.\n\uc5f0\uacb0\uc774 \uc548 \ub420 \uc218 \uc788\uc5b4\uc694.',
+                                          '점심시간(12:00~13:00)입니다.\n연결이 안 될 수 있어요.',
                                           style: TextStyle(
                                             color: Colors.orange,
                                             fontSize: 12,
@@ -3537,7 +3540,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                             TextButton(
                               onPressed: () => Navigator.pop(c, false),
                               child: Text(
-                                '\ucde8\uc18c',
+                                '취소',
                                 style: TextStyle(
                                   color: isDark
                                       ? Colors.white54
@@ -3555,7 +3558,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                 ),
                               ),
                               icon: const Icon(Icons.call_rounded, size: 16),
-                              label: const Text('\uc804\ud654\ud558\uae30'),
+                              label: const Text('전화하기'),
                             ),
                           ],
                         ),
@@ -3732,6 +3735,508 @@ class _CampusMapScreenState extends State<CampusMapScreen>
             );
           }
         } // end loop
+
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 24),
+          children: tabItems,
+        );
+      },
+    );
+  }
+
+  Widget _buildAdminOfficeTab(bool isDark) {
+    const color = Colors.blueGrey;
+    const icon = Icons.account_balance_rounded;
+
+    return StatefulBuilder(
+      builder: (ctx, setLocal) {
+        final query = adminSearchQuery.trim();
+        List<Widget> tabItems = [];
+
+        tabItems.add(
+          SizedBox(height: MediaQuery.of(context).padding.top + 104),
+        );
+        tabItems.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white12
+                      : Colors.black.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search_rounded,
+                    size: 18,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      onChanged: (v) => setLocal(() => adminSearchQuery = v),
+                      decoration: InputDecoration(
+                        hintText: '부서 또는 건물명 검색...',
+                        hintStyle: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 11,
+                        ),
+                      ),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        // 부서 아이템 위젯 생성 헬퍼
+        Widget buildAdminItem(DeptOffice d, Color color) {
+          final isFav = _favoriteAdmins.contains(d.dept);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.15)),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(14, 6, 12, 6),
+              leading: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    if (isFav) {
+                      _favoriteAdmins.remove(d.dept);
+                    } else {
+                      if (_favoriteAdmins.length < 2) {
+                        _favoriteAdmins.add(d.dept);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('관심 부서는 최대 2개까지만 등록할 수 있습니다.'),
+                          ),
+                        );
+                      }
+                    }
+                    _saveFavoritesAndCategories();
+                  });
+                },
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isFav
+                        ? Colors.amber.withValues(alpha: 0.15)
+                        : color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      isFav ? Icons.star_rounded : Icons.star_outline_rounded,
+                      color: isFav ? Colors.amber : color,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+              title: Text(
+                d.dept,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              subtitle: Text(
+                '${d.building} ${d.room}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.white54 : Colors.black54,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: d.phone.split(',').map((p) {
+                  final phoneNum = p.trim();
+                  return GestureDetector(
+                    onTap: () async {
+                      final now = TimeOfDay.now();
+                      final isLunch =
+                          now.hour == 12 ||
+                          (now.hour == 11 && now.minute >= 55);
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (c) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          backgroundColor: isDark
+                              ? const Color(0xFF1C1C2E)
+                              : Colors.white,
+                          title: Row(
+                            children: [
+                              Icon(Icons.phone_rounded, color: color, size: 20),
+                              const SizedBox(width: 8),
+                              const Text(
+                                '전화 시 매너',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (isLunch)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.orange.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Colors.orange,
+                                        size: 16,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          '점심시간(12:00~13:00)입니다.\n연결이 안 될 수 있어요.',
+                                          style: TextStyle(
+                                            color: Colors.orange,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? const Color(0xFF2A2A3D)
+                                      : const Color(0xFFF8F9FA),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.3),
+                                    width: 1.5,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: color.withValues(alpha: 0.1),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.format_quote_rounded,
+                                          color: color,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '이렇게 말해보세요',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: color,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text.rich(
+                                      TextSpan(
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          height: 1.6,
+                                          color: isDark
+                                              ? Colors.white
+                                              : Colors.black87,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        children: [
+                                          const TextSpan(text: '"안녕하세요, '),
+                                          TextSpan(
+                                            text: '김청람 학생',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: color,
+                                              backgroundColor: color.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                            ),
+                                          ),
+                                          const TextSpan(text: '입니다.\n'),
+                                          const TextSpan(text: '다름이 아니라 '),
+                                          TextSpan(
+                                            text: '[용건]',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: color,
+                                              backgroundColor: color.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                            ),
+                                          ),
+                                          const TextSpan(
+                                            text: ' 때문에 연락드렸습니다."',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.15),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.access_time_rounded,
+                                      size: 14,
+                                      color: color,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '운영시간 09:00~17:30 (점심 12:00~13:00)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: color.withValues(alpha: 0.8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(c, false),
+                              child: Text(
+                                '취소',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.black45,
+                                ),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => Navigator.pop(c, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: color,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              icon: const Icon(Icons.call_rounded, size: 16),
+                              label: const Text('전화하기'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        final uri = Uri.parse('tel:$phoneNum');
+                        if (await canLaunchUrl(uri)) launchUrl(uri);
+                      }
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(left: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.call_rounded, size: 13, color: color),
+                          const SizedBox(height: 2),
+                          Text(
+                            phoneNum.replaceFirst('043-', ''),
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              onTap: () {
+                final building = kBuildings.firstWhere(
+                  (b) => b.name.contains(
+                    d.building.replaceAll('관', '').replaceAll('학관', ''),
+                  ),
+                  orElse: () => kBuildings.first,
+                );
+                _tabController.animateTo(0);
+                Future.delayed(
+                  const Duration(milliseconds: 200),
+                  () => _animatedMove(building.position, 18.5),
+                );
+              },
+            ),
+          );
+        }
+
+        // 2. 즐겨찾기 (관심 부서)
+        if (query.isEmpty && _favoriteAdmins.isNotEmpty) {
+          final favs = kAdminOffices
+              .where((d) => _favoriteAdmins.contains(d.dept))
+              .toList();
+          if (favs.isNotEmpty) {
+            tabItems.add(
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.star_rounded,
+                        size: 15,
+                        color: Colors.amber,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '나의 관심 부서',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+            tabItems.add(
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: favs.map((d) => buildAdminItem(d, color)).toList(),
+                ),
+              ),
+            );
+          }
+        }
+
+        // 3. 전체 부서 목록 (행정 부서)
+        final admins = kAdminOffices.where((d) {
+          if (query.isEmpty) return true;
+          return d.dept.contains(query) || d.building.contains(query);
+        }).toList();
+
+        if (admins.isNotEmpty) {
+          tabItems.add(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(icon, size: 15, color: color),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '행정 부서',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${admins.length}개 부서',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+          tabItems.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: admins.map((d) => buildAdminItem(d, color)).toList(),
+              ),
+            ),
+          );
+        }
 
         return ListView(
           padding: const EdgeInsets.only(bottom: 24),
