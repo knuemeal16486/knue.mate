@@ -32,6 +32,7 @@ const List<Color> kColorPalette = [
   Color(0xFF2563EB),
   Color(0xFFEF5350),
   Color(0xFFEC407A),
+  Color.fromARGB(255, 199, 122, 211),
   Color(0xFFAB47BC),
   Color(0xFF7E57C2),
   Color(0xFF5C6BC0),
@@ -47,7 +48,6 @@ const List<Color> kColorPalette = [
   Color(0xFFF4511E),
   Color(0xFF6D4C41),
   Color(0xFF757575),
-  Color.fromARGB(255, 199, 122, 211),
   Color(0xFF000000),
 ];
 
