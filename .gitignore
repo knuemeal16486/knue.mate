@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/release
 # API Keys
 .env
+
+# Firebase CLI
+firebase.exe
