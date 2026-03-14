@@ -233,10 +233,12 @@ class _TodayMealPageState extends State<TodayMealPage> {
     if (newState) {
       await NotificationService().requestPermissions();
       await _scheduleAlarmsBySource(_source);
+      if (!mounted) return;
       final restaurantName = _source == MealSource.a ? "기숙사" : "학생회관";
       showToast(context, "$restaurantName 식당 시간으로 알림이 설정되었습니다.");
     } else {
       await NotificationService().cancelAll();
+      if (!mounted) return;
       showToast(context, "알림이 해제되었습니다.");
     }
   }
@@ -249,8 +251,10 @@ class _TodayMealPageState extends State<TodayMealPage> {
     // 알림이 켜져 있다면, 변경된 식당 시간으로 재설정
     if (_alarmOn) {
       await _scheduleAlarmsBySource(s);
-      final restaurantName = s == MealSource.a ? "기숙사" : "학생회관";
-      showToast(context, "$restaurantName 시간으로 알림이 업데이트되었습니다.");
+      if (mounted) {
+        final restaurantName = s == MealSource.a ? "기숙사" : "학생회관";
+        showToast(context, "$restaurantName 시간으로 알림이 업데이트되었습니다.");
+      }
     }
 
     await fetchMeals();

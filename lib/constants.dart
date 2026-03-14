@@ -579,4 +579,26 @@ class NotificationService {
       print("알림 예약 실패: $e");
     }
   }
+
+  // FCM 포그라운드 수신용 즉시 알림 메서드 추가
+  Future<void> showNotification(int id, String title, String body) async {
+    const android = AndroidNotificationDetails(
+      'fcm_general_channel',
+      '기본 알림',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    const ios = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+    await flutterLocalNotificationsPlugin.show(
+      id,
+      title,
+      body,
+      const NotificationDetails(android: android, iOS: ios),
+    );
+  }
 }
+

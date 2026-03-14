@@ -269,6 +269,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
+          if (!mounted) return;
           showToast(context, "위치 권한이 필요합니다.");
           return;
         }
@@ -276,6 +277,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
 
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
+        if (!mounted) return;
         showToast(context, "위치 서비스를 활성화해주세요.");
         return;
       }

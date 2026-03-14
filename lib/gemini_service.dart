@@ -31,7 +31,6 @@ class GeminiService {
 
   // 메뉴 리스트로 칼로리 예상하기
   static Future<String> estimateCalories(List<String> menuItems) async {
-    if (apiKey.isEmpty) return "키 없음";
     if (menuItems.isEmpty) return "";
 
     // "없음"이나 빈 항목 제거
@@ -72,13 +71,11 @@ class GeminiService {
           continue;
         }
 
-        final result = _normalizeCalorieResponse(rawText);
+        final result = _normalizeCalorieResponse(rawText, validItems);
 
-        if (result != "측정 불가") {
-          // 캐시에 저장
-          _cache[cacheKey] = result;
-          _cacheTimestamps[cacheKey] = DateTime.now();
-        }
+        // 캐시에 저장 (무조건 값이 있음)
+        _cache[cacheKey] = result;
+        _cacheTimestamps[cacheKey] = DateTime.now();
 
         return result;
       } catch (e) {
@@ -89,7 +86,11 @@ class GeminiService {
       }
     }
 
-    return "측정 불가";
+    // 완전히 실패한 경우 자체 계산식 사용 (때려맞추기)
+    final fallback = _generateFallbackCalories(validItems);
+    _cache[cacheKey] = fallback;
+    _cacheTimestamps[cacheKey] = DateTime.now();
+    return fallback;
   }
 
   static String _buildPrompt(List<String> menuItems) {
@@ -106,10 +107,14 @@ class GeminiService {
     반드시 '숫자~숫자kcal' 형식으로 응답하십시오. (예: 650~750kcal)
     숫자 범위는 플러스마이너스 20kcal 이내로 하십시오.  
     다른 어떤 설명이나 텍스트도 포함하지 마십시오. 오직 칼로리 범위만 출력하십시오.
+    무슨 일이 있어도 사용자에게 '측정불가'라는 메세지가 뜨지 않도록 하십시오.
     """;
   }
 
-  static String _normalizeCalorieResponse(String rawResponse) {
+  static String _normalizeCalorieResponse(
+    String rawResponse,
+    List<String> validItems,
+  ) {
     // 1. 공백 및 불필요 문자 정리
     String clean = rawResponse.replaceAll(RegExp(r'[*#_]'), '').trim();
 
@@ -127,7 +132,55 @@ class GeminiService {
       if (val > 100) return "${val - 50}~${val + 50}kcal";
     }
 
-    return "측정 불가";
+    // AI가 숫자를 아예 응답하지 않았을 때 때려맞추기
+    return _generateFallbackCalories(validItems);
+  }
+
+  // 예측 실패나 API 장애 시 메뉴 이름으로 대강의 칼로리를 끼워맞추는 메서드
+  static String _generateFallbackCalories(List<String> validItems) {
+    int baseCalorie = 450;
+    for (var item in validItems) {
+      if (item.contains('고기') ||
+          item.contains('돈까스') ||
+          item.contains('튀김') ||
+          item.contains('치킨') ||
+          item.contains('카츠') ||
+          item.contains('삼겹') ||
+          item.contains('갈비') ||
+          item.contains('불고기') ||
+          item.contains('제육') ||
+          item.contains('함박')) {
+        baseCalorie += 250;
+      } else if (item.contains('국') ||
+          item.contains('찌개') ||
+          item.contains('탕') ||
+          item.contains('전골')) {
+        baseCalorie += 120;
+      } else if (item.contains('면') ||
+          item.contains('우동') ||
+          item.contains('짬뽕') ||
+          item.contains('짜장') ||
+          item.contains('스파게티')) {
+        baseCalorie += 150;
+      } else if (item.contains('밥') ||
+          item.contains('죽') ||
+          item.contains('볶음') ||
+          item.contains('비빔')) {
+        baseCalorie += 120;
+      } else if (item.contains('떡') || item.contains('만두')) {
+        baseCalorie += 100;
+      } else {
+        baseCalorie += 40; // 밑반찬 류
+      }
+    }
+
+    // 너무 높거나 낮은 값 극단값 필터링 (식단이라는 가정)
+    if (baseCalorie > 1150) baseCalorie = 1150;
+    if (baseCalorie < 550) baseCalorie = 550;
+
+    // 10단위로 깔끔하게 떨어지게 맞춤
+    int startRange = (baseCalorie ~/ 10) * 10;
+    return "${startRange}~${startRange + 100}kcal";
   }
 
   // 캐시 초기화 (선택적)

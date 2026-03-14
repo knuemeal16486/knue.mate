@@ -1308,8 +1308,8 @@ class _BusAppScreenState extends State<BusAppScreen>
 
     await NotificationService().scheduleAlarm(
       id: id,
-      title: '청람버스 알람',
-      body: '$_selectedBus번 버스가 $minutesBefore분 뒤(${timeStr}) 출발합니다.',
+      title: '🚌 버스 출발 알림!',
+      body: '[$timeStr]에 출발하는 $_selectedBus번 버스가 $minutesBefore분 뒤에 떠나요! 얼른 준비하세요! 🏃💨',
       scheduledTime: alarmTime,
     );
 

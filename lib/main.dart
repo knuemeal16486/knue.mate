@@ -6,9 +6,53 @@ import 'package:google_fonts/google_fonts.dart';
 import 'constants.dart';
 import 'meal_screen.dart';
 import 'building_data.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // 백그라운드 메시지 핸들링
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  print("Handling a background message: ${message.messageId}");
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase 초기화
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // FCM 백그라운드 메시지 핸들러 등록
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // 푸시 알림 권한 요청 (iOS) 및 알림 설정
+  FirebaseMessaging messaging = FirebaseMessaging.instance;
+  NotificationSettings settings = await messaging.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+  print('Push messaging permission: ${settings.authorizationStatus}');
+
+  // 현재 기기의 푸시 토큰 가져오기 (테스트 및 서버 전송용)
+  String? fcmToken = await messaging.getToken();
+  print("FCM Registration Token: $fcmToken");
+
+  // 앱이 켜져있을 때 (Foreground) 푸시 알림이 오면 처리하는 로직
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    print('Foreground message received: ${message.messageId}');
+    if (message.notification != null) {
+      // constants.dart에 방금 만든 showNotification 함수 호출
+      NotificationService().showNotification(
+        message.notification.hashCode,
+        message.notification!.title ?? '알림',
+        message.notification!.body ?? '',
+      );
+    }
+  });
 
   // JSON 건물 데이터 로드
   await loadBuildingData();

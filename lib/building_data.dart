@@ -259,22 +259,22 @@ const Map<String, _BuildingMeta> _kBuildingMetadata = {
 List<BuildingData> kBuildings = [];
 
 Future<void> loadBuildingData() async {
-  try {
-    // 1. 모든 메타데이터를 기반으로 기본 건물 리스트 생성 (먼저 모든 건물이 표시되도록 함)
-    final List<BuildingData> allBuildings = [];
-    _kBuildingMetadata.forEach((name, meta) {
-      allBuildings.add(
-        BuildingData(
-          name: name,
-          shortName: meta.shortName,
-          description: meta.description,
-          position: meta.position,
-          color: meta.color,
-          floors: [], // 기본값은 층 정보 없음
-        ),
-      );
-    });
+  // 1. 모든 메타데이터를 기반으로 기본 건물 리스트 생성 (먼저 모든 건물이 표시되도록 함)
+  final List<BuildingData> allBuildings = [];
+  _kBuildingMetadata.forEach((name, meta) {
+    allBuildings.add(
+      BuildingData(
+        name: name,
+        shortName: meta.shortName,
+        description: meta.description,
+        position: meta.position,
+        color: meta.color,
+        floors: [], // 기본값은 층 정보 없음
+      ),
+    );
+  });
 
+  try {
     // 2. JSON 파일 로드
     final String jsonString = await rootBundle.loadString(
       'assets/buildings/knue_buildings.json',
@@ -327,20 +327,9 @@ Future<void> loadBuildingData() async {
     );
   } catch (e) {
     debugPrint('Error loading building data: $e');
-    // 오류 시에도 메타데이터만으로라도 채우기 시도
+    // 오류 시에도 메타데이터만으로도 화면 표시는 가능하도록 설정
     if (kBuildings.isEmpty) {
-      _kBuildingMetadata.forEach((name, meta) {
-        kBuildings.add(
-          BuildingData(
-            name: name,
-            shortName: meta.shortName,
-            description: meta.description,
-            position: meta.position,
-            color: meta.color,
-            floors: [],
-          ),
-        );
-      });
+      kBuildings = allBuildings;
     }
   }
 }

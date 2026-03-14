@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "958518376868",
+    "project_id": "knue-mate",
+    "storage_bucket": "knue-mate.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:958518376868:android:b5725c86521d1a2aa7e931",
+        "android_client_info": {
+          "package_name": "com.knue.knuemate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyChJpxu6_bAVcMr5i5NobtFm24_OhVzB6o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
