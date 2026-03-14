@@ -97,13 +97,33 @@ class _TodayMealPageState extends State<TodayMealPage> {
     "dinner": [],
   };
   int _reqId = 0;
+  late final ScrollController _scrollController;
+  bool _isHeaderCompact = false;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_handleScroll);
     _updateSelectionByTime();
     _loadAlarmState();
     fetchMeals();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _handleScroll() {
+    final shouldCompact = _scrollController.offset > 80;
+    if (shouldCompact != _isHeaderCompact) {
+      setState(() {
+        _isHeaderCompact = shouldCompact;
+      });
+    }
   }
 
   Future<void> _loadAlarmState() async {
@@ -266,6 +286,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
     final isToday = DateUtils.isSameDay(_date, DateTime.now());
     return _CommonMealLayout(
       header: _Header(
+        isCompact: _isHeaderCompact,
         alarmOn: _alarmOn,
         onToggleAlarm: _handleAlarmToggle,
         date: _date,
@@ -276,6 +297,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
         onSourceChanged: _loading ? null : _onSourceChangedWithAlarmUpdate,
       ),
       content: SingleChildScrollView(
+        controller: _scrollController,
         child: Column(
           children: [
             // [New] Firestore 실시간 공지사항 배너
@@ -2405,16 +2427,6 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      if (widget.isToday)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text("TODAY",
-                              style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
-                        ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
@@ -2442,6 +2454,57 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                               style: const TextStyle(
                                   color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
                         ),
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('meal_ratings')
+                            .where(
+                              'date',
+                              isEqualTo:
+                                  "${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}",
+                            )
+                            .where('source', isEqualTo: widget.source.name)
+                            .where('mealType', isEqualTo: widget.type.stdKey)
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          double avg = 0.0;
+                          int count = 0;
+                          if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                            count = snapshot.data!.docs.length;
+                            double sum = 0.0;
+                            for (var doc in snapshot.data!.docs) {
+                              sum += (doc.data() as Map<String, dynamic>)['rating'] ?? 0.0;
+                            }
+                            avg = sum / count;
+                          }
+
+                          if (count == 0) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: primary.withOpacity(0.06),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                                const SizedBox(width: 4),
+                                Text(
+                                  avg.toStringAsFixed(1),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -2477,9 +2540,11 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                       StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('meal_ratings')
-                            .where('date',
-                                isEqualTo:
-                                    "${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}")
+                            .where(
+                              'date',
+                              isEqualTo:
+                                  "${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}",
+                            )
                             .where('source', isEqualTo: widget.source.name)
                             .where('mealType', isEqualTo: widget.type.stdKey)
                             .snapshots(),
@@ -2495,33 +2560,32 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                             avg = sum / count;
                           }
 
-                          return InkWell(
-                            onTap: _showRatingDialog,
-                            borderRadius: BorderRadius.circular(16),
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 20),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.star_rounded, color: count > 0 ? Colors.amber : Colors.grey, size: 24),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    count > 0 ? avg.toStringAsFixed(1) : "평가 없음",
-                                    style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w900,
-                                        color: count > 0 ? primary : Colors.grey),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text("($count명 참여)", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                  const Spacer(),
-                                  Text("별점 남기기 >",
-                                      style: TextStyle(fontSize: 12, color: primary, fontWeight: FontWeight.bold)),
-                                ],
+                          return Row(
+                            children: [
+                              Icon(
+                                Icons.star_rounded,
+                                color: count > 0 ? Colors.amber : Colors.grey,
+                                size: 22,
                               ),
-                            ),
+                              const SizedBox(width: 6),
+                              Text(
+                                count > 0 ? avg.toStringAsFixed(1) : "평가 없음",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: count > 0 ? primary : Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                "(${count}명)",
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                            ],
                           );
                         },
                       ),
+                      const SizedBox(height: 16),
                       ...widget.items.map(
                         (e) => Padding(
                           padding: const EdgeInsets.only(bottom: 12),
@@ -2538,6 +2602,53 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                               Expanded(child: Text(e, style: const TextStyle(fontSize: 16, height: 1.4))),
                             ],
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withOpacity(0.02) : primary.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isDark ? Colors.white10 : primary.withOpacity(0.15),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.star_rounded, color: Colors.amber, size: 22),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                "식단은 어떠셨나요?\n맛있게 드셨다면 별점을 남겨주세요.",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: _showRatingDialog,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                              ),
+                              child: const Text(
+                                "평가하기",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -2638,6 +2749,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
 // [중요] _Header 클래스 정의 (누락되었던 부분)
 // -----------------------------------------------------------------------------
 class _Header extends StatelessWidget {
+  final bool isCompact;
   final bool alarmOn;
   final VoidCallback onToggleAlarm;
   final DateTime date;
@@ -2648,6 +2760,7 @@ class _Header extends StatelessWidget {
   final ValueChanged<MealSource>? onSourceChanged;
   const _Header({
     super.key,
+    required this.isCompact,
     required this.alarmOn,
     required this.onToggleAlarm,
     required this.date,
@@ -2836,58 +2949,66 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                onPressed: onPrev,
-                icon: const Icon(Icons.chevron_left, color: Colors.white),
-              ),
-              Column(
-                children: [
-                  if (isToday)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            child: isCompact
+                ? const SizedBox.shrink(key: ValueKey('header-collapsed'))
+                : Row(
+                    key: const ValueKey('header-expanded'),
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        onPressed: onPrev,
+                        icon: const Icon(Icons.chevron_left, color: Colors.white),
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
+                      Column(
+                        children: [
+                          if (isToday)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                "오늘의 식단",
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          Text(
+                            "${wd[date.weekday]}요일",
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            "${date.year}년 ${date.month.toString().padLeft(2, '0')}월 ${date.day.toString().padLeft(2, '0')}일",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Text(
-                        "오늘의 식단",
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      IconButton(
+                        onPressed: onNext,
+                        icon: const Icon(Icons.chevron_right, color: Colors.white),
                       ),
-                    ),
-                  Text(
-                    "${wd[date.weekday]}요일",
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    ],
                   ),
-                  Text(
-                    "${date.year}년 ${date.month.toString().padLeft(2, '0')}월 ${date.day.toString().padLeft(2, '0')}일",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              IconButton(
-                onPressed: onNext,
-                icon: const Icon(Icons.chevron_right, color: Colors.white),
-              ),
-            ],
           ),
         ],
       ),
