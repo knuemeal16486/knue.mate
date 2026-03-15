@@ -114,8 +114,6 @@ class _TodayMealPageState extends State<TodayMealPage> {
     super.dispose();
   }
 
-  // Removed manual scroll listener for natural folding logic
-
   Future<void> _loadAlarmState() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
@@ -181,11 +179,9 @@ class _TodayMealPageState extends State<TodayMealPage> {
     fetchMeals();
   }
 
-  // [New] 식당 소스에 따라 알림 스케줄링 (Dorm vs Student)
   Future<void> _scheduleAlarmsBySource(MealSource source) async {
     final now = DateTime.now();
 
-    // 알림 등록 헬퍼 함수
     Future<void> schedule(
       int id,
       int h,
@@ -201,36 +197,23 @@ class _TodayMealPageState extends State<TodayMealPage> {
       );
     }
 
-    await NotificationService().cancelAll(); // 기존 알림 제거
+    await NotificationService().cancelAll();
 
     if (source == MealSource.a) {
-      // === 기숙사 식당 시간표 ===
-      // 아침: 07:30 ~ 09:00
       await schedule(1, 7, 30, "기숙사 아침 식사 ☀️", "아침 식사가 시작되었습니다. 든든하게 챙겨 드세요!");
       await schedule(2, 8, 50, "기숙사 아침 마감 임박 ⏰", "10분 뒤 배식이 종료됩니다.");
-
-      // 점심: 11:30 ~ 13:30
       await schedule(3, 11, 30, "기숙사 점심 식사 🍽️", "맛있는 점심 시간입니다!");
       await schedule(4, 13, 20, "기숙사 점심 마감 임박 🏃‍♂️", "10분 뒤 점심 식사가 종료됩니다.");
-
-      // 저녁: 17:30 ~ 19:00
       await schedule(5, 17, 30, "기숙사 저녁 식사 🌙", "저녁 식사가 준비되었습니다.");
       await schedule(6, 18, 50, "기숙사 저녁 마감 임박 ⚠️", "10분 뒤 저녁 배식이 끝납니다.");
     } else {
-      // === 학생회관 식당 시간표 ===
-      // 아침: 미운영 (알림 없음)
-
-      // 점심: 11:00 ~ 14:00
       await schedule(3, 11, 00, "학생회관 점심 시작 🍽️", "학생회관 점심 식사가 시작되었습니다!");
       await schedule(4, 13, 50, "학생회관 점심 마감 임박 🏃‍♂️", "10분 뒤 식당이 문을 닫습니다.");
-
-      // 저녁: 17:00 ~ 18:30
       await schedule(5, 17, 00, "학생회관 저녁 시작 🌙", "학생회관 저녁 식사 시간입니다.");
       await schedule(6, 18, 20, "학생회관 저녁 마감 임박 ⚠️", "10분 뒤 저녁 운영이 종료됩니다.");
     }
   }
 
-  // [Updated] 알림 토글 핸들러
   Future<void> _handleAlarmToggle() async {
     if (!Platform.isAndroid && !Platform.isIOS) {
       showToast(context, "모바일에서만 가능합니다.");
@@ -254,12 +237,10 @@ class _TodayMealPageState extends State<TodayMealPage> {
     }
   }
 
-  // [New] 식당 탭 변경 시 알림 자동 업데이트
   Future<void> _onSourceChangedWithAlarmUpdate(MealSource s) async {
     setState(() => _source = s);
     PreferencesService.saveMealSource(s);
 
-    // 알림이 켜져 있다면, 변경된 식당 시간으로 재설정
     if (_alarmOn) {
       await _scheduleAlarmsBySource(s);
       if (mounted) {
@@ -752,7 +733,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = themeColor.value; // Use parent's provided color
+    final primaryColor = themeColor.value;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: primaryColor,
@@ -910,22 +891,28 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                   ),
                   const SizedBox(height: 20),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _buildLegendItem(
-                        context,
-                        isToday: true,
-                        isSelected: false,
-                        label: "오늘",
-                        color: primaryColor,
+                      Expanded(
+                        child: Center(
+                          child: _buildLegendItem(
+                            context,
+                            isToday: true,
+                            isSelected: false,
+                            label: "오늘",
+                            color: primaryColor,
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 20),
-                      _buildLegendItem(
-                        context,
-                        isToday: false,
-                        isSelected: true,
-                        label: "선택됨",
-                        color: primaryColor,
+                      Expanded(
+                        child: Center(
+                          child: _buildLegendItem(
+                            context,
+                            isToday: false,
+                            isSelected: true,
+                            label: "선택됨",
+                            color: primaryColor,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -967,13 +954,6 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                 items: _meals[_selectedType.stdKey] ?? [],
                 isToday: DateUtils.isSameDay(_selectedDate, DateTime.now()),
                 date: _selectedDate,
-                onShare: () => shareMenu(
-                  context,
-                  _selectedDate,
-                  _source,
-                  _selectedType,
-                  _meals[_selectedType.stdKey],
-                ),
               ),
           ],
         ),
@@ -990,6 +970,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 14,
@@ -2273,8 +2254,6 @@ class _ColorPickerItem extends StatelessWidget {
   );
 }
 
-// 공용 AppSwitchOption은 파일 끝에 정의되어 있습니다.
-
 class _MealTabs extends StatelessWidget {
   final MealType selected;
   final MealSource source;
@@ -2367,8 +2346,8 @@ class _MealDetailCard extends StatefulWidget {
   final MealSource source;
   final List<String> items;
   final bool isToday;
-  final VoidCallback onShare;
   final DateTime date;
+  final VoidCallback? onShare;
 
   const _MealDetailCard({
     super.key,
@@ -2377,8 +2356,8 @@ class _MealDetailCard extends StatefulWidget {
     required this.source,
     required this.items,
     required this.isToday,
-    required this.onShare,
     required this.date,
+    this.onShare,
   });
   @override
   State<_MealDetailCard> createState() => _MealDetailCardState();
@@ -2406,7 +2385,97 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     return "ratings_${widget.source.name}_${widget.type.stdKey}_$dateStr";
   }
 
+  /// 별점 평가 가능 시간인지 확인
+  /// 운영 시작 시간부터 운영 종료 후 30분까지 평가 가능
+  bool _isRatingAllowed() {
+    if (!widget.isToday) return false;
+
+    final now = DateTime.now();
+
+    // 각 식당과MealType별 운영 시간 설정
+    int startHour, startMinute, endHour, endMinute;
+
+    if (widget.source == MealSource.a) {
+      // 기숙사 식당
+      switch (widget.type) {
+        case MealType.breakfast:
+          startHour = 7;
+          startMinute = 30;
+          endHour = 9;
+          endMinute = 0;
+          break;
+        case MealType.lunch:
+          startHour = 11;
+          startMinute = 30;
+          endHour = 13;
+          endMinute = 30;
+          break;
+        case MealType.dinner:
+          startHour = 17;
+          startMinute = 30;
+          endHour = 19;
+          endMinute = 0;
+          break;
+      }
+    } else {
+      // 학생회관 식당 (조식은 운영 안함)
+      if (widget.type == MealType.breakfast) return false;
+
+      switch (widget.type) {
+        case MealType.lunch:
+          startHour = 11;
+          startMinute = 0;
+          endHour = 14;
+          endMinute = 0;
+          break;
+        case MealType.dinner:
+          startHour = 17;
+          startMinute = 0;
+          endHour = 18;
+          endMinute = 30;
+          break;
+        default:
+          return false;
+      }
+    }
+
+    final startTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      startHour,
+      startMinute,
+    );
+    // 종료 후 30분까지 허용
+    final endTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      endHour,
+      endMinute,
+    ).add(const Duration(minutes: 30));
+
+    return now.isAfter(startTime) && now.isBefore(endTime);
+  }
+
+  /// 별점 평가 가능 시간에 대한 사용자 안내 메시지
+  String _getRatingTimeMessage() {
+    if (!widget.isToday) return "오늘만 평가할 수 있습니다";
+
+    if (widget.source == MealSource.b && widget.type == MealType.breakfast) {
+      return "학생회관 아침은 운영하지 않습니다";
+    }
+
+    return "운영 시간에 평가해주세요";
+  }
+
   Future<void> _submitRating(double rating) async {
+    // 평가 가능 시간인지 다시 확인
+    if (!_isRatingAllowed()) {
+      if (mounted) showToast(context, _getRatingTimeMessage());
+      return;
+    }
+
     if (_isRatingSubmitting) return;
 
     final prefs = await SharedPreferences.getInstance();
@@ -2495,6 +2564,12 @@ class _MealDetailCardState extends State<_MealDetailCard> {
   }
 
   void _showRatingDialog() {
+    // 평가 가능 시간인지 확인
+    if (!_isRatingAllowed()) {
+      showToast(context, _getRatingTimeMessage());
+      return;
+    }
+
     double currentRating = 4.0;
     showDialog(
       context: context,
@@ -2900,7 +2975,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 4),
             child: unavailable
                 ? const Center(
                     child: Column(
@@ -3067,7 +3142,14 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                     ),
                   ),
                   FilledButton.icon(
-                    onPressed: widget.onShare,
+                    onPressed: () => shareMenu(
+                      context,
+                      widget.date,
+                      widget.source,
+                      widget.type,
+                      widget.items,
+                      calories: _caloriesInfo,
+                    ),
                     icon: const Icon(Icons.share, size: 16),
                     label: const Text("공유"),
                     style: FilledButton.styleFrom(

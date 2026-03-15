@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
+import 'firebase_sync_service.dart';
 
 class FloorData {
   final dynamic floor; // int or String
@@ -259,7 +260,7 @@ const Map<String, _BuildingMeta> _kBuildingMetadata = {
 List<BuildingData> kBuildings = [];
 
 Future<void> loadBuildingData() async {
-  // 1. 모든 메타데이터를 기반으로 기본 건물 리스트 생성 (먼저 모든 건물이 표시되도록 함)
+  // 1. 모든 메타데이터를 기반으로 기본 건물 리스트 생성
   final List<BuildingData> allBuildings = [];
   _kBuildingMetadata.forEach((name, meta) {
     allBuildings.add(
@@ -269,47 +270,37 @@ Future<void> loadBuildingData() async {
         description: meta.description,
         position: meta.position,
         color: meta.color,
-        floors: [], // 기본값은 층 정보 없음
+        floors: [],
       ),
     );
   });
 
+  // 2. 로컬 JSON 데이터를 먼저 로드 (속도 최우선)
   try {
-    // 2. JSON 파일 로드
     final String jsonString = await rootBundle.loadString(
       'assets/buildings/knue_buildings.json',
     );
     final Map<String, dynamic> jsonData = json.decode(jsonString);
     final List<dynamic> buildingsJson = jsonData['buildings'];
 
-    // 3. JSON 데이터가 있는 건물에 대해 정보 업데이트
     for (var bJson in buildingsJson) {
       final String name = bJson['name'];
-
-      // JSON의 건물명과 메타데이터의 건물명이 일치하는지 확인
       final int targetIdx = allBuildings.indexWhere((b) => b.name == name);
-      if (targetIdx == -1) {
-        debugPrint('Metadata not found for building in JSON: $name');
-        continue;
-      }
+      if (targetIdx == -1) continue;
 
       final List<FloorData> floors = (bJson['floors'] as List).map((fJson) {
-        final List<String> rooms = (fJson['facilities'] as List)
-            .map((fac) {
-              final String? roomNum = fac['room'];
-              final String facName = fac['name'] ?? '';
-              if (roomNum != null && roomNum.isNotEmpty) {
-                return '$roomNum $facName'.trim();
-              }
-              return facName.trim();
-            })
-            .where((s) => s.isNotEmpty)
-            .toList();
+        final List<String> rooms = (fJson['facilities'] as List).map((fac) {
+          final String? roomNum = fac['room'];
+          final String facName = fac['name'] ?? '';
+          if (roomNum != null && roomNum.isNotEmpty) {
+            return '$roomNum $facName'.trim();
+          }
+          return facName.trim();
+        }).where((s) => s.isNotEmpty).toList();
 
         return FloorData(floor: fJson['floor'], rooms: rooms);
       }).toList();
 
-      // 층 정보가 있는 경우 보강
       final meta = allBuildings[targetIdx];
       allBuildings[targetIdx] = BuildingData(
         name: meta.name,
@@ -320,16 +311,43 @@ Future<void> loadBuildingData() async {
         floors: floors,
       );
     }
-
     kBuildings = allBuildings;
-    debugPrint(
-      'Successfully loaded ${kBuildings.length} buildings (JSON updated: ${buildingsJson.length})',
-    );
+    debugPrint('Successfully loaded ${kBuildings.length} buildings (Local JSON - Initial)');
   } catch (e) {
-    debugPrint('Error loading building data: $e');
-    // 오류 시에도 메타데이터만으로도 화면 표시는 가능하도록 설정
-    if (kBuildings.isEmpty) {
-      kBuildings = allBuildings;
+    debugPrint('Error loading local building data: $e');
+    kBuildings = allBuildings;
+  }
+
+  // 3. 백그라운드에서 Firebase 동기화 시도 (UI를 블로킹하지 않음)
+  _syncWithFirebase(allBuildings);
+}
+
+/// 백그라운드에서 Firebase 데이터를 가져와 kBuildings를 업데이트합니다.
+Future<void> _syncWithFirebase(List<BuildingData> currentBuildings) async {
+  try {
+    final List<BuildingData>? fbBuildings =
+        await FirebaseSyncService.fetchBuildingsFromFirestore();
+
+    if (fbBuildings != null && fbBuildings.isNotEmpty) {
+      for (var fbBuilding in fbBuildings) {
+        final int targetIdx =
+            currentBuildings.indexWhere((b) => b.name == fbBuilding.name);
+        if (targetIdx != -1) {
+          final meta = currentBuildings[targetIdx];
+          currentBuildings[targetIdx] = BuildingData(
+            name: meta.name,
+            shortName: meta.shortName,
+            description: meta.description,
+            position: meta.position,
+            color: meta.color,
+            floors: fbBuilding.floors,
+          );
+        }
+      }
+      kBuildings = List.from(currentBuildings);
+      debugPrint('Successfully synced buildings with Firebase in background');
     }
+  } catch (e) {
+    debugPrint('Background Firebase sync failed: $e');
   }
 }

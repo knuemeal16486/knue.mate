@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'dart:convert';
@@ -1414,7 +1414,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                     )
                     .toList(),
               ),
-            // 건물 마커 (줌 15.5 이상, 토글 켜진 경우)
             if (_showBuildings && _currentZoom >= 15.5)
               MarkerLayer(
                 markers: kBuildings
