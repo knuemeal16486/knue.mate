@@ -514,7 +514,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
               _buildInfoRow(
                 Icons.attach_money,
                 "가격",
-                isDorm ? "의무입사생 무료" : "5,000원 (일반)",
+                isDorm ? "의무입사생 무료" : "5,500원 (일반)",
               ),
               const SizedBox(height: 12),
               _buildInfoRow(
@@ -774,15 +774,12 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                 children: [
                   const Icon(Icons.swap_horiz, size: 16, color: Colors.white),
                   const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      _source == MealSource.a ? "기숙사 식당" : "학생회관 식당",
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  Text(
+                    _source == MealSource.a ? "기숙사 식당" : "학생회관 식당",
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -2897,15 +2894,12 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                                     color: statusColor,
                                   ),
                                   const SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      statusText,
-                                      style: TextStyle(
-                                        color: statusColor,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
+                                  Text(
+                                    statusText,
+                                    style: TextStyle(
+                                      color: statusColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
                                     ),
                                   ),
                                   if (count > 0) ...[
@@ -3011,15 +3005,12 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                               color: isDark ? Colors.grey : Colors.black45,
                             ),
                             const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                "${_getTimeRangeText()}",
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.grey : Colors.black45,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                            Text(
+                              "${_getTimeRangeText()}",
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.grey : Colors.black45,
                               ),
                             ),
                           ],
