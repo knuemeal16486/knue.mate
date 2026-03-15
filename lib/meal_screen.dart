@@ -533,7 +533,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
               _buildInfoRow(
                 Icons.attach_money,
                 "가격",
-                isDorm ? "의무입사생 무료" : "5,000원 (일반)",
+                isDorm ? "의무입사생 무료" : "5,500원 (일반)",
               ),
               const SizedBox(height: 12),
               _buildInfoRow(
@@ -2941,56 +2941,62 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                           ],
                         ),
                       ),
-                      ...widget.items.asMap().entries.map(
-                        (entry) {
-                          final idx = entry.key;
-                          final e = entry.value;
-                          final isBold = _boldItemIndex == idx;
+                      ...widget.items.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final e = entry.value;
+                        final isBold = _boldItemIndex == idx;
 
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (_boldItemIndex == idx) {
-                                  _boldItemIndex = null;
-                                } else {
-                                  _boldItemIndex = idx;
-                                }
-                              });
-                            },
-                            behavior: HitTestBehavior.opaque,
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 7),
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: isBold ? primary : primary.withOpacity(0.5),
-                                      shape: BoxShape.circle,
-                                    ),
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              if (_boldItemIndex == idx) {
+                                _boldItemIndex = null;
+                              } else {
+                                _boldItemIndex = idx;
+                              }
+                            });
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  margin: const EdgeInsets.only(top: 7),
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: isBold
+                                        ? primary
+                                        : primary.withOpacity(0.5),
+                                    shape: BoxShape.circle,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: AnimatedDefaultTextStyle(
-                                      duration: const Duration(milliseconds: 150),
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        height: 1.4,
-                                        fontWeight: isBold ? FontWeight.w900 : FontWeight.normal,
-                                        color: isBold ? primary : (isDark ? Colors.white : Colors.black87),
-                                      ),
-                                      child: Text(e),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: AnimatedDefaultTextStyle(
+                                    duration: const Duration(milliseconds: 150),
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      height: 1.4,
+                                      fontWeight: isBold
+                                          ? FontWeight.w900
+                                          : FontWeight.normal,
+                                      color: isBold
+                                          ? primary
+                                          : (isDark
+                                                ? Colors.white
+                                                : Colors.black87),
                                     ),
+                                    child: Text(e),
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      }),
                       const SizedBox(height: 8),
                     ],
                   ),
