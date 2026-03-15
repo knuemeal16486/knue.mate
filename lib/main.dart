@@ -13,7 +13,6 @@ import 'firebase_sync_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // 백그라운드 메시지 핸들링
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   print("Handling a background message: ${message.messageId}");
 }
@@ -33,14 +32,9 @@ void main() async {
     print("[DEBUG] Firebase init error: $e");
   }
 
-  // FCM 백그라운드 메시지 핸들러 등록
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-  // [임시] Firebase 데이터 초기 업로드
-  // 앱 시작을 방해하지 않도록 await를 제거하고 비동기로 실행하거나 주석 처리합니다.
   FirebaseSyncService.uploadBuildingsToFirestore();
 
-  // 푸시 알림 권한 요청 (iOS) 및 알림 설정
   try {
     print("[DEBUG] Requesting messaging permission...");
     FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -58,7 +52,6 @@ void main() async {
     print("[DEBUG] Messaging setup error: $e");
   }
 
-  // 앱이 켜져있을 때 (Foreground) 푸시 알림이 오면 처리하는 로직
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
     print('Foreground message received: ${message.messageId}');
     if (message.notification != null) {
@@ -70,26 +63,20 @@ void main() async {
     }
   });
 
-  // 데이터 로딩을 비동기로 시작하되, 완료를 기다리지 않고 앱을 먼저 띄울 수도 있습니다.
-  // 하지만 초기 데이터가 중요하므로 여기서는 유지하되 오류 처리를 강화합니다.
   try {
     print("[DEBUG] Loading building data...");
-    await loadBuildingData().timeout(const Duration(seconds: 5));
+    await loadBuildingData();
     print("[DEBUG] Building data loaded");
   } catch (e) {
-    print("[DEBUG] 데이터 로딩 타임아웃 또는 오류: $e");
+    print("[DEBUG] loadBuildingData error: $e");
   }
 
-  // 디버그 모드 설정
   debugPrint = (String? message, {int? wrapWidth}) {
-    if (message != null) {
-      print(message);
-    }
+    if (message != null) print(message);
   };
 
   print("=== 앱 시작 ===");
 
-  // .env 파일 로드
   try {
     print("[DEBUG] Loading dotenv...");
     await dotenv.load(fileName: ".env");
@@ -106,13 +93,11 @@ void main() async {
     print("[DEBUG] date formatting error: $e");
   }
 
-  // HomeWidget 초기화
   try {
     print("[DEBUG] Setting HomeWidget AppGroupId...");
     await HomeWidget.setAppGroupId('group.knue.meal');
     print("HomeWidget AppGroupId 설정 완료");
 
-    // 위젯에서 앱 실행 여부 확인
     try {
       print("[DEBUG] Checking initiallyLaunchedFromHomeWidget...");
       final launchedFromWidget =
@@ -130,7 +115,6 @@ void main() async {
     print("HomeWidget 초기화 오류: $e");
   }
 
-  // 설정 로드
   try {
     print("[DEBUG] Loading settings...");
     await PreferencesService.loadSettings();
@@ -139,7 +123,6 @@ void main() async {
     print("[DEBUG] loadSettings error: $e");
   }
 
-  // 알람 초기화
   try {
     print("[DEBUG] Initializing NotificationService...");
     await NotificationService().init();
