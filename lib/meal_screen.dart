@@ -793,15 +793,12 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                 children: [
                   const Icon(Icons.swap_horiz, size: 16, color: Colors.white),
                   const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      _source == MealSource.a ? "기숙사 식당" : "학생회관 식당",
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  Text(
+                    _source == MealSource.a ? "기숙사 식당" : "학생회관 식당",
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -912,10 +909,8 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                     source: _source,
                   ),
                   const SizedBox(height: 20),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 20,
-                    runSpacing: 10,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _buildLegendItem(
                         context,
@@ -924,6 +919,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
                         label: "오늘",
                         color: primaryColor,
                       ),
+                      const SizedBox(width: 20),
                       _buildLegendItem(
                         context,
                         isToday: false,
@@ -2823,15 +2819,12 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                                     color: statusColor,
                                   ),
                                   const SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      statusText,
-                                      style: TextStyle(
-                                        color: statusColor,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
+                                  Text(
+                                    statusText,
+                                    style: TextStyle(
+                                      color: statusColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
                                     ),
                                   ),
                                   if (count > 0) ...[
@@ -2937,15 +2930,12 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                               color: isDark ? Colors.grey : Colors.black45,
                             ),
                             const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                "${_getTimeRangeText()}",
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.grey : Colors.black45,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                            Text(
+                              "${_getTimeRangeText()}",
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.grey : Colors.black45,
                               ),
                             ),
                           ],

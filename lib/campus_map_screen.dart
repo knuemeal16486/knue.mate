@@ -445,12 +445,6 @@ final List<MapFacility> kFacilities = [
     detail: '07:00~19:00',
   ),
   const MapFacility(
-    name: '뉴욕 버거',
-    type: FacilityType.restaurant,
-    position: LatLng(36.6104197, 127.3589766),
-    detail: '11:00~20:00',
-  ),
-  const MapFacility(
     name: '농협은행 교원대출장소',
     type: FacilityType.bank,
     position: LatLng(36.6084551, 127.3569837),
