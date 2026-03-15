@@ -52,9 +52,9 @@ class BusArrival {
   }
 
   @override
-  int get hashCode => 
-      remainStops.hashCode ^ 
-      currentStopName.hashCode ^ 
+  int get hashCode =>
+      remainStops.hashCode ^
+      currentStopName.hashCode ^
       estimatedMinutes.hashCode ^
       latitude.hashCode ^
       longitude.hashCode ^
@@ -65,7 +65,7 @@ class BusArrival {
   // 유틸리티 메서드
   bool get isApproaching => remainStops <= 3;
   bool get isFarAway => remainStops > 10;
-  
+
   String get statusText {
     if (remainStops == 0) return "도착";
     if (remainStops < 0) return "현재 위치: $currentStopName";
@@ -75,18 +75,23 @@ class BusArrival {
 
   String get formattedCongestion {
     switch (congestion) {
-      case 1: return "여유";
-      case 2: return "보통";
-      case 3: return "혼잡";
-      case 4: return "매우혼잡";
-      default: return "보통";
+      case 1:
+        return "여유";
+      case 2:
+        return "보통";
+      case 3:
+        return "혼잡";
+      case 4:
+        return "매우혼잡";
+      default:
+        return "보통";
     }
   }
-  
+
   // 예상 도착 시간 포맷팅
   String get formattedEstimatedTime {
     if (estimatedMinutes <= 0) return "정보 없음";
-    
+
     if (estimatedMinutes < 1) {
       return "곧 도착";
     } else if (estimatedMinutes < 60) {
@@ -98,7 +103,7 @@ class BusArrival {
       return "${hours}시간 ${mins}분 후";
     }
   }
-  
+
   String get detailedInfo {
     return "$currentStopName ($remainStops정거장 전)";
   }
@@ -129,9 +134,13 @@ class BusSummary {
     if (arrivals.isEmpty) return null;
     final upboundArrivals = arrivals.where((a) => a.remainStops >= 0).toList();
     if (upboundArrivals.isNotEmpty) {
-      return upboundArrivals.reduce((a, b) => a.remainStops <= b.remainStops ? a : b);
+      return upboundArrivals.reduce(
+        (a, b) => a.remainStops <= b.remainStops ? a : b,
+      );
     }
-    return arrivals.reduce((a, b) => a.remainStops.abs() < b.remainStops.abs() ? a : b);
+    return arrivals.reduce(
+      (a, b) => a.remainStops.abs() < b.remainStops.abs() ? a : b,
+    );
   }
 
   int get arrivingBusCount => arrivals.length;
@@ -139,35 +148,51 @@ class BusSummary {
 
   String get estimatedArrivalTime {
     final arrival = nextArrival;
-    return (arrival == null || arrival.estimatedMinutes <= 0) ? "정보 없음" : arrival.formattedEstimatedTime;
+    return (arrival == null || arrival.estimatedMinutes <= 0)
+        ? "정보 없음"
+        : arrival.formattedEstimatedTime;
   }
 
   Color get color {
     switch (type) {
-      case 'red': return Colors.redAccent;
-      case 'blue': return Colors.blueAccent;
-      case 'green': return Colors.green;
-      default: return Colors.grey;
+      case 'red':
+        return Colors.redAccent;
+      case 'blue':
+        return Colors.blueAccent;
+      case 'green':
+        return Colors.green;
+      default:
+        return Colors.grey;
     }
   }
 
   Color get congestionColor {
     switch (congestion) {
-      case 'empty': return Colors.green;
-      case 'normal': return Colors.blue;
-      case 'crowded': return Colors.orange;
-      case 'full': return Colors.red;
-      default: return Colors.grey;
+      case 'empty':
+        return Colors.green;
+      case 'normal':
+        return Colors.blue;
+      case 'crowded':
+        return Colors.orange;
+      case 'full':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 
   int get congestionLevel {
     switch (congestion) {
-      case 'empty': return 1;
-      case 'normal': return 2;
-      case 'crowded': return 3;
-      case 'full': return 4;
-      default: return 0;
+      case 'empty':
+        return 1;
+      case 'normal':
+        return 2;
+      case 'crowded':
+        return 3;
+      case 'full':
+        return 4;
+      default:
+        return 0;
     }
   }
 
@@ -177,16 +202,20 @@ class BusSummary {
       'number': number,
       'type': type,
       'direction': direction,
-      'arrivals': arrivals.map((a) => {
-        'remainStops': a.remainStops,
-        'currentStopName': a.currentStopName,
-        'estimatedMinutes': a.estimatedMinutes,
-        'latitude': a.latitude,
-        'longitude': a.longitude,
-        'vehicleNo': a.vehicleNo,
-        'nodeOrd': a.nodeOrd,
-        'congestion': a.congestion,
-      }).toList(),
+      'arrivals': arrivals
+          .map(
+            (a) => {
+              'remainStops': a.remainStops,
+              'currentStopName': a.currentStopName,
+              'estimatedMinutes': a.estimatedMinutes,
+              'latitude': a.latitude,
+              'longitude': a.longitude,
+              'vehicleNo': a.vehicleNo,
+              'nodeOrd': a.nodeOrd,
+              'congestion': a.congestion,
+            },
+          )
+          .toList(),
       'congestion': congestion,
       'isDirect': isDirect,
     };
@@ -199,16 +228,18 @@ class BusSummary {
       type: json['type'] as String,
       direction: json['direction'] as String,
       arrivals: (json['arrivals'] as List)
-          .map((e) => BusArrival(
-                remainStops: e['remainStops'] as int,
-                currentStopName: e['currentStopName'] as String,
-                estimatedMinutes: (e['estimatedMinutes'] as num).toDouble(),
-                latitude: (e['latitude'] as num?)?.toDouble(),
-                longitude: (e['longitude'] as num?)?.toDouble(),
-                vehicleNo: e['vehicleNo'] as String?,
-                nodeOrd: (e['nodeOrd'] as num?)?.toInt(),
-                congestion: (e['congestion'] as num?)?.toInt(),
-              ))
+          .map(
+            (e) => BusArrival(
+              remainStops: e['remainStops'] as int,
+              currentStopName: e['currentStopName'] as String,
+              estimatedMinutes: (e['estimatedMinutes'] as num).toDouble(),
+              latitude: (e['latitude'] as num?)?.toDouble(),
+              longitude: (e['longitude'] as num?)?.toDouble(),
+              vehicleNo: e['vehicleNo'] as String?,
+              nodeOrd: (e['nodeOrd'] as num?)?.toInt(),
+              congestion: (e['congestion'] as num?)?.toInt(),
+            ),
+          )
           .toList(),
       congestion: json['congestion'] as String,
       isDirect: json['isDirect'] as bool,
@@ -265,11 +296,13 @@ class BusLocation {
       if (v is String) return int.tryParse(v) ?? 0;
       return 0;
     }
+
     double? toDouble(dynamic v) {
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v);
       return null;
     }
+
     String toString(dynamic v) => v?.toString() ?? '알수없음';
 
     return BusLocation(
@@ -301,10 +334,7 @@ class RouteRemaining {
   final int routeNumber;
   final List<BusArrival> arrivals;
 
-  const RouteRemaining({
-    required this.routeNumber,
-    required this.arrivals,
-  });
+  const RouteRemaining({required this.routeNumber, required this.arrivals});
 
   BusArrival? get closestBus {
     if (arrivals.isEmpty) return null;
@@ -313,7 +343,11 @@ class RouteRemaining {
 
   double get averageWaitingMinutes {
     if (arrivals.isEmpty) return 0.0;
-    return arrivals.fold(0.0, (sum, arrival) => sum + arrival.estimatedMinutes) / arrivals.length;
+    return arrivals.fold(
+          0.0,
+          (sum, arrival) => sum + arrival.estimatedMinutes,
+        ) /
+        arrivals.length;
   }
 
   bool get isOperating => arrivals.isNotEmpty;
@@ -349,10 +383,20 @@ class RouteStop {
       nodeId: j['nodeid']?.toString() ?? '',
       nodeName: j['nodenm']?.toString() ?? '알수없음',
       nodeNo: j['nodeno']?.toString(),
-      nodeOrd: (j['nodeord'] is num) ? (j['nodeord'] as num).toInt() : int.tryParse(j['nodeord']?.toString() ?? '0') ?? 0,
-      latitude: (j['gpslati'] is num) ? (j['gpslati'] as num).toDouble() : double.tryParse(j['gpslati']?.toString() ?? ''),
-      longitude: (j['gpslong'] is num) ? (j['gpslong'] as num).toDouble() : double.tryParse(j['gpslong']?.toString() ?? ''),
-      traffic: (j['traffic'] is num) ? (j['traffic'] as num).toInt() : (j['traffic'] != null ? int.tryParse(j['traffic'].toString()) : null),
+      nodeOrd: (j['nodeord'] is num)
+          ? (j['nodeord'] as num).toInt()
+          : int.tryParse(j['nodeord']?.toString() ?? '0') ?? 0,
+      latitude: (j['gpslati'] is num)
+          ? (j['gpslati'] as num).toDouble()
+          : double.tryParse(j['gpslati']?.toString() ?? ''),
+      longitude: (j['gpslong'] is num)
+          ? (j['gpslong'] as num).toDouble()
+          : double.tryParse(j['gpslong']?.toString() ?? ''),
+      traffic: (j['traffic'] is num)
+          ? (j['traffic'] as num).toInt()
+          : (j['traffic'] != null
+                ? int.tryParse(j['traffic'].toString())
+                : null),
     );
   }
 
@@ -365,4 +409,121 @@ class RouteStop {
     'gpslong': longitude,
     'traffic': traffic,
   };
+}
+
+/// 버스 시간표 데이터 (Firebase 연동용)
+@immutable
+class BusTimetable {
+  final String routeNumber;
+  final bool isOutgoing; // true: 교원대행, false: 학교에서下山
+  final bool isWeekday;
+  final List<String> departureTimes;
+
+  const BusTimetable({
+    required this.routeNumber,
+    required this.isOutgoing,
+    required this.isWeekday,
+    required this.departureTimes,
+  });
+
+  factory BusTimetable.fromJson(Map<String, dynamic> json) {
+    return BusTimetable(
+      routeNumber: json['routeNumber'] as String,
+      isOutgoing: json['isOutgoing'] as bool,
+      isWeekday: json['isWeekday'] as bool,
+      departureTimes: List<String>.from(json['departureTimes'] ?? []),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'routeNumber': routeNumber,
+      'isOutgoing': isOutgoing,
+      'isWeekday': isWeekday,
+      'departureTimes': departureTimes,
+    };
+  }
+
+  /// 다음 버스 시간 가져오기
+  String? getNextBusTime() {
+    if (departureTimes.isEmpty) return null;
+
+    final now = DateTime.now();
+    final currentTime =
+        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+
+    for (final time in departureTimes) {
+      if (time.compareTo(currentTime) > 0) {
+        return time;
+      }
+    }
+    return null;
+  }
+
+  /// 시간표에서 해당 시간 이후의 버스 목록 가져오기
+  List<String> getUpcomingBuses({int hours = 2}) {
+    if (departureTimes.isEmpty) return [];
+
+    final now = DateTime.now();
+    final currentMinutes = now.hour * 60 + now.minute;
+    final limitMinutes = currentMinutes + (hours * 60);
+
+    return departureTimes.where((time) {
+      final parts = time.split(':');
+      final timeMinutes = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+      return timeMinutes >= currentMinutes && timeMinutes <= limitMinutes;
+    }).toList();
+  }
+}
+
+/// 버스 정류장 정보 (Firebase 연동용)
+@immutable
+class BusStop {
+  final String nodeId;
+  final String nodeName;
+  final String? nodeNo;
+  final double latitude;
+  final double longitude;
+  final int nodeOrd;
+
+  const BusStop({
+    required this.nodeId,
+    required this.nodeName,
+    this.nodeNo,
+    required this.latitude,
+    required this.longitude,
+    required this.nodeOrd,
+  });
+
+  factory BusStop.fromJson(Map<String, dynamic> json) {
+    return BusStop(
+      nodeId: json['nodeId'] as String? ?? json['nodeid'] as String? ?? '',
+      nodeName:
+          json['nodeName'] as String? ?? json['nodenm'] as String? ?? '알수없음',
+      nodeNo: json['nodeNo'] as String? ?? json['nodeno'] as String?,
+      latitude:
+          (json['latitude'] as num?)?.toDouble() ??
+          (json['gpslati'] as num?)?.toDouble() ??
+          0.0,
+      longitude:
+          (json['longitude'] as num?)?.toDouble() ??
+          (json['gpslong'] as num?)?.toDouble() ??
+          0.0,
+      nodeOrd:
+          (json['nodeOrd'] as num?)?.toInt() ??
+          (json['nodeord'] as num?)?.toInt() ??
+          0,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'nodeId': nodeId,
+      'nodeName': nodeName,
+      'nodeNo': nodeNo,
+      'latitude': latitude,
+      'longitude': longitude,
+      'nodeOrd': nodeOrd,
+    };
+  }
 }
