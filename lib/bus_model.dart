@@ -17,12 +17,22 @@ class BusRouteConfig {
 class BusArrival {
   final int remainStops;
   final String currentStopName;
-  final double estimatedMinutes; // 추가: 예상 도착 시간(분)
+  final double estimatedMinutes;
+  final double? latitude;
+  final double? longitude;
+  final String? vehicleNo;
+  final int? nodeOrd;
+  final int? congestion; // 1: 여유, 2: 보통, 3: 혼잡, 4: 매우혼잡
 
   const BusArrival({
     required this.remainStops,
     required this.currentStopName,
     this.estimatedMinutes = 0.0,
+    this.latitude,
+    this.longitude,
+    this.vehicleNo,
+    this.nodeOrd,
+    this.congestion,
   });
 
   int compareTo(BusArrival other) => remainStops.compareTo(other.remainStops);
@@ -33,13 +43,24 @@ class BusArrival {
     return other is BusArrival &&
         other.remainStops == remainStops &&
         other.currentStopName == currentStopName &&
-        other.estimatedMinutes == estimatedMinutes;
+        other.estimatedMinutes == estimatedMinutes &&
+        other.latitude == latitude &&
+        other.longitude == longitude &&
+        other.vehicleNo == vehicleNo &&
+        other.nodeOrd == nodeOrd &&
+        other.congestion == congestion;
   }
 
   @override
-  int get hashCode => remainStops.hashCode ^ 
+  int get hashCode => 
+      remainStops.hashCode ^ 
       currentStopName.hashCode ^ 
-      estimatedMinutes.hashCode;
+      estimatedMinutes.hashCode ^
+      latitude.hashCode ^
+      longitude.hashCode ^
+      vehicleNo.hashCode ^
+      nodeOrd.hashCode ^
+      congestion.hashCode;
 
   // 유틸리티 메서드
   bool get isApproaching => remainStops <= 3;
@@ -47,12 +68,22 @@ class BusArrival {
   
   String get statusText {
     if (remainStops == 0) return "도착";
+    if (remainStops < 0) return "현재 위치: $currentStopName";
     if (remainStops <= 3) return "곧 도착";
-    if (remainStops <= 10) return "$remainStops정거장 전";
-    return "멀리 있음";
+    return "$remainStops정거장 전";
+  }
+
+  String get formattedCongestion {
+    switch (congestion) {
+      case 1: return "여유";
+      case 2: return "보통";
+      case 3: return "혼잡";
+      case 4: return "매우혼잡";
+      default: return "보통";
+    }
   }
   
-  // 예상 도착 시간 포맷팅 (추가된 기능)
+  // 예상 도착 시간 포맷팅
   String get formattedEstimatedTime {
     if (estimatedMinutes <= 0) return "정보 없음";
     
@@ -68,7 +99,6 @@ class BusArrival {
     }
   }
   
-  // 상세 도착 정보 (추가된 기능)
   String get detailedInfo {
     return "$currentStopName ($remainStops정거장 전)";
   }
@@ -97,77 +127,50 @@ class BusSummary {
   // 가장 빨리 도착하는 버스 정보
   BusArrival? get nextArrival {
     if (arrivals.isEmpty) return null;
-    
-    // estimatedMinutes를 기준으로 가장 빠른 버스 선택
-    return arrivals.reduce((a, b) {
-      if (a.estimatedMinutes <= 0) return b;
-      if (b.estimatedMinutes <= 0) return a;
-      return a.estimatedMinutes < b.estimatedMinutes ? a : b;
-    });
+    final upboundArrivals = arrivals.where((a) => a.remainStops >= 0).toList();
+    if (upboundArrivals.isNotEmpty) {
+      return upboundArrivals.reduce((a, b) => a.remainStops <= b.remainStops ? a : b);
+    }
+    return arrivals.reduce((a, b) => a.remainStops.abs() < b.remainStops.abs() ? a : b);
   }
 
-  // 도착 예정 버스 수
   int get arrivingBusCount => arrivals.length;
-
-  // 가장 가까운 버스의 남은 정류장 수
   int get closestRemainingStops => nextArrival?.remainStops ?? -1;
 
-  // 예상 도착 시간 (추가된 기능)
   String get estimatedArrivalTime {
     final arrival = nextArrival;
-    if (arrival == null || arrival.estimatedMinutes <= 0) {
-      return "정보 없음";
-    }
-    return arrival.formattedEstimatedTime;
+    return (arrival == null || arrival.estimatedMinutes <= 0) ? "정보 없음" : arrival.formattedEstimatedTime;
   }
 
-  // 컬러 매핑
   Color get color {
     switch (type) {
-      case 'red':
-        return Colors.redAccent;
-      case 'blue':
-        return Colors.blueAccent;
-      case 'green':
-        return Colors.green;
-      default:
-        return Colors.grey;
+      case 'red': return Colors.redAccent;
+      case 'blue': return Colors.blueAccent;
+      case 'green': return Colors.green;
+      default: return Colors.grey;
     }
   }
 
-  // 혼잡도 컬러 (추가된 기능)
   Color get congestionColor {
     switch (congestion) {
-      case 'empty':
-        return Colors.green;
-      case 'normal':
-        return Colors.blue;
-      case 'crowded':
-        return Colors.orange;
-      case 'full':
-        return Colors.red;
-      default:
-        return Colors.grey;
+      case 'empty': return Colors.green;
+      case 'normal': return Colors.blue;
+      case 'crowded': return Colors.orange;
+      case 'full': return Colors.red;
+      default: return Colors.grey;
     }
   }
 
-  // 혼잡도 레벨
   int get congestionLevel {
     switch (congestion) {
-      case 'empty':
-        return 1;
-      case 'normal':
-        return 2;
-      case 'crowded':
-        return 3;
-      case 'full':
-        return 4;
-      default:
-        return 0;
+      case 'empty': return 1;
+      case 'normal': return 2;
+      case 'crowded': return 3;
+      case 'full': return 4;
+      default: return 0;
     }
   }
 
-  // 직렬화/역직렬화 메서드
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -178,6 +181,11 @@ class BusSummary {
         'remainStops': a.remainStops,
         'currentStopName': a.currentStopName,
         'estimatedMinutes': a.estimatedMinutes,
+        'latitude': a.latitude,
+        'longitude': a.longitude,
+        'vehicleNo': a.vehicleNo,
+        'nodeOrd': a.nodeOrd,
+        'congestion': a.congestion,
       }).toList(),
       'congestion': congestion,
       'isDirect': isDirect,
@@ -195,6 +203,11 @@ class BusSummary {
                 remainStops: e['remainStops'] as int,
                 currentStopName: e['currentStopName'] as String,
                 estimatedMinutes: (e['estimatedMinutes'] as num).toDouble(),
+                latitude: (e['latitude'] as num?)?.toDouble(),
+                longitude: (e['longitude'] as num?)?.toDouble(),
+                vehicleNo: e['vehicleNo'] as String?,
+                nodeOrd: (e['nodeOrd'] as num?)?.toInt(),
+                congestion: (e['congestion'] as num?)?.toInt(),
               ))
           .toList(),
       congestion: json['congestion'] as String,
@@ -232,12 +245,18 @@ class BusLocation {
   final int nodeOrd;
   final String nodeNm;
   final String vehicleno;
+  final double? latitude;
+  final double? longitude;
+  final int? congestion;
 
   const BusLocation({
     required this.nodeId,
     required this.nodeOrd,
     required this.nodeNm,
     required this.vehicleno,
+    this.latitude,
+    this.longitude,
+    this.congestion,
   });
 
   factory BusLocation.fromJson(Map<String, dynamic> j) {
@@ -246,7 +265,11 @@ class BusLocation {
       if (v is String) return int.tryParse(v) ?? 0;
       return 0;
     }
-
+    double? toDouble(dynamic v) {
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
     String toString(dynamic v) => v?.toString() ?? '알수없음';
 
     return BusLocation(
@@ -254,15 +277,21 @@ class BusLocation {
       nodeOrd: toInt(j["nodeord"]),
       nodeNm: toString(j["nodenm"]),
       vehicleno: toString(j["vehicleno"]),
+      latitude: toDouble(j["gpslati"] ?? j["gpslat"]),
+      longitude: toDouble(j["gpslong"] ?? j["gpslon"]),
+      congestion: j["congest"] != null ? toInt(j["congest"]) : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'nodeId': nodeId,
-      'nodeOrd': nodeOrd,
-      'nodeNm': nodeNm,
+      'nodeid': nodeId,
+      'nodeord': nodeOrd,
+      'nodenm': nodeNm,
       'vehicleno': vehicleno,
+      'gpslati': latitude,
+      'gpslong': longitude,
+      'congest': congestion,
     };
   }
 }
@@ -277,32 +306,63 @@ class RouteRemaining {
     required this.arrivals,
   });
 
-  // 가장 가까운 버스 (추가된 기능)
   BusArrival? get closestBus {
     if (arrivals.isEmpty) return null;
-    
-    // 남은 정거장 수가 가장 적은 버스 선택
-    BusArrival? closest;
-    for (final arrival in arrivals) {
-      if (closest == null || arrival.remainStops < closest.remainStops) {
-        closest = arrival;
-      }
-    }
-    return closest;
+    return arrivals.reduce((a, b) => a.remainStops < b.remainStops ? a : b);
   }
 
-  // 평균 대기 시간 (분 단위)
   double get averageWaitingMinutes {
     if (arrivals.isEmpty) return 0.0;
-    final totalMinutes = arrivals.fold(0.0, (sum, arrival) => sum + arrival.estimatedMinutes);
-    return totalMinutes / arrivals.length;
+    return arrivals.fold(0.0, (sum, arrival) => sum + arrival.estimatedMinutes) / arrivals.length;
   }
 
-  // 버스가 운행 중인지
   bool get isOperating => arrivals.isNotEmpty;
 
-  // 예상 도착 버스 수 (10분 내 도착)
   int get expectedArrivalsIn10Minutes {
     return arrivals.where((a) => a.estimatedMinutes <= 10).length;
   }
+}
+
+/// 노선 경유 정류장 정보 (API: getRouteAcctoThrghSttnList)
+@immutable
+class RouteStop {
+  final String nodeId;
+  final String nodeName;
+  final String? nodeNo;
+  final int nodeOrd;
+  final double? latitude;
+  final double? longitude;
+  final int? traffic; // 0: 원활, 1: 서행, 2: 정체
+
+  const RouteStop({
+    required this.nodeId,
+    required this.nodeName,
+    this.nodeNo,
+    required this.nodeOrd,
+    this.latitude,
+    this.longitude,
+    this.traffic,
+  });
+
+  factory RouteStop.fromJson(Map<String, dynamic> j) {
+    return RouteStop(
+      nodeId: j['nodeid']?.toString() ?? '',
+      nodeName: j['nodenm']?.toString() ?? '알수없음',
+      nodeNo: j['nodeno']?.toString(),
+      nodeOrd: (j['nodeord'] is num) ? (j['nodeord'] as num).toInt() : int.tryParse(j['nodeord']?.toString() ?? '0') ?? 0,
+      latitude: (j['gpslati'] is num) ? (j['gpslati'] as num).toDouble() : double.tryParse(j['gpslati']?.toString() ?? ''),
+      longitude: (j['gpslong'] is num) ? (j['gpslong'] as num).toDouble() : double.tryParse(j['gpslong']?.toString() ?? ''),
+      traffic: (j['traffic'] is num) ? (j['traffic'] as num).toInt() : (j['traffic'] != null ? int.tryParse(j['traffic'].toString()) : null),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'nodeid': nodeId,
+    'nodenm': nodeName,
+    'nodeno': nodeNo,
+    'nodeord': nodeOrd,
+    'gpslati': latitude,
+    'gpslong': longitude,
+    'traffic': traffic,
+  };
 }

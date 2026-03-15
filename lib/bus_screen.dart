@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart';
@@ -8,6 +10,7 @@ import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_card.dart';
 import 'meal_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BusAppScreen extends StatefulWidget {
   const BusAppScreen({super.key});
@@ -29,7 +32,8 @@ class _BusAppScreenState extends State<BusAppScreen>
   List<BusSummary> _realtimeBusList = [];
   bool _isLoading = true;
   bool _hasError = false;
-  Timer? _timer; // [수정] 타이머 변수 추가
+  Timer? _timer; 
+  StreamSubscription<DocumentSnapshot>? _busSub; // 실시간 구독 변수 추가
 
   String _selectedBus = "513";
   bool _isWeekend = false;
@@ -346,28 +350,73 @@ class _BusAppScreenState extends State<BusAppScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); // [수정] 옵저버 등록
+    WidgetsBinding.instance.addObserver(this);
 
     _tabController = TabController(length: 2, vsync: this);
     final weekday = DateTime.now().weekday;
     _isWeekend = (weekday == 6 || weekday == 7);
 
     // 초기 데이터 로드 및 알람 로드
-    _fetchBusData();
+    // [개선] 초기 로딩을 백그라운드에서 수행하고 Firestore 리스너가 UI를 관리하도록 함
+    _fetchBusData(isQuietRefetch: true); 
     _startAutoRefresh();
     _loadAlarms();
+    _startRealtimeTracking();
+  }
+
+  void _startRealtimeTracking() {
+    _busSub = FirebaseFirestore.instance
+        .collection('realtime')
+        .doc('bus_locations')
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>;
+        final List<dynamic>? summaries = data['summaries'];
+        if (summaries != null) {
+          final newList = summaries
+              .map((e) => BusSummary.fromJson(e as Map<String, dynamic>))
+              .toList();
+          
+          if (!listEquals(_realtimeBusList, newList)) {
+            if (mounted) {
+              setState(() {
+                _realtimeBusList = newList;
+                _isLoading = false;
+                _hasError = false;
+              });
+            }
+          } else if (_isLoading) {
+            setState(() => _isLoading = false);
+          }
+        }
+      } else {
+        // 데이터가 없는 경우 로딩 종료
+        if (_isLoading && mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
+    }, onError: (e) {
+      debugPrint("Realtime Sync Error: $e");
+      if (mounted && _realtimeBusList.isEmpty) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this); // [수정] 옵저버 해제
-    _timer?.cancel(); // [수정] 타이머 해제
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    _busSub?.cancel();
     _tabController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  // [수정] 앱 생명주기 관리: 백그라운드 시 타이머 정지
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -378,19 +427,21 @@ class _BusAppScreenState extends State<BusAppScreen>
     }
   }
 
-  // [수정] 자동 새로고침 타이머 시작
+  // [개선] 자동 새로고침 타이머 간격 조정 (15초 -> 30초)
+  // 너무 빈번한 API 호출은 네트워크 지연 및 서버 부하를 초래할 수 있음
   void _startAutoRefresh() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (mounted) {
-        _fetchBusData(isQuietRefetch: true); // 로딩바 없이 갱신
+        _fetchBusData(isQuietRefetch: true);
       }
     });
   }
 
-  // [수정] 버스 데이터 가져오기 (Seamless Update 지원)
+  // [개선] 버스 데이터 가져오기 로직 최적화
   Future<void> _fetchBusData({bool isQuietRefetch = false}) async {
-    if (!isQuietRefetch) {
+    // 이미 데이터가 있다면 로딩바를 띄우지 않음 (Seamless Update)
+    if (!isQuietRefetch && _realtimeBusList.isEmpty) {
       setState(() {
         _isLoading = true;
         _hasError = false;
@@ -398,7 +449,7 @@ class _BusAppScreenState extends State<BusAppScreen>
     }
 
     try {
-      final buses = await _busService.fetchAllBuses(); // Service 메서드 호출
+      final buses = await _busService.fetchAllBuses();
       if (mounted) {
         setState(() {
           _realtimeBusList = buses;
@@ -406,17 +457,20 @@ class _BusAppScreenState extends State<BusAppScreen>
           _hasError = false;
         });
 
-        // 수동 새로고침일 때만 토스트 메시지
+        // 수동 새로고침일 때 && 데이터가 갱신되었을 때만 토스트
         if (!isQuietRefetch) {
           showToast(context, "버스 정보를 업데이트했습니다.");
         }
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _hasError = true;
-          _isLoading = false;
-        });
+        // 이미 데이터가 있는 경우 에러 화면으로 전환하지 않고 로그만 남김
+        if (_realtimeBusList.isEmpty) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+        }
         debugPrint("Bus Fetch Error: $e");
       }
     }
@@ -583,13 +637,18 @@ class _BusAppScreenState extends State<BusAppScreen>
     // 4. 버스 목록 표시
     final directBuses = _realtimeBusList.where((b) => b.isDirect).toList();
     final tapyeonBuses = _realtimeBusList.where((b) => !b.isDirect).toList();
+    final totalBuses = _realtimeBusList.fold<int>(0, (sum, b) => sum + b.arrivals.length);
+    final traffic = BusService.estimateTrafficCondition(DateTime.now());
 
     return RefreshIndicator(
       onRefresh: () async => _fetchBusData(),
       child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(), // 내용이 적어도 당기기 가능하게 설정
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         children: [
+          // === 실시간 요약 카드 ===
+          _buildRealtimeSummaryCard(isDark, traffic, totalBuses),
+          
           if (directBuses.isNotEmpty) ...[
             _buildSectionHeader("교원대 직행", isDark),
             ...directBuses.map((b) => BusCard(bus: b)),
@@ -603,6 +662,111 @@ class _BusAppScreenState extends State<BusAppScreen>
           ],
 
           _buildArrivalInfoSection(isDark),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRealtimeSummaryCard(bool isDark, String traffic, int totalBuses) {
+    String trafficText;
+    Color trafficColor;
+    IconData trafficIcon;
+    switch (traffic) {
+      case "slow":
+        trafficText = "서행";
+        trafficColor = Colors.orange;
+        trafficIcon = Icons.speed;
+        break;
+      case "congested":
+        trafficText = "정체";
+        trafficColor = Colors.red;
+        trafficIcon = Icons.warning_amber_rounded;
+        break;
+      default:
+        trafficText = "원활";
+        trafficColor = Colors.green;
+        trafficIcon = Icons.check_circle_outline;
+    }
+
+    final timeStr = "${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} 기준";
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark 
+            ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+            : [const Color(0xFFF0F9FF), const Color(0xFFE0F2FE)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.blue.shade100),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // 교통 상황
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: trafficColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(trafficIcon, color: trafficColor, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("교통 상황", style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.grey.shade600)),
+                        Text(trafficText, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: trafficColor)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Container(width: 1, height: 36, color: isDark ? Colors.white10 : Colors.blue.shade100),
+              // 총 운행 대수
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.directions_bus, color: isDark ? Colors.blue.shade300 : Colors.blue, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("운행 중", style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.grey.shade600)),
+                        Text("$totalBuses대", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Icon(Icons.access_time, size: 11, color: isDark ? Colors.white24 : Colors.grey.shade400),
+              const SizedBox(width: 4),
+              Text(timeStr, style: TextStyle(fontSize: 10, color: isDark ? Colors.white24 : Colors.grey.shade400)),
+            ],
+          ),
         ],
       ),
     );
@@ -1002,11 +1166,18 @@ class _BusAppScreenState extends State<BusAppScreen>
               }
 
               IconData statusIcon = Icons.access_time_filled;
+              bool isWalking = false;
+              bool isRunning = false;
               if (isNext) {
-                if (diff >= 15)
-                  statusIcon = Icons.directions_walk;
-                else
+                if (diff <= 5) {
                   statusIcon = Icons.directions_run;
+                  isRunning = true;
+                } else if (diff <= 20) {
+                  statusIcon = Icons.directions_walk;
+                  isWalking = true;
+                } else {
+                  statusIcon = Icons.directions_walk;
+                }
               }
 
               return AnimatedContainer(
@@ -1042,8 +1213,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                   children: [
                     Row(
                       children: [
-                        Icon(
-                          statusIcon,
+                        _AnimatedPersonIcon(
+                          icon: statusIcon,
                           color: isNext
                               ? (isDark ? Colors.white : primary)
                               : (passed
@@ -1052,6 +1223,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                                           ? Colors.white70
                                           : Colors.black54)),
                           size: isNext ? 26 : 20,
+                          isWalking: isWalking,
+                          isRunning: isRunning,
                         ),
                         const SizedBox(width: 12),
                         Text(
@@ -1400,4 +1573,110 @@ class _BusAppScreenState extends State<BusAppScreen>
   }
 }
 
-// _AppSwitchOption 클래스 (기존 디자인 유지)
+
+// 출발 시간에 따른 사람 아이콘 애니메이션 위젯
+class _AnimatedPersonIcon extends StatefulWidget {
+  final IconData icon;
+  final Color color;
+  final double size;
+  final bool isWalking;
+  final bool isRunning;
+
+  const _AnimatedPersonIcon({
+    required this.icon,
+    required this.color,
+    required this.size,
+    this.isWalking = false,
+    this.isRunning = false,
+  });
+
+  @override
+  _AnimatedPersonIconState createState() => _AnimatedPersonIconState();
+}
+
+class _AnimatedPersonIconState extends State<_AnimatedPersonIcon> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: widget.isRunning ? 400 : 1000),
+    );
+    if (widget.isWalking || widget.isRunning) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedPersonIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isWalking != oldWidget.isWalking || widget.isRunning != oldWidget.isRunning) {
+      _controller.duration = Duration(milliseconds: widget.isRunning ? 400 : 1000);
+      if (widget.isWalking || widget.isRunning) {
+        if (!_controller.isAnimating) _controller.repeat(reverse: true);
+      } else {
+        _controller.stop();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        double angle = 0;
+        double dx = 0;
+        double dy = 0;
+        double scaleX = 1.0;
+        double scaleY = 1.0;
+
+        final double val = _controller.value;
+        // Curves를 활용해 더 자연스러운 가감속 구현
+        final double sinVal = math.sin(val * math.pi * 2);
+        final double absCosVal = math.cos(val * math.pi).abs();
+
+        if (widget.isRunning) {
+          // [급하게 뛰기]
+          // 앞으로 기울어짐 (기본 기울기 + 역동적 변화)
+          angle = 0.25 + (0.1 * sinVal);
+          // 상하 바운스 (포물선 느낌)
+          dy = -6 * absCosVal;
+          // 좌우 흔들림
+          dx = 2 * sinVal;
+          // 신축 효과 (Stretch & Squash)
+          scaleY = 1.0 + (0.15 * absCosVal);
+          scaleX = 1.0 - (0.1 * absCosVal);
+        } else if (widget.isWalking) {
+          // [살살 걷기]
+          // 약간의 회전
+          angle = 0.1 * sinVal;
+          // 가벼운 상하 bobbing
+          dy = -2 * absCosVal;
+          // 앞뒤로 살짝 움직임
+          dx = 1.5 * sinVal;
+        }
+
+        return Transform.translate(
+          offset: Offset(dx, dy),
+          child: Transform.rotate(
+            angle: angle,
+            child: Transform.scale(
+              scaleX: scaleX,
+              scaleY: scaleY,
+              child: Icon(widget.icon, color: widget.color, size: widget.size),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

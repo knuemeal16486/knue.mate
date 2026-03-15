@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'dart:convert';
@@ -443,12 +443,6 @@ final List<MapFacility> kFacilities = [
     type: FacilityType.restaurant,
     position: LatLng(36.612830, 127.360559),
     detail: '07:00~19:00',
-  ),
-  const MapFacility(
-    name: '뉴욕 버거',
-    type: FacilityType.restaurant,
-    position: LatLng(36.6104197, 127.3589766),
-    detail: '11:00~20:00',
   ),
   const MapFacility(
     name: '농협은행 교원대출장소',
@@ -1420,7 +1414,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                     )
                     .toList(),
               ),
-            // 건물 마커 (줌 15.5 이상, 토글 켜진 경우)
             if (_showBuildings && _currentZoom >= 15.5)
               MarkerLayer(
                 markers: kBuildings

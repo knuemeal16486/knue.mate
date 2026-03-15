@@ -11,6 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:home_widget/home_widget.dart';
+import 'firebase_sync_service.dart';
 
 // [1] 전역 설정
 const String kBaseUrl = "https://knue-meal-api.onrender.com";
@@ -106,12 +107,22 @@ Future<void> shareMenu(
   DateTime date,
   MealSource source,
   MealType type,
-  List<String>? items,
-) async {
+  List<String>? items, {
+  String? calories,
+}) async {
   if (items == null || items.isEmpty) return;
-  final title = "${date.month}월 ${date.day}일 ${type.label} 메뉴";
-  final content = items.join("\n");
-  await Share.share("[$title]\n\n$content");
+
+  final sourceLabel = source == MealSource.a ? "기숙사" : "학관";
+  final dateStr = "${date.month}/${date.day}";
+  final menuList = items.map((e) => "· $e").join("\n");
+
+  String shareText = "[$dateStr ${type.label} | $sourceLabel]\n$menuList";
+
+  if (calories != null && calories.isNotEmpty) {
+    shareText += "\n\n⚡ 예상: $calories";
+  }
+
+  await Share.share(shareText.trim());
 }
 
 void showToast(BuildContext context, String msg) {
@@ -159,6 +170,16 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
       : 'https://pot.knue.ac.kr/enview/knue/mobileMenu.html#';
 
   try {
+    // 1. 파이어베이스에서 먼저 확인
+    final cachedMeal = await FirebaseSyncService.getMealFromFirestore(date, source);
+    if (cachedMeal != null) {
+      if (DateUtils.isSameDay(date, DateTime.now())) {
+        // 위젯 업데이트는 비동기로 진행하고 데이터를 즉시 반환
+        _updateWidgetDataInternal(cachedMeal, source); 
+      }
+      return cachedMeal;
+    }
+
     final response = await http
         .get(
           Uri.parse(url),
@@ -167,15 +188,25 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
             'Accept': 'text/html,*/*',
           },
         )
-        .timeout(const Duration(seconds: 30));
+        .timeout(const Duration(seconds: 15)); // 타임아웃 단축 (30s -> 15s)
 
     if (response.statusCode == 200) {
       final html = utf8.decode(response.bodyBytes, allowMalformed: true);
       final result = source == MealSource.a
           ? _parseSadoHtml(html, date)
           : _parseCafeHtml(html, date);
+          
+      // 3. 크롤링 결과 저장 (사용자를 기다리게 하지 않음)
+      final meals = result['meals'] as Map<String, dynamic>;
+      bool hasData = meals.values.any((list) => (list as List).isNotEmpty);
+      
+      if (hasData) {
+        // await 없이 즉시 실행
+        FirebaseSyncService.saveMealToFirestore(date, source, result);
+      }
+
       if (DateUtils.isSameDay(date, DateTime.now())) {
-        await _updateWidgetDataInternal(result, source);
+        _updateWidgetDataInternal(result, source);
       }
       return result;
     }

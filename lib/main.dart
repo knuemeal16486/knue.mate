@@ -9,6 +9,7 @@ import 'building_data.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
+import 'firebase_sync_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -20,12 +21,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // FCM 백그라운드 메시지 핸들러 등록
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // [임시] Firebase 데이터 초기 업로드
+  // 앱 시작을 방해하지 않도록 await를 제거하고 비동기로 실행하거나 주석 처리합니다.
+  FirebaseSyncService.uploadBuildingsToFirestore();
 
   // 푸시 알림 권한 요청 (iOS) 및 알림 설정
   FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -53,8 +56,13 @@ void main() async {
     }
   });
 
-  // JSON 건물 데이터 로드
-  await loadBuildingData();
+  // 데이터 로딩을 비동기로 시작하되, 완료를 기다리지 않고 앱을 먼저 띄울 수도 있습니다.
+  // 하지만 초기 데이터가 중요하므로 여기서는 유지하되 오류 처리를 강화합니다.
+  try {
+    await loadBuildingData().timeout(const Duration(seconds: 5));
+  } catch (e) {
+    debugPrint("데이터 로딩 타임아웃 또는 오류: $e");
+  }
 
   // 디버그 모드 설정
   debugPrint = (String? message, {int? wrapWidth}) {

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'bus_model.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BusService {
   // API 키를 .env에서 안전하게 가져오기
@@ -82,56 +84,115 @@ class BusService {
   // 캐싱 변수
   static final Map<String, List<BusSummary>> _cache = {};
   static final Map<String, DateTime> _cacheTimestamps = {};
-  static const Duration _cacheDuration = Duration(minutes: 1); // 1분 캐시
+  static DateTime? _lastFirebaseUpdateTime; // 마지막 파이어베이스 업데이트 시간
+
+  // 노선별 정류장 캐시 (세션 내 유지)
+  static final Map<String, List<RouteStop>> _routeStopsCache = {};
+
+  /// 노선 ID로 노선번호 매핑 (BusCard에서 사용)
+  static String? getRouteId(int routeNumber) {
+    try {
+      return _kRoutes.firstWhere((r) => r.routeNumber == routeNumber).routeId;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<List<BusSummary>> fetchAllBuses() async {
     final now = DateTime.now();
     final cacheKey = 'all_buses';
 
-    // 캐시 유효성 체크
+    // 1. 로컬 메모리 캐시 먼저 확인 (가장 빠름)
     if (_cache.containsKey(cacheKey)) {
       final timestamp = _cacheTimestamps[cacheKey];
-      if (timestamp != null && now.difference(timestamp) < _cacheDuration) {
+      // 메모리 캐시는 매우 짧게 유지 (15초)
+      if (timestamp != null && now.difference(timestamp) < const Duration(seconds: 15)) {
         return _cache[cacheKey]!;
       }
     }
 
+    // 2. 파이어베이스 캐시 확인 (공유 데이터)
     try {
-      // 모든 노선 병렬 요청
-      final results = await Future.wait(_kRoutes.map(_fetchRouteRemaining));
+      final fbDoc = await FirebaseFirestore.instance
+          .collection('realtime')
+          .doc('bus_locations')
+          .get(const GetOptions(source: Source.serverAndCache)); // 캐시 우선 확인
 
-      final summaries = results.map((r) {
-        final config = _kRoutes.firstWhere(
-          (e) => e.routeNumber == r.routeNumber,
-        );
+      if (fbDoc.exists) {
+        final data = fbDoc.data();
+        final Timestamp? lastUpdated = data?['lastUpdated'];
+        if (lastUpdated != null) {
+          final diff = now.difference(lastUpdated.toDate());
+          
+          // [개선] 캐시 유효 시간을 45초로 연장하고, 클라이언트별 지터(Random) 추가
+          // 여러 사용자가 동시에 API를 호출하는 현상 방지
+          final int threshold = 45 + (now.millisecond % 15); 
+          
+          if (diff.inSeconds < threshold && data?['summaries'] != null) {
+            final List<dynamic> list = data!['summaries'];
+            final cachedList = list.map((e) => BusSummary.fromJson(e)).toList();
+            
+            // 메모리 캐시 업데이트
+            _cache[cacheKey] = cachedList;
+            _cacheTimestamps[cacheKey] = now;
+            
+            debugPrint("BusService: 파이어베이스 캐시 히트 (${diff.inSeconds}초 전)");
+            return cachedList;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("BusService: 파이어베이스 확인 실패: $e");
+    }
+
+    try {
+      // 3. API 호출 (실제 전국버스 API 사용)
+      // [개선] 개별 요청 타임아웃 단축 (10s -> 5s) 및 병렬 실행
+      final results = await Future.wait(
+        _kRoutes.map((cfg) => _fetchRouteRemaining(cfg).timeout(
+          const Duration(seconds: 7), // 전체 병렬 작업에 대한 약간 긴 타임아웃
+          onTimeout: () => RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []),
+        )),
+      );
+
+      final List<Map<String, dynamic>> summariesJson = [];
+      for (final r in results) {
+        final config = _kRoutes.firstWhere((e) => e.routeNumber == r.routeNumber);
         final meta = _getRouteMeta(r.routeNumber, config.isDirect);
 
-        final closestBus = r.closestBus;
-        final arrivals = closestBus != null ? [closestBus] : <BusArrival>[];
-
-        return BusSummary(
+        final summary = BusSummary(
           id: r.routeNumber,
           number: r.routeNumber.toString(),
           type: meta['type']!,
           direction: meta['direction']!,
-          arrivals: arrivals,
+          arrivals: r.arrivals,
           congestion: _calculateCongestion(now, r.routeNumber),
           isDirect: config.isDirect,
         );
-      }).toList();
+        summariesJson.add(summary.toJson());
+      }
 
-      // 결과 캐싱
-      _cache[cacheKey] = summaries;
+      final summaryList = summariesJson.map((e) => BusSummary.fromJson(e)).toList();
+
+      // 4. 결과 파이어베이스에 업데이트
+      // 마지막 업데이트 후 30초 경과 시에만 업데이트 수행
+      if (_lastFirebaseUpdateTime == null || 
+          now.difference(_lastFirebaseUpdateTime!) > const Duration(seconds: 30)) {
+        _lastFirebaseUpdateTime = now;
+        FirebaseFirestore.instance.collection('realtime').doc('bus_locations').set({
+          'lastUpdated': FieldValue.serverTimestamp(),
+          'summaries': summariesJson,
+        }).catchError((e) => debugPrint("BusService: 파이어베이스 업데이트 실패: $e"));
+      }
+
+      // 5. 로컬 메모리 캐싱
+      _cache[cacheKey] = summaryList;
       _cacheTimestamps[cacheKey] = now;
 
-      return summaries;
+      return summaryList;
     } catch (e) {
-      if (_cache.containsKey(cacheKey)) {
-        print("API 실패, 캐시 데이터 반환");
-        return _cache[cacheKey]!;
-      }
-      print("버스 정보 로드 실패: $e");
-      return [];
+      debugPrint("BusService: 전체 버스 정보 로드 실패: $e");
+      return _cache[cacheKey] ?? [];
     }
   }
 
@@ -147,7 +208,7 @@ class BusService {
     try {
       final res = await http
           .get(uri, headers: {"Accept": "application/json"})
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 5)); // [개선] 개별 API 타임아웃 단축
 
       if (res.statusCode != 200) {
         return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []);
@@ -165,52 +226,32 @@ class BusService {
         list = [items];
       }
 
-      final buses = list
+      final arrivals = list
           .whereType<Map>()
-          .map((e) => BusLocation.fromJson(e.cast<String, dynamic>()))
-          .toList();
+          .map((e) {
+            final b = BusLocation.fromJson(e.cast<String, dynamic>());
+            // 남은 정거장 계산 (타겟 정류장 기준)
+            final target = _kTargetNodeOrdByRoute[cfg.routeNumber] ?? 40;
+            final int remaining = target - b.nodeOrd;
 
-      final List<BusArrival> arrivals = [];
-
-      for (final b in buses) {
-        int? remaining;
-
-        // 913번 교내 순환 처리
-        if (cfg.routeNumber == 913) {
-          if (b.nodeOrd <= 31) {
-            remaining = 31 - b.nodeOrd;
-          } else if (b.nodeOrd <= 46) {
-            remaining = 46 - b.nodeOrd;
-          }
-        } else {
-          // 일반 노선: 설정된 타겟 정류장(교원대 or 탑연삼거리) 기준 남은 정거장 계산
-          final target = _kTargetNodeOrdByRoute[cfg.routeNumber] ?? 40;
-          if (b.nodeOrd <= target) {
-            remaining = target - b.nodeOrd;
-          }
-        }
-
-        if (remaining != null && remaining >= 0) {
-          // [개선됨] 예상 시간 계산 로직 적용
-          final estimatedMinutes = _calculateEstimatedMinutes(
-            cfg.routeNumber,
-            remaining,
-            DateTime.now(),
-          );
-
-          arrivals.add(
-            BusArrival(
+            return BusArrival(
               remainStops: remaining,
               currentStopName: b.nodeNm,
-              estimatedMinutes: estimatedMinutes,
-            ),
-          );
-        }
-      }
+              estimatedMinutes: remaining >= 0 
+                ? _calculateEstimatedMinutes(cfg.routeNumber, remaining, DateTime.now(), busCongestion: b.congestion)
+                : 0.0,
+              latitude: b.latitude,
+              longitude: b.longitude,
+              vehicleNo: b.vehicleno,
+              nodeOrd: b.nodeOrd,
+              congestion: b.congestion,
+            );
+          })
+          .toList();
 
       return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: arrivals);
     } catch (e) {
-      print("버스 ${cfg.routeNumber} 조회 오류: $e");
+      debugPrint("BusService: 버스 ${cfg.routeNumber} 조회 오류: $e");
       return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []);
     }
   }
@@ -219,8 +260,9 @@ class BusService {
   double _calculateEstimatedMinutes(
     int routeNumber,
     int remainStops,
-    DateTime now,
-  ) {
+    DateTime now, {
+    int? busCongestion,
+  }) {
     if (remainStops <= 0) return 0.0;
 
     // 1. 노선별 기본 속도 적용 (고속화도로 vs 시내 vs 교내)
@@ -243,11 +285,17 @@ class BusService {
       approachBuffer = 1.0; // 남은 정거장 3개 이하면 1분 추가 (신호 대기 고려)
     }
 
+    // 6. [신규] 실시간 버스 혼잡도 반영 (승하차 시간 증가)
+    double busFactor = 1.0;
+    if (busCongestion == 3) busFactor = 1.15; // 혼잡
+    if (busCongestion == 4) busFactor = 1.3;  // 매우 혼잡
+
     // 최종 계산
     double estimatedMinutes =
         (remainStops *
             baseTimePerStop *
             trafficFactor *
+            busFactor *
             dayFactor *
             weatherFactor) +
         approachBuffer;
@@ -279,5 +327,91 @@ class BusService {
   static void clearCache() {
     _cache.clear();
     _cacheTimestamps.clear();
+    _routeStopsCache.clear();
+  }
+
+  /// 노선별 경유 정류장 목록 조회 (API: getRouteAcctoThrghSttnList)
+  /// 세션 내 캐시하여 중복 호출 방지
+  static Future<List<RouteStop>> fetchRouteStops(String routeId) async {
+    // 1. 캐시 확인
+    if (_routeStopsCache.containsKey(routeId)) {
+      return _routeStopsCache[routeId]!;
+    }
+
+    // 2. API 호출
+    final key = _serviceKey;
+    if (key.isEmpty) return [];
+
+    final uri = Uri.parse(
+      "https://apis.data.go.kr/1613000/BusRouteInfoInqireService/getRouteAcctoThrghSttnList"
+      "?serviceKey=$key&pageNo=1&numOfRows=200&_type=json&cityCode=33010&routeId=$routeId",
+    );
+
+    try {
+      final res = await http
+          .get(uri, headers: {"Accept": "application/json"})
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode != 200) return [];
+
+      final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+      final items = decoded["response"]?["body"]?["items"]?["item"];
+
+      List<dynamic> list;
+      if (items == null) {
+        list = [];
+      } else if (items is List) {
+        list = items;
+      } else {
+        list = [items];
+      }
+
+      final stops = list
+          .whereType<Map>()
+          .map((e) => RouteStop.fromJson(e.cast<String, dynamic>()))
+          .toList();
+
+      // 정류장 순서대로 정렬
+      stops.sort((a, b) => a.nodeOrd.compareTo(b.nodeOrd));
+
+      // 3. 캐시 저장
+      _routeStopsCache[routeId] = stops;
+      debugPrint("BusService: $routeId 노선 정류장 ${stops.length}개 로드 완료");
+
+      return stops;
+    } catch (e) {
+      debugPrint("BusService: 노선 정류장 조회 실패 ($routeId): $e");
+      return [];
+    }
+  }
+
+  /// 교통 상황 추정 ("smooth", "slow", "congested")
+  static String estimateTrafficCondition(DateTime now) {
+    final h = now.hour;
+    // 출퇴근 시간대
+    if ((h >= 7 && h <= 9) || (h >= 17 && h <= 19)) return "slow";
+    // 준 혈잡 시간대
+    if (h >= 12 && h <= 14) return "moderate";
+    // 심야 / 이른 아침
+    if (h >= 22 || h < 6) return "smooth";
+    return "smooth";
+  }
+
+  /// 노선별 현재 혼잡도 반환
+  static String estimateCongestion(DateTime now, int routeNumber) {
+    final h = now.hour;
+    // 교원대 노선 특성: 아침 등교 시간이 가장 혼잡
+    if (h >= 8 && h <= 9) {
+      if ([513, 514, 913].contains(routeNumber)) return "crowded";
+      return "normal";
+    }
+    // 저녁 퇴근
+    if (h >= 17 && h <= 18) {
+      if ([513, 514].contains(routeNumber)) return "crowded";
+      return "normal";
+    }
+    // 심야
+    if (h >= 21) return "empty";
+    return "normal";
   }
 }
