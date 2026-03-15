@@ -2981,7 +2981,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 4),
             child: unavailable
                 ? const Center(
                     child: Column(
@@ -3081,7 +3081,6 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                           ),
                         );
                       }),
-                      const SizedBox(height: 8),
                     ],
                   ),
           ),
