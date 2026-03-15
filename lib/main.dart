@@ -19,9 +19,19 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 void main() async {
+  print("[DEBUG] main starting...");
   WidgetsFlutterBinding.ensureInitialized();
+  print("[DEBUG] WidgetsFlutterBinding initialized");
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    print("[DEBUG] Initializing Firebase...");
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print("[DEBUG] Firebase initialized");
+  } catch (e) {
+    print("[DEBUG] Firebase init error: $e");
+  }
 
   // FCM 백그라운드 메시지 핸들러 등록
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -31,23 +41,27 @@ void main() async {
   FirebaseSyncService.uploadBuildingsToFirestore();
 
   // 푸시 알림 권한 요청 (iOS) 및 알림 설정
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
-  NotificationSettings settings = await messaging.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-  print('Push messaging permission: ${settings.authorizationStatus}');
+  try {
+    print("[DEBUG] Requesting messaging permission...");
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    print("[DEBUG] Messaging permission: ${settings.authorizationStatus}");
 
-  // 현재 기기의 푸시 토큰 가져오기 (테스트 및 서버 전송용)
-  String? fcmToken = await messaging.getToken();
-  print("FCM Registration Token: $fcmToken");
+    print("[DEBUG] Getting FCM token...");
+    String? fcmToken = await messaging.getToken();
+    print("[DEBUG] FCM Registration Token: $fcmToken");
+  } catch (e) {
+    print("[DEBUG] Messaging setup error: $e");
+  }
 
   // 앱이 켜져있을 때 (Foreground) 푸시 알림이 오면 처리하는 로직
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
     print('Foreground message received: ${message.messageId}');
     if (message.notification != null) {
-      // constants.dart에 방금 만든 showNotification 함수 호출
       NotificationService().showNotification(
         message.notification.hashCode,
         message.notification!.title ?? '알림',
@@ -59,9 +73,11 @@ void main() async {
   // 데이터 로딩을 비동기로 시작하되, 완료를 기다리지 않고 앱을 먼저 띄울 수도 있습니다.
   // 하지만 초기 데이터가 중요하므로 여기서는 유지하되 오류 처리를 강화합니다.
   try {
+    print("[DEBUG] Loading building data...");
     await loadBuildingData().timeout(const Duration(seconds: 5));
+    print("[DEBUG] Building data loaded");
   } catch (e) {
-    debugPrint("데이터 로딩 타임아웃 또는 오류: $e");
+    print("[DEBUG] 데이터 로딩 타임아웃 또는 오류: $e");
   }
 
   // 디버그 모드 설정
@@ -75,23 +91,30 @@ void main() async {
 
   // .env 파일 로드
   try {
+    print("[DEBUG] Loading dotenv...");
     await dotenv.load(fileName: ".env");
     print(".env 파일 로드 성공");
   } catch (e) {
     print(".env Load Error: $e");
   }
 
-  await initializeDateFormatting();
-  print("날짜 형식 초기화 완료");
+  try {
+    print("[DEBUG] Initializing date formatting...");
+    await initializeDateFormatting();
+    print("날짜 형식 초기화 완료");
+  } catch (e) {
+    print("[DEBUG] date formatting error: $e");
+  }
 
   // HomeWidget 초기화
   try {
-    // iOS용 App Group ID (Android에서는 무시됨)
+    print("[DEBUG] Setting HomeWidget AppGroupId...");
     await HomeWidget.setAppGroupId('group.knue.meal');
     print("HomeWidget AppGroupId 설정 완료");
 
     // 위젯에서 앱 실행 여부 확인
     try {
+      print("[DEBUG] Checking initiallyLaunchedFromHomeWidget...");
       final launchedFromWidget =
           await HomeWidget.initiallyLaunchedFromHomeWidget();
       print("위젯에서 실행됨: $launchedFromWidget");
@@ -108,13 +131,24 @@ void main() async {
   }
 
   // 설정 로드
-  await PreferencesService.loadSettings();
-  print("설정 로드 완료");
+  try {
+    print("[DEBUG] Loading settings...");
+    await PreferencesService.loadSettings();
+    print("설정 로드 완료");
+  } catch (e) {
+    print("[DEBUG] loadSettings error: $e");
+  }
 
   // 알람 초기화
-  await NotificationService().init();
-  print("알림 서비스 초기화 완료");
+  try {
+    print("[DEBUG] Initializing NotificationService...");
+    await NotificationService().init();
+    print("알림 서비스 초기화 완료");
+  } catch (e) {
+    print("[DEBUG] NotificationService init error: $e");
+  }
 
+  print("[DEBUG] Calling runApp...");
   runApp(const MyApp());
 }
 
