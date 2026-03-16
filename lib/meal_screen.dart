@@ -3064,7 +3064,11 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                                                 ? Colors.white
                                                 : Colors.black87),
                                     ),
-                                    child: Text(e),
+                                    child: Text(
+                                      e,
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ),
                               ],

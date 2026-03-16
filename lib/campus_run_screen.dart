@@ -486,28 +486,34 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "목표",
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 12,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "목표",
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 12,
+                                ),
                               ),
-                            ),
-                            if (!isTargetSelected) const SizedBox(height: 4),
-                            Text(
-                              _targetClassroom?.name ?? "강의실을 선택하세요",
-                              style: TextStyle(
-                                color: _targetClassroom == null
-                                    ? Colors.grey
-                                    : textWhite,
-                                fontSize: isTargetSelected ? 16 : 18,
-                                fontWeight: FontWeight.bold,
+                              if (!isTargetSelected) const SizedBox(height: 4),
+                              Flexible(
+                                child: Text(
+                                  _targetClassroom?.name ?? "강의실을 선택하세요",
+                                  style: TextStyle(
+                                    color: _targetClassroom == null
+                                        ? Colors.grey
+                                        : textWhite,
+                                    fontSize: isTargetSelected ? 16 : 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         Icon(Icons.location_on, color: neonColor),
                       ],
