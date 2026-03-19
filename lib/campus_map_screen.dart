@@ -3361,11 +3361,14 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                             children: [
                               Icon(Icons.phone_rounded, color: color, size: 20),
                               const SizedBox(width: 8),
-                              const Text(
-                                '전화 시 매너',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
+                              const Expanded(
+                                child: Text(
+                                  '전화 시 매너',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -3440,12 +3443,14 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                           size: 20,
                                         ),
                                         const SizedBox(width: 8),
-                                        Text(
-                                          '이렇게 말해보세요',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w700,
-                                            color: color,
+                                        Expanded(
+                                          child: Text(
+                                            '이렇게 말해보세요',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: color,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -3464,7 +3469,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                         children: [
                                           const TextSpan(text: '"안녕하세요, '),
                                           TextSpan(
-                                            text: 'OO교육과\u00A026학번\u00A0김청람',
+                                            text: 'OO교육과 26학번 김청람',
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               color: color,
@@ -3486,7 +3491,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                             ),
                                           ),
                                           const TextSpan(
-                                            text: ' 때문에\u00A0연락드렸습니다."',
+                                            text: ' 때문에 연락드렸습니다."',
                                           ),
                                         ],
                                       ),
@@ -3885,11 +3890,14 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                             children: [
                               Icon(Icons.phone_rounded, color: color, size: 20),
                               const SizedBox(width: 8),
-                              const Text(
-                                '전화 시 매너',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
+                              const Expanded(
+                                child: Text(
+                                  '전화 시 매너',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -3964,12 +3972,14 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                           size: 20,
                                         ),
                                         const SizedBox(width: 8),
-                                        Text(
-                                          '이렇게 말해보세요',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w700,
-                                            color: color,
+                                        Expanded(
+                                          child: Text(
+                                            '이렇게 말해보세요',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: color,
+                                            ),
                                           ),
                                         ),
                                       ],

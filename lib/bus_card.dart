@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'bus_model.dart';
 import 'bus_service.dart';
+import 'bus_route_data.dart';
 
 class BusCard extends StatelessWidget {
   final BusSummary bus;
@@ -577,7 +578,7 @@ class BusCard extends StatelessWidget {
   }
 
   void _showRouteDetail(BuildContext context) {
-    final routeData = _fullRouteStops[bus.number];
+    final routeData = BusRouteData.routeStops[bus.number];
     if (routeData == null) return;
 
     showModalBottomSheet(
@@ -1010,7 +1011,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
   }
 
   void _determineInitialDirection() {
-    final routeData = BusCard._fullRouteStops[widget.bus.number];
+    final routeData = BusRouteData.routeStops[widget.bus.number];
     if (routeData is List) {
       _selectedDirection = "순환";
     } else if (routeData is Map) {
@@ -1208,8 +1209,8 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final routeData = BusCard._fullRouteStops[widget.bus.number];
-    final bool hasFallbackDirections = routeData is Map;
+    final routeData = BusRouteData.routeStops[widget.bus.number];
+    final bool hasFallbackDirections = routeData != null;
 
     // API 정류장이 있으면 통합 노선으로 표시 (상행/하행 토글 없음)
     final bool useUnifiedRoute = _apiStops != null && _apiStops!.isNotEmpty;

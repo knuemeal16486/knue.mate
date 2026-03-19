@@ -138,24 +138,11 @@ void showToast(BuildContext context, String msg) {
   );
 }
 
-// [3] API 및 위젯 로직 (수정됨)
+// [3] API 및 위젯 로직
+/// 요일을 요일 파라미터로 변환
 String _weekdayToDayParam(DateTime d) {
-  switch (d.weekday) {
-    case 1:
-      return "mon";
-    case 2:
-      return "tue";
-    case 3:
-      return "wed";
-    case 4:
-      return "thu";
-    case 5:
-      return "fri";
-    case 6:
-      return "sat";
-    default:
-      return "sun";
-  }
+  const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  return days[d.weekday % 7];
 }
 
 /// KNUE \uc2dd\ub2f8 HTML \uc2a4\ud06c\ub798\ud37c
@@ -171,11 +158,14 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
 
   try {
     // 1. 파이어베이스에서 먼저 확인
-    final cachedMeal = await FirebaseSyncService.getMealFromFirestore(date, source);
+    final cachedMeal = await FirebaseSyncService.getMealFromFirestore(
+      date,
+      source,
+    );
     if (cachedMeal != null) {
       if (DateUtils.isSameDay(date, DateTime.now())) {
         // 위젯 업데이트는 비동기로 진행하고 데이터를 즉시 반환
-        _updateWidgetDataInternal(cachedMeal, source); 
+        _updateWidgetDataInternal(cachedMeal, source);
       }
       return cachedMeal;
     }
@@ -195,11 +185,11 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
       final result = source == MealSource.a
           ? _parseSadoHtml(html, date)
           : _parseCafeHtml(html, date);
-          
+
       // 3. 크롤링 결과 저장 (사용자를 기다리게 하지 않음)
       final meals = result['meals'] as Map<String, dynamic>;
       bool hasData = meals.values.any((list) => (list as List).isNotEmpty);
-      
+
       if (hasData) {
         // await 없이 즉시 실행
         FirebaseSyncService.saveMealToFirestore(date, source, result);
@@ -211,7 +201,7 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
       return result;
     }
   } catch (e) {
-    print('fetchMealApi error: $e');
+    debugPrint('fetchMealApi error: $e');
   }
   return _emptyMeals();
 }
@@ -408,9 +398,9 @@ Future<void> _updateWidgetDataInternal(
       qualifiedAndroidName: 'com.knue.knuemate.MealWidgetProvider',
     );
 
-    print("위젯 업데이트 요청 완료: $sourceName / $timeText");
+    debugPrint("위젯 업데이트 완료: $sourceName / $timeText");
   } catch (e) {
-    print("위젯 내부 업데이트 실패: $e");
+    debugPrint("위젯 업데이트 실패: $e");
   }
 }
 
@@ -632,4 +622,3 @@ class NotificationService {
     );
   }
 }
-

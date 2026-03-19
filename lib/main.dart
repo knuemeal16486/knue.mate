@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -14,125 +15,91 @@ import 'firebase_sync_service.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  print("Handling a background message: ${message.messageId}");
+  debugPrint("Handling a background message: ${message.messageId}");
 }
 
 void main() async {
-  print("[DEBUG] main starting...");
   WidgetsFlutterBinding.ensureInitialized();
-  print("[DEBUG] WidgetsFlutterBinding initialized");
 
+  // [개선] 초기화 작업을 병렬로 실행하여 앱 시작 시간 단축
+  await Future.wait([
+    // Firebase 초기화
+    _initializeFirebase(),
+    // 날짜 형식 초기화
+    initializeDateFormatting(),
+    // dotenv 로드
+    dotenv.load(fileName: ".env"),
+    // Gebäude 데이터 로드
+    loadBuildingData(),
+    // 설정 로드
+    PreferencesService.loadSettings(),
+  ]);
+
+  // 백그라운드 작업들 (병렬로 실행해도 무방)
+  _initializeBackgroundTasks();
+
+  // HomeWidget 초기화 (UI Blocking 방지)
+  _initializeHomeWidget();
+
+  // 알림 서비스 초기화
+  await NotificationService().init();
+
+  runApp(const MyApp());
+}
+
+Future<void> _initializeFirebase() async {
   try {
-    print("[DEBUG] Initializing Firebase...");
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    print("[DEBUG] Firebase initialized");
-  } catch (e) {
-    print("[DEBUG] Firebase init error: $e");
-  }
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  FirebaseSyncService.uploadBuildingsToFirestore();
-
-  try {
-    print("[DEBUG] Requesting messaging permission...");
-    FirebaseMessaging messaging = FirebaseMessaging.instance;
-    NotificationSettings settings = await messaging.requestPermission(
+    // FCM 권한 요청 및 토큰 가져오기
+    final messaging = FirebaseMessaging.instance;
+    final settings = await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
-    print("[DEBUG] Messaging permission: ${settings.authorizationStatus}");
 
-    print("[DEBUG] Getting FCM token...");
-    String? fcmToken = await messaging.getToken();
-    print("[DEBUG] FCM Registration Token: $fcmToken");
-  } catch (e) {
-    print("[DEBUG] Messaging setup error: $e");
-  }
-
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    print('Foreground message received: ${message.messageId}');
-    if (message.notification != null) {
-      NotificationService().showNotification(
-        message.notification.hashCode,
-        message.notification!.title ?? '알림',
-        message.notification!.body ?? '',
-      );
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      final fcmToken = await messaging.getToken();
+      debugPrint("FCM Token: ${fcmToken?.substring(0, 20)}...");
     }
-  });
 
-  try {
-    print("[DEBUG] Loading building data...");
-    await loadBuildingData();
-    print("[DEBUG] Building data loaded");
-  } catch (e) {
-    print("[DEBUG] loadBuildingData error: $e");
-  }
-
-  debugPrint = (String? message, {int? wrapWidth}) {
-    if (message != null) print(message);
-  };
-
-  print("=== 앱 시작 ===");
-
-  try {
-    print("[DEBUG] Loading dotenv...");
-    await dotenv.load(fileName: ".env");
-    print(".env 파일 로드 성공");
-  } catch (e) {
-    print(".env Load Error: $e");
-  }
-
-  try {
-    print("[DEBUG] Initializing date formatting...");
-    await initializeDateFormatting();
-    print("날짜 형식 초기화 완료");
-  } catch (e) {
-    print("[DEBUG] date formatting error: $e");
-  }
-
-  try {
-    print("[DEBUG] Setting HomeWidget AppGroupId...");
-    await HomeWidget.setAppGroupId('group.knue.meal');
-    print("HomeWidget AppGroupId 설정 완료");
-
-    try {
-      print("[DEBUG] Checking initiallyLaunchedFromHomeWidget...");
-      final launchedFromWidget =
-          await HomeWidget.initiallyLaunchedFromHomeWidget();
-      print("위젯에서 실행됨: $launchedFromWidget");
-
-      if (launchedFromWidget == true) {
-        final title = await HomeWidget.getWidgetData<String>('title');
-        print("위젯 데이터 - title: $title");
+    // 포그라운드 메시지 리스너
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null) {
+        NotificationService().showNotification(
+          message.notification.hashCode,
+          message.notification!.title ?? '알림',
+          message.notification!.body ?? '',
+        );
       }
-    } catch (e) {
-      print("위젯 실행 확인 오류: $e");
+    });
+  } catch (e) {
+    debugPrint("Firebase init error: $e");
+  }
+}
+
+void _initializeBackgroundTasks() {
+  // Firebase에 건물 데이터 업로드 (백그라운드)
+  FirebaseSyncService.uploadBuildingsToFirestore();
+}
+
+Future<void> _initializeHomeWidget() async {
+  try {
+    await HomeWidget.setAppGroupId('group.knue.meal');
+    final launchedFromWidget =
+        await HomeWidget.initiallyLaunchedFromHomeWidget();
+    if (launchedFromWidget == true) {
+      // Uri? 타입이므로 == true로 비교
+      final title = await HomeWidget.getWidgetData<String>('title');
+      debugPrint("위젯 데이터 - title: $title");
     }
   } catch (e) {
-    print("HomeWidget 초기화 오류: $e");
+    debugPrint("HomeWidget 초기화 오류: $e");
   }
-
-  try {
-    print("[DEBUG] Loading settings...");
-    await PreferencesService.loadSettings();
-    print("설정 로드 완료");
-  } catch (e) {
-    print("[DEBUG] loadSettings error: $e");
-  }
-
-  try {
-    print("[DEBUG] Initializing NotificationService...");
-    await NotificationService().init();
-    print("알림 서비스 초기화 완료");
-  } catch (e) {
-    print("[DEBUG] NotificationService init error: $e");
-  }
-
-  print("[DEBUG] Calling runApp...");
-  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {

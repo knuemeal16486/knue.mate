@@ -95,7 +95,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
           _currentTime = DateTime.now();
           if (_isRunning && _runStartTime != null) {
             _elapsedDuration = DateTime.now().difference(_runStartTime!);
-            if (_targetDurationSeconds != null) _recalculateRequiredSpeed();
+            if (_targetDurationSeconds != null) _updateRequiredSpeedOnly();
           }
         });
       }
@@ -315,17 +315,15 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     }
   }
 
-  void _recalculateRequiredSpeed() {
+  void _updateRequiredSpeedOnly() {
     if (_runStartTime == null || _targetDurationSeconds == null) return;
     final remainTime = _targetDurationSeconds! - _elapsedDuration.inSeconds;
-    setState(() {
-      if (remainTime <= 0) {
-        _requiredSpeedKmh = 999.0;
-      } else {
-        double reqSpeedMs = _distanceRemaining / remainTime;
-        _requiredSpeedKmh = reqSpeedMs * 3.6;
-      }
-    });
+    if (remainTime <= 0) {
+      _requiredSpeedKmh = 999.0;
+    } else {
+      double reqSpeedMs = _distanceRemaining / remainTime;
+      _requiredSpeedKmh = reqSpeedMs * 3.6;
+    }
   }
 
   void _updateMetrics(Position position) {
@@ -405,7 +403,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
   Widget build(BuildContext context) {
     return ValueListenableBuilder<Color>(
       valueListenable: themeColor,
-      builder: (context, primaryColor, child) {
+      builder: (builderContext, primaryColor, child) {
         final neonColor = _getNeonVariant(primaryColor);
         const bgDark = Color(0xFF121212);
         const textWhite = Colors.white;
@@ -498,19 +496,17 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                                 ),
                               ),
                               if (!isTargetSelected) const SizedBox(height: 4),
-                              Flexible(
-                                child: Text(
-                                  _targetClassroom?.name ?? "강의실을 선택하세요",
-                                  style: TextStyle(
-                                    color: _targetClassroom == null
-                                        ? Colors.grey
-                                        : textWhite,
-                                    fontSize: isTargetSelected ? 16 : 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                              Text(
+                                _targetClassroom?.name ?? "강의실을 선택하세요",
+                                style: TextStyle(
+                                  color: _targetClassroom == null
+                                      ? Colors.grey
+                                      : textWhite,
+                                  fontSize: isTargetSelected ? 16 : 18,
+                                  fontWeight: FontWeight.bold,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
@@ -591,9 +587,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                 ),
                 const SizedBox(height: 4),
                 AnimatedBuilder(
-                  animation: isArrived
-                      ? _pulseAnimation
-                      : AlwaysStoppedAnimation(1.0),
+                  animation: _pulseAnimation,
                   builder: (context, child) {
                     return Transform.scale(
                       scale: isArrived ? _pulseAnimation.value : 1.0,
@@ -672,10 +666,14 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                   ),
                 ],
                 const SizedBox(height: 30),
-                ScaleTransition(
-                  scale: _isRunning
-                      ? _pulseAnimation
-                      : AlwaysStoppedAnimation(1.0),
+                AnimatedBuilder(
+                  animation: _pulseAnimation,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: _isRunning ? _pulseAnimation.value : 1.0,
+                      child: child,
+                    );
+                  },
                   child: GestureDetector(
                     onTap: _toggleTracking,
                     child: Container(

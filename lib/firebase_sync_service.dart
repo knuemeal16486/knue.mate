@@ -367,4 +367,101 @@ class FirebaseSyncService {
       return [];
     }
   }
+
+  // ==================== 식단 별점 기능 ====================
+
+  /// [식단 별점] 별점을 Firestore에 저장합니다.
+  /// key: "{date}_{source}_{mealType}" (예: "2024-01-15_a_lunch")
+  static Future<void> saveMealRating({
+    required DateTime date,
+    required MealSource source,
+    required MealType mealType,
+    required double rating,
+  }) async {
+    try {
+      final dateStr =
+          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      final docId = "${dateStr}_${source.name}_${mealType.name}";
+
+      await _firestore.collection('meal_ratings').doc(docId).set({
+        'date': dateStr,
+        'source': source.name,
+        'mealType': mealType.name,
+        'rating': rating,
+        'ratedAt': FieldValue.serverTimestamp(),
+      });
+
+      debugPrint('FirebaseSyncService: 별점 저장 완료 ($docId: $rating)');
+    } catch (e) {
+      debugPrint('FirebaseSyncService: 별점 저장 실패: $e');
+    }
+  }
+
+  /// [식단 별점] Firestore에서 특정 식단의 별점을 가져옵니다.
+  static Future<double?> getMealRating({
+    required DateTime date,
+    required MealSource source,
+    required MealType mealType,
+  }) async {
+    try {
+      final dateStr =
+          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      final docId = "${dateStr}_${source.name}_${mealType.name}";
+
+      final doc = await _firestore.collection('meal_ratings').doc(docId).get();
+      if (doc.exists) {
+        final data = doc.data();
+        return data?['rating']?.toDouble();
+      }
+    } catch (e) {
+      debugPrint('FirebaseSyncService: 별점 가져오기 실패: $e');
+    }
+    return null;
+  }
+
+  /// [식단 별점] 해당 식사가 별점 매기가 가능한 시간인지 확인
+  /// 식사 시작시간 ~ 식사 종료 1시간 뒤까지 별점 매기 가능
+  static bool canRateMeal(
+    MealType mealType,
+    DateTime targetDate,
+    DateTime now,
+  ) {
+    // 오늘이 아니면 별점 매기 가능 (과거 날짜도 평가 가능)
+    // 오늘이라면 시간 제한 적용
+    if (!DateUtils.isSameDay(targetDate, now)) {
+      return true;
+    }
+
+    // 식사 시간대별 시작 시간과 종료 후 1시간까지
+    final times = mealType.timeRange.split("~");
+    if (times.length != 2) return false;
+
+    final startStr = times[0].trim().split(":");
+    final endStr = times[1].trim().split(":");
+
+    final startHour = int.parse(startStr[0]);
+    final startMinute = int.parse(startStr[1]);
+    final endHour = int.parse(endStr[0]);
+    final endMinute = int.parse(endStr[1]);
+
+    // 식사 시작 시간
+    final mealStart = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      startHour,
+      startMinute,
+    );
+    // 식사 종료 후 1시간
+    final mealEndPlusOne = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      endHour,
+      endMinute,
+    ).add(const Duration(hours: 1));
+
+    // 현재 시간이 식사 시작 후 1시간 뒤까지
+    return now.isAfter(mealStart) && now.isBefore(mealEndPlusOne);
+  }
 }

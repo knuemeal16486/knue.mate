@@ -2446,14 +2446,14 @@ class _MealDetailCardState extends State<_MealDetailCard> {
       startHour,
       startMinute,
     );
-    // 종료 후 30분까지 허용
+    // 종료 후 1시간까지 허용 (사용자 요청)
     final endTime = DateTime(
       now.year,
       now.month,
       now.day,
       endHour,
       endMinute,
-    ).add(const Duration(minutes: 30));
+    ).add(const Duration(hours: 1));
 
     return now.isAfter(startTime) && now.isBefore(endTime);
   }
