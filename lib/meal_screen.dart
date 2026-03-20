@@ -23,6 +23,13 @@ class _MealMainScreenState extends State<MealMainScreen> {
   int _currentIndex = 0;
   late final PageController _pageController;
 
+  // 페이지를 필드로 고정 — build마다 새 인스턴스가 생성되지 않도록
+  final List<Widget> _pages = [
+    const TodayMealPage(),
+    const MonthlyMealPage(),
+    const SettingsPage(),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -63,7 +70,7 @@ class _MealMainScreenState extends State<MealMainScreen> {
             controller: _pageController,
             onPageChanged: _onPageChanged,
             physics: const PageScrollPhysics(),
-            children: [TodayMealPage(), MonthlyMealPage(), SettingsPage()],
+            children: _pages,
           ),
           bottomNavigationBar: _BottomNavBar(
             currentIndex: _currentIndex,
@@ -84,7 +91,8 @@ class TodayMealPage extends StatefulWidget {
   State<TodayMealPage> createState() => _TodayMealPageState();
 }
 
-class _TodayMealPageState extends State<TodayMealPage> {
+class _TodayMealPageState extends State<TodayMealPage>
+    with AutomaticKeepAliveClientMixin {
   DateTime _date = DateTime.now();
   MealType _selected = MealType.lunch;
   MealSource _source = defaultSourceNotifier.value;
@@ -98,6 +106,9 @@ class _TodayMealPageState extends State<TodayMealPage> {
   };
   int _reqId = 0;
   late final ScrollController _scrollController;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -254,6 +265,7 @@ class _TodayMealPageState extends State<TodayMealPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 필수 호출
     final isToday = DateUtils.isSameDay(_date, DateTime.now());
     final primaryColor = Theme.of(context).primaryColor;
 
@@ -664,7 +676,8 @@ class MonthlyMealPage extends StatefulWidget {
   State<MonthlyMealPage> createState() => _MonthlyMealPageState();
 }
 
-class _MonthlyMealPageState extends State<MonthlyMealPage> {
+class _MonthlyMealPageState extends State<MonthlyMealPage>
+    with AutomaticKeepAliveClientMixin {
   DateTime _focusedMonth = DateTime.now();
   DateTime _selectedDate = DateTime.now();
   MealSource _source = defaultSourceNotifier.value;
@@ -676,6 +689,9 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
     "lunch": [],
     "dinner": [],
   };
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -733,6 +749,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 필수 호출
     final primaryColor = themeColor.value;
     return Scaffold(
       appBar: AppBar(
@@ -2867,12 +2884,10 @@ class _MealDetailCardState extends State<_MealDetailCard> {
 
                       return Align(
                         alignment: Alignment.centerLeft,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: _showRatingDialog,
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
                                 vertical: 6,
@@ -2902,34 +2917,56 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                                       fontSize: 12,
                                     ),
                                   ),
-                                  if (count > 0) ...[
-                                    Container(
-                                      margin: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      width: 1,
-                                      height: 10,
-                                      color: statusColor.withOpacity(0.2),
-                                    ),
-                                    const Icon(
-                                      Icons.star_rounded,
-                                      size: 14,
-                                      color: Colors.amber,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      avg.toStringAsFixed(1),
-                                      style: TextStyle(
-                                        color: statusColor.withOpacity(0.8),
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
                                 ],
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            if (!isStudentHallBreakfast)
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _showRatingDialog,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.amber.withOpacity(0.2),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.star_rounded,
+                                          size: 16,
+                                          color: Colors.amber,
+                                        ),
+                                        if (count > 0) ...[
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            avg.toStringAsFixed(1),
+                                            style: TextStyle(
+                                              color: isDark
+                                                  ? Colors.amber.shade300
+                                                  : Colors.amber.shade800,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       );
                     },

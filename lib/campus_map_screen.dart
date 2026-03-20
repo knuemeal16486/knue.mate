@@ -4681,153 +4681,18 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                   ],
                 ),
               ),
-              // 층별 안내 헤더
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 3,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: b.color,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '층별 안내',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView.separated(
-                  controller: ctrl,
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
-                  itemCount: b.floors.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 6),
-                  itemBuilder: (_, i) {
-                    final f = b.floors[b.floors.length - 1 - i];
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: b.color.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              f.floor is int
-                                  ? (f.floor < 0
-                                        ? 'B${(f.floor as int).abs()}'
-                                        : '${f.floor}F')
-                                  : f.floor.toString(),
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: b.color,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: f.rooms
-                                  .map(
-                                    (r) => Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: b.color.withValues(alpha: 0.08),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: b.color.withValues(
-                                            alpha: 0.15,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        r,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark
-                                              ? Colors.white.withValues(
-                                                  alpha: 0.9,
-                                                )
-                                              : Colors.black.withValues(
-                                                  alpha: 0.8,
-                                                ),
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-              // 버튼들
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      setState(() {
-                        final idx = kBuildings.indexOf(b);
-                        if (idx >= 0) _hiddenBuildingIdx.add(idx);
-                      });
-                    },
-                    icon: const Icon(
-                      Icons.visibility_off_rounded,
-                      size: 14,
-                      color: Colors.grey,
-                    ),
-                    label: const Text(
-                      '이 마커 지도에서 숨기기',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ),
+              // 층별 안내 (어코디언 + 정렬 토글)
+              _BuildingFloorSection(
+                building: b,
+                isDark: isDark,
+                ctrl: ctrl,
+                onHide: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    final idx = kBuildings.indexOf(b);
+                    if (idx >= 0) _hiddenBuildingIdx.add(idx);
+                  });
+                },
               ),
             ],
           ),
@@ -6084,5 +5949,302 @@ class _CustomReorderableDragStartListener extends ReorderableDragStartListener {
   @override
   MultiDragGestureRecognizer createRecognizer() {
     return DelayedMultiDragGestureRecognizer(delay: delay, debugOwner: this);
+  }
+}
+
+// ─── 건물 층별 안내 (어코디언 + 정렬 토글) ───
+
+class _BuildingFloorSection extends StatefulWidget {
+  final BuildingData building;
+  final bool isDark;
+  final ScrollController ctrl;
+  final VoidCallback onHide;
+
+  const _BuildingFloorSection({
+    required this.building,
+    required this.isDark,
+    required this.ctrl,
+    required this.onHide,
+  });
+
+  @override
+  State<_BuildingFloorSection> createState() => _BuildingFloorSectionState();
+}
+
+class _BuildingFloorSectionState extends State<_BuildingFloorSection> {
+  bool _sortAscending = false; // 기본: 내림차순 (높은 층 우선)
+  final Set<int> _expandedIndices = {}; // 펼쳐진 층의 floors 인덱스
+
+  @override
+  Widget build(BuildContext context) {
+    final b = widget.building;
+    final isDark = widget.isDark;
+
+    // 정렬된 층 인덱스 목록 생성
+    final indexedFloors = List.generate(b.floors.length, (i) => i);
+    final sortedIndices = _sortAscending
+        ? indexedFloors
+        : indexedFloors.reversed.toList();
+
+    return Expanded(
+      child: Column(
+        children: [
+          // 헤더 행: 층별 안내 타이틀 + 정렬 토글
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 16, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 3,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: b.color,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '층별 안내',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const Spacer(),
+                // 정렬 토글 버튼
+                GestureDetector(
+                  onTap: () => setState(() {
+                    _sortAscending = !_sortAscending;
+                    _expandedIndices.clear();
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: b.color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: b.color.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _sortAscending
+                              ? Icons.arrow_upward_rounded
+                              : Icons.arrow_downward_rounded,
+                          size: 11,
+                          color: b.color,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _sortAscending ? '오름차순' : '내림차순',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: b.color,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 층 목록 (어코디언 스타일)
+          Expanded(
+            child: ListView.separated(
+              controller: widget.ctrl,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              itemCount: sortedIndices.length + 1, // +1: 숨기기 버튼
+              separatorBuilder: (_, __) => const SizedBox(height: 6),
+              itemBuilder: (_, listIdx) {
+                // 마지막 아이템: 숨기기 버튼
+                if (listIdx == sortedIndices.length) {
+                  return Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: widget.onHide,
+                      icon: const Icon(
+                        Icons.visibility_off_rounded,
+                        size: 14,
+                        color: Colors.grey,
+                      ),
+                      label: const Text(
+                        '이 마커 지도에서 숨기기',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  );
+                }
+
+                final floorIdx = sortedIndices[listIdx];
+                final f = b.floors[floorIdx];
+                final isExpanded = _expandedIndices.contains(floorIdx);
+                final hasRooms = f.rooms.isNotEmpty;
+
+                final floorLabel = f.floor is int
+                    ? (f.floor < 0
+                          ? 'B${(f.floor as int).abs()}'
+                          : '${f.floor}F')
+                    : f.floor.toString();
+
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeInOut,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: isExpanded
+                        ? Border.all(
+                            color: b.color.withValues(alpha: 0.35),
+                            width: 1.2,
+                          )
+                        : Border.all(color: Colors.transparent),
+                  ),
+                  child: Column(
+                    children: [
+                      // 층 행 (탭 가능)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: hasRooms
+                            ? () {
+                                setState(() {
+                                  if (isExpanded) {
+                                    _expandedIndices.remove(floorIdx);
+                                  } else {
+                                    _expandedIndices.add(floorIdx);
+                                  }
+                                });
+                              }
+                            : null,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              // 층 배지
+                              Container(
+                                width: 50,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  color: isExpanded
+                                      ? b.color.withValues(alpha: 0.2)
+                                      : b.color.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  floorLabel,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: b.color,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // 호실 수 / 비어있음 텍스트
+                              Expanded(
+                                child: Text(
+                                  hasRooms ? '${f.rooms.length}개 호실' : '정보 없음',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: hasRooms
+                                        ? (isDark
+                                              ? Colors.white70
+                                              : Colors.black54)
+                                        : (isDark
+                                              ? Colors.white30
+                                              : Colors.black26),
+                                  ),
+                                ),
+                              ),
+                              // 펼치기 화살표
+                              if (hasRooms)
+                                AnimatedRotation(
+                                  turns: isExpanded ? 0.5 : 0.0,
+                                  duration: const Duration(milliseconds: 200),
+                                  child: Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    size: 20,
+                                    color: isExpanded
+                                        ? b.color
+                                        : (isDark
+                                              ? Colors.white38
+                                              : Colors.black26),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // 호실 칩 (펼쳐졌을 때만 표시)
+                      if (isExpanded && hasRooms)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: f.rooms
+                                .map(
+                                  (r) => Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: b.color.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: b.color.withValues(alpha: 0.18),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      r,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.9)
+                                            : Colors.black.withValues(alpha: 0.8),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
