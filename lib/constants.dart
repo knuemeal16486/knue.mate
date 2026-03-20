@@ -145,8 +145,19 @@ String _weekdayToDayParam(DateTime d) {
   return days[d.weekday % 7];
 }
 
-/// KNUE \uc2dd\ub2f8 HTML \uc2a4\ud06c\ub798\ud37c
-/// \uc8fc\uac04 \uce98\ub9b0\ub354 \ud14c\uc774\ube14\uc5d0\uc11c \uc694\uccad\ub41c \ub0a0\uc9dc\uc758 \uc870\uc2dd/\uc911\uc2dd/\uc11d\uc2dd \uba54\ub274\ub97c \ucd94\ucd9c
+DateTime getWidgetTargetDate(MealSource source) {
+  final now = DateTime.now();
+  final hour = now.hour;
+  if (source == MealSource.a && hour >= 19) {
+    return now.add(const Duration(days: 1));
+  } else if (source == MealSource.b && hour >= 18) {
+    return now.add(const Duration(days: 1));
+  }
+  return now;
+}
+
+/// KNUE 식당 HTML 스크래퍼
+/// 주간 캘린더 테이블에서 요청된 날짜의 조식/중식/석식 메뉴를 추출
 Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
   final monday = date.subtract(Duration(days: date.weekday - 1));
   final dateStr =
@@ -163,9 +174,9 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
       source,
     );
     if (cachedMeal != null) {
-      if (DateUtils.isSameDay(date, DateTime.now())) {
+      if (DateUtils.isSameDay(date, getWidgetTargetDate(source))) {
         // 위젯 업데이트는 비동기로 진행하고 데이터를 즉시 반환
-        _updateWidgetDataInternal(cachedMeal, source);
+        _updateWidgetDataInternal(cachedMeal, source, date);
       }
       return cachedMeal;
     }
@@ -195,8 +206,8 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
         FirebaseSyncService.saveMealToFirestore(date, source, result);
       }
 
-      if (DateUtils.isSameDay(date, DateTime.now())) {
-        _updateWidgetDataInternal(result, source);
+      if (DateUtils.isSameDay(date, getWidgetTargetDate(source))) {
+        _updateWidgetDataInternal(result, source, date);
       }
       return result;
     }
@@ -328,10 +339,12 @@ Map<String, dynamic> _parseCafeHtml(String html, DateTime date) {
 Future<void> _updateWidgetDataInternal(
   Map<String, dynamic> data,
   MealSource source,
+  DateTime requestedDate,
 ) async {
   try {
     final now = DateTime.now();
     final hour = now.hour;
+    final isTomorrow = requestedDate.day != now.day || requestedDate.month != now.month;
 
     String timeText = "";
     String mealKey = "";
@@ -346,18 +359,24 @@ Future<void> _updateWidgetDataInternal(
       } else if (hour < 14) {
         timeText = "오늘 점심";
         mealKey = "lunch";
-      } else {
+      } else if (hour < 19) {
         timeText = "오늘 저녁";
         mealKey = "dinner";
+      } else {
+        timeText = "내일 아침";
+        mealKey = "breakfast";
       }
     } else {
       // 학생회관
       if (hour < 14) {
         timeText = "오늘 점심";
         mealKey = "lunch";
-      } else {
+      } else if (hour < 18) {
         timeText = "오늘 저녁";
         mealKey = "dinner";
+      } else {
+        timeText = "내일 점심";
+        mealKey = "lunch";
       }
     }
 
@@ -378,6 +397,15 @@ Future<void> _updateWidgetDataInternal(
     String menuText = menuItems.isNotEmpty
         ? menuItems.map((e) => "· ${e.trim()}").join("\n")
         : "등록된 메뉴가 없습니다.";
+
+    // 학생회관의 경우, "내일"이 주말(토/일)이거나 공휴일이면 예외 문구 처리
+    if (source == MealSource.b && isTomorrow) {
+      final isWeekend = requestedDate.weekday == DateTime.saturday || requestedDate.weekday == DateTime.sunday;
+      // Note: 간단히 주말만 체크. 공휴일을 완벽히 체크하려면 법정공휴일 API가 필요하지만, 데이터(menuItems)가 없으면 엎어버릴 수 있음
+      if (isWeekend || menuItems.isEmpty) {
+        menuText = "내일은 식당을 운영하지 않아요 🥺";
+      }
+    }
 
     // 데이터 저장
     await HomeWidget.saveWidgetData<String>('widget_title', sourceName);
@@ -429,7 +457,8 @@ Future<void> saveWidgetSettingsAndUpdate(
     );
 
     // 실제 데이터 호출
-    await fetchMealApi(DateTime.now(), source);
+    final targetDate = getWidgetTargetDate(source);
+    await fetchMealApi(targetDate, source);
 
     if (context.mounted) showToast(context, "위젯 설정이 적용되었습니다.");
   } catch (e) {
@@ -439,7 +468,8 @@ Future<void> saveWidgetSettingsAndUpdate(
 
 Future<void> forceUpdateWidgetWithCurrentSettings() async {
   await PreferencesService.loadSettings();
-  await fetchMealApi(DateTime.now(), defaultSourceNotifier.value);
+  final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
+  await fetchMealApi(targetDate, defaultSourceNotifier.value);
 }
 
 Future<void> testBasicWidgetFunction() async {

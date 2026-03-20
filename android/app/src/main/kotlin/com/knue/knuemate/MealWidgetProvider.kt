@@ -63,7 +63,6 @@ class MealWidgetProvider : HomeWidgetProvider() {
                 views.setTextColor(R.id.widget_time, subColor)
                 views.setTextViewText(R.id.widget_menu, menu)
                 views.setTextColor(R.id.widget_menu, subColor)
-                views.setInt(R.id.widget_divider, "setBackgroundColor", dividerColor)
 
                 appWidgetManager.updateAppWidget(widgetId, views)
             } catch (e: Exception) {

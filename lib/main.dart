@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'constants.dart';
 import 'meal_screen.dart';
 import 'building_data.dart';
+import 'package:workmanager/workmanager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
@@ -18,10 +19,40 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint("Handling a background message: ${message.messageId}");
 }
 
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      await PreferencesService.loadSettings();
+      final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
+      await fetchMealApi(targetDate, defaultSourceNotifier.value);
+    } catch (e) {
+      debugPrint("Workmanager error: $e");
+    }
+    return Future.value(true);
+  });
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 워크매니저 초기화 및 정기적 위젯 업데이트 등록 (최소 15분 주기)
+  Workmanager().initialize(
+    callbackDispatcher,
+    isInDebugMode: false,
+  );
+  Workmanager().registerPeriodicTask(
+    "meal_widget_update_task",
+    "widget_update",
+    frequency: const Duration(minutes: 15),
+    constraints: Constraints(networkType: NetworkType.connected),
+  );
+
   // [개선] 초기화 작업을 병렬로 실행하여 앱 시작 시간 단축
+
   await Future.wait([
     // Firebase 초기화
     _initializeFirebase(),

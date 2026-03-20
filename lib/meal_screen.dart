@@ -498,7 +498,10 @@ class _TodayMealPageState extends State<TodayMealPage>
       builder: (context) => Dialog(
         backgroundColor: Theme.of(context).cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -521,18 +524,147 @@ class _TodayMealPageState extends State<TodayMealPage>
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              _buildInfoRow(Icons.place, "위치", isDorm ? "관리동 1층" : "학생회관 1층"),
-              const SizedBox(height: 12),
-              _buildInfoRow(
-                Icons.attach_money,
-                "가격",
-                isDorm ? "의무입사생 무료" : "5,500원 (일반)",
-              ),
-              const SizedBox(height: 12),
-              _buildInfoRow(
-                Icons.access_time,
-                "운영",
-                isDorm ? "연중무휴" : "주말/공휴일 휴무",
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildInfoRow(Icons.place, "위치", isDorm ? "관리동 1층" : "학생회관 1층"),
+                      const SizedBox(height: 12),
+                      _buildInfoRow(
+                        Icons.attach_money,
+                        "가격",
+                        isDorm ? "의무입사생 무료" : "5,500원 (일반)",
+                      ),
+                      const SizedBox(height: 12),
+                      _buildInfoRow(
+                        Icons.access_time,
+                        "운영",
+                        isDorm ? "연중무휴" : "주말/공휴일 휴무",
+                      ),
+                      if (!isDorm) ...[
+                        const SizedBox(height: 24),
+                        const SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            "선택식 메뉴",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ...[
+                          {
+                            "category": "🍲 한식 & 찌개",
+                            "items": [
+                              {"name": "느티헌 교원백반", "price": "5,500"},
+                              {"name": "매화헌 교원백반", "price": "6,000"},
+                              {"name": "촌돼지김치찌개", "price": "6,500"},
+                            ]
+                          },
+                          {
+                            "category": "🍜 라면",
+                            "items": [
+                              {"name": "해장라면+공기밥", "price": "5,000"},
+                              {"name": "떡만두라면+공기밥", "price": "5,200"},
+                              {"name": "치즈라면+공기밥", "price": "5,200"},
+                              {"name": "부대라면+공기밥", "price": "5,500"},
+                            ]
+                          },
+                          {
+                            "category": "🍛 돈까스 & 알밥",
+                            "items": [
+                              {"name": "등심돈까스", "price": "6,000"},
+                              {"name": "등심돈까스+알밥", "price": "6,500"},
+                              {"name": "치즈돈까스", "price": "6,500"},
+                              {"name": "치즈돈까스+알밥", "price": "7,000"},
+                              {"name": "고구마치즈돈까스", "price": "6,500"},
+                              {"name": "고구마치즈돈까스+알밥", "price": "7,000"},
+                              {"name": "치킨까스", "price": "6,000"},
+                              {"name": "치킨까스+알밥", "price": "6,500"},
+                            ]
+                          },
+                        ].map((group) {
+                          final category = group["category"] as String;
+                          final items = group["items"] as List<Map<String, String>>;
+                          final bool isDark = Theme.of(context).brightness == Brightness.dark;
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  category,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: isDark ? Colors.grey[900] : Colors.grey[50],
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    children: items.map((menu) {
+                                      final isLast = items.last == menu;
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 14,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          border: isLast
+                                              ? null
+                                              : Border(
+                                                  bottom: BorderSide(
+                                                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                                                  ),
+                                                ),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                menu["name"]!,
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                            Text(
+                                              "${menu["price"]}원",
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w900,
+                                                color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
               GestureDetector(
