@@ -529,12 +529,16 @@ class _TodayMealPageState extends State<TodayMealPage>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildInfoRow(Icons.place, "위치", isDorm ? "관리동 1층" : "학생회관 1층"),
+                      _buildInfoRow(
+                        Icons.place,
+                        "위치",
+                        isDorm ? "관리동 1층" : "학생회관 1층",
+                      ),
                       const SizedBox(height: 12),
                       _buildInfoRow(
                         Icons.attach_money,
                         "가격",
-                        isDorm ? "의무입사생 무료" : "5,500원 (일반)",
+                        isDorm ? "의무입사생 무료" : "5,500원 (느티헌)",
                       ),
                       const SizedBox(height: 12),
                       _buildInfoRow(
@@ -563,7 +567,7 @@ class _TodayMealPageState extends State<TodayMealPage>
                               {"name": "느티헌 교원백반", "price": "5,500"},
                               {"name": "매화헌 교원백반", "price": "6,000"},
                               {"name": "촌돼지김치찌개", "price": "6,500"},
-                            ]
+                            ],
                           },
                           {
                             "category": "🍜 라면",
@@ -572,7 +576,7 @@ class _TodayMealPageState extends State<TodayMealPage>
                               {"name": "떡만두라면+공기밥", "price": "5,200"},
                               {"name": "치즈라면+공기밥", "price": "5,200"},
                               {"name": "부대라면+공기밥", "price": "5,500"},
-                            ]
+                            ],
                           },
                           {
                             "category": "🍛 돈까스 & 알밥",
@@ -585,13 +589,15 @@ class _TodayMealPageState extends State<TodayMealPage>
                               {"name": "고구마치즈돈까스+알밥", "price": "7,000"},
                               {"name": "치킨까스", "price": "6,000"},
                               {"name": "치킨까스+알밥", "price": "6,500"},
-                            ]
+                            ],
                           },
                         ].map((group) {
                           final category = group["category"] as String;
-                          final items = group["items"] as List<Map<String, String>>;
-                          final bool isDark = Theme.of(context).brightness == Brightness.dark;
-                          
+                          final items =
+                              group["items"] as List<Map<String, String>>;
+                          final bool isDark =
+                              Theme.of(context).brightness == Brightness.dark;
+
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 20),
                             child: Column(
@@ -608,10 +614,14 @@ class _TodayMealPageState extends State<TodayMealPage>
                                 const SizedBox(height: 10),
                                 Container(
                                   decoration: BoxDecoration(
-                                    color: isDark ? Colors.grey[900] : Colors.grey[50],
+                                    color: isDark
+                                        ? Colors.grey[900]
+                                        : Colors.grey[50],
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                                      color: isDark
+                                          ? Colors.grey[800]!
+                                          : Colors.grey[200]!,
                                     ),
                                   ),
                                   child: Column(
@@ -627,12 +637,15 @@ class _TodayMealPageState extends State<TodayMealPage>
                                               ? null
                                               : Border(
                                                   bottom: BorderSide(
-                                                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                                                    color: isDark
+                                                        ? Colors.grey[800]!
+                                                        : Colors.grey[200]!,
                                                   ),
                                                 ),
                                         ),
                                         child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
                                             Expanded(
                                               child: Text(
@@ -648,7 +661,9 @@ class _TodayMealPageState extends State<TodayMealPage>
                                               style: TextStyle(
                                                 fontSize: 14,
                                                 fontWeight: FontWeight.w900,
-                                                color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                                color: isDark
+                                                    ? Colors.grey[300]
+                                                    : Colors.grey[700],
                                               ),
                                             ),
                                           ],

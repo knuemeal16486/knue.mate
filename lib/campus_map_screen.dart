@@ -18,6 +18,7 @@ import 'package:screenshot/screenshot.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'constants.dart';
 import 'meal_screen.dart';
+import 'admin_staff_data.dart';
 
 // ─────────────────────────────────────────────────── 데이터 모델 ──
 
@@ -370,23 +371,11 @@ const List<DeptOffice> kDeptOffices = [
   ),
 ];
 
-const List<DeptOffice> kAdminOffices = [
-  DeptOffice(
-    dept: '교무처',
-    college: '행정 부서',
-    building: '대학본부',
-    room: '2층',
-    phone: '043-230-3200',
-  ),
-  DeptOffice(
-    dept: '학생처',
-    college: '행정 부서',
-    building: '대학본부',
-    room: '2층',
-    phone: '043-230-3300',
-  ),
-];
+const List<DeptOffice> kAdminOffices = [];
+// 행정직원 데이터는 admin_staff_data.dart에서 불러온 kAdminStaff 리스트를 사용합니다.
+
 // Building data is now loaded dynamically from assets.
+
 
 final List<MapFacility> kFacilities = [
   // 사용자 제공 실제 좌표
@@ -648,6 +637,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   List<String> _favoriteAdmins = [];
   String deptSearchQuery = '';
   String adminSearchQuery = '';
+  final Set<String> _expandedAdminDepts = {};
 
   // 위치 관련
   Position? _userPosition;
@@ -3642,100 +3632,120 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(
+                    const Text(
                       '나의 관심 학과',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
-                        color: isDark ? Colors.white : Colors.black87,
+                        letterSpacing: -0.5,
                       ),
                     ),
                   ],
                 ),
               ),
             );
-            tabItems.add(
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  children: favs.map((d) {
-                    final ci = colleges.indexOf(d.college);
-                    final color = ci >= 0 ? collegeColors[ci] : Colors.blueGrey;
-                    return buildDeptItem(d, d.college, color);
-                  }).toList(),
+
+            for (final d in favs) {
+              tabItems.add(
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: buildDeptItem(d, '', Colors.amber),
                 ),
-              ),
-            );
+              );
+            }
+            tabItems.add(const SizedBox(height: 12));
           }
         }
 
-        // 3. 대학 분류 목록
-        for (var ci = 0; ci < colleges.length; ci++) {
-          final college = colleges[ci];
-          final color = collegeColors[ci];
-          final icon = collegeIcons[ci];
-          final depts = kDeptOffices.where((d) {
-            if (d.college != college) return false;
-            if (query.isEmpty) return true;
-            return d.dept.contains(query) || d.building.contains(query);
-          }).toList();
+        // 3. 전체 목록 (전공/학과)
+        if (query.isEmpty) {
+          for (int i = 0; i < colleges.length; i++) {
+            final college = colleges[i];
+            final color = collegeColors[i];
+            final icon = collegeIcons[i];
 
-          if (depts.isNotEmpty) {
+            final depts = kDeptOffices.where((d) => d.college == college).toList();
+            if (depts.isEmpty) continue;
+
             tabItems.add(
               Padding(
-                padding: const EdgeInsets.only(
-                  top: 12,
-                  bottom: 8,
-                  left: 16,
-                  right: 16,
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: Row(
                   children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(icon, size: 15, color: color),
-                    ),
+                    Icon(icon, size: 16, color: color),
                     const SizedBox(width: 8),
                     Text(
                       college,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${depts.length}개 학과',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? Colors.white38 : Colors.black38,
+                        color: color,
                       ),
                     ),
                   ],
                 ),
               ),
             );
+
+            for (final d in depts) {
+              tabItems.add(
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: buildDeptItem(d, college, color),
+                ),
+              );
+            }
+          }
+        } else {
+          final results = kDeptOffices
+              .where(
+                (d) =>
+                    d.dept.contains(query) ||
+                    d.building.contains(query) ||
+                    d.phone.contains(query),
+              )
+              .toList();
+
+          if (results.isEmpty) {
             tabItems.add(
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 64),
                 child: Column(
-                  children: depts
-                      .map((d) => buildDeptItem(d, college, color))
-                      .toList(),
+                  children: [
+                    Icon(
+                      Icons.search_off_rounded,
+                      size: 48,
+                      color: isDark ? Colors.white12 : Colors.black12,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '찾으시는 학과가 없습니다',
+                      style: TextStyle(
+                        color: isDark ? Colors.white38 : Colors.black38,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
+          } else {
+            for (final d in results) {
+              tabItems.add(
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: buildDeptItem(d, '', Colors.blue),
+                ),
+              );
+            }
           }
-        } // end loop
+        }
+
+        tabItems.add(const SizedBox(height: 100));
 
         return ListView(
-          padding: const EdgeInsets.only(bottom: 24),
+          padding: EdgeInsets.zero,
+          physics: const BouncingScrollPhysics(),
           children: tabItems,
         );
       },
@@ -3743,511 +3753,579 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   }
 
   Widget _buildAdminOfficeTab(bool isDark) {
-    const color = Colors.blueGrey;
-    const icon = Icons.account_balance_rounded;
+    const color = Colors.indigoAccent;
 
     return StatefulBuilder(
       builder: (ctx, setLocal) {
         final query = adminSearchQuery.trim();
-        List<Widget> tabItems = [];
 
-        tabItems.add(
-          SizedBox(height: MediaQuery.of(context).padding.top + 104),
-        );
-        tabItems.add(
+        // 1. 부서별 그룹화 및 검색 필터링
+        final Map<String, List<AdminStaff>> grouped = {};
+        for (final s in kAdminStaff) {
+          if (query.isNotEmpty) {
+            final matches = s.dept.contains(query) ||
+                s.duties.contains(query) ||
+                s.category.contains(query);
+            if (!matches) continue;
+          }
+          grouped.putIfAbsent(s.dept, () => []).add(s);
+        }
+
+        // 2. 정렬: 관심 부서 우선 -> 나머지 가나다순
+        final favDepts = grouped.keys
+            .where((d) => _favoriteAdmins.contains(d))
+            .toList();
+        final otherDepts = grouped.keys
+            .where((d) => !_favoriteAdmins.contains(d))
+            .toList()
+          ..sort();
+        final orderedDepts = [...favDepts, ...otherDepts];
+
+        Future<void> callPhone(String phoneNum) async {
+          final now = TimeOfDay.now();
+          final isLunch = now.hour == 12 || (now.hour == 11 && now.minute >= 55);
+          final confirm = await showDialog<bool>(
+            context: context,
+            builder: (c) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              backgroundColor: isDark ? const Color(0xFF1C1C2E) : Colors.white,
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.phone_in_talk_rounded,
+                      color: color,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    '전화 예절 확인',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isLunch)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.restaurant_rounded,
+                            color: Colors.orange,
+                            size: 18,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '현재는 점심시간(12:00~13:00)입니다.\n통화 연결이 어려울 수 있습니다.',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.04)
+                          : const Color(0xFFF8F9FA),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white10
+                            : Colors.black.withValues(alpha: 0.05),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '정중하게 말씀해 주세요',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: color.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text.rich(
+                          TextSpan(
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.6,
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.9)
+                                  : Colors.black87,
+                            ),
+                            children: [
+                              const TextSpan(text: '"안녕하세요, '),
+                              TextSpan(
+                                text: '김청람 학생',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: color,
+                                ),
+                              ),
+                              const TextSpan(text: '입니다.\n'),
+                              TextSpan(
+                                text: '[용건]',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: color,
+                                ),
+                              ),
+                              const TextSpan(text: ' 때문에 연락드렸습니다."'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline_rounded,
+                          size: 14,
+                          color: color,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '번호: $phoneNum',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: color,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(c, false),
+                  child: Text(
+                    '취소',
+                    style: TextStyle(
+                      color: isDark ? Colors.white38 : Colors.black38,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8, bottom: 4),
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(c, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: color,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      '통화 시작',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+          if (confirm == true) {
+            final uri = Uri.parse('tel:$phoneNum');
+            if (await canLaunchUrl(uri)) launchUrl(uri);
+          }
+        }
+
+        List<Widget> items = [];
+        items.add(SizedBox(height: MediaQuery.of(context).padding.top + 104));
+
+        // 3. 검색 섹션
+        items.add(
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
                 border: Border.all(
                   color: isDark
-                      ? Colors.white12
-                      : Colors.black.withValues(alpha: 0.08),
+                      ? Colors.white10
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.search_rounded,
-                    size: 18,
-                    color: isDark ? Colors.white38 : Colors.black38,
+                    color: color.withValues(alpha: 0.7),
+                    size: 22,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                       onChanged: (v) => setLocal(() => adminSearchQuery = v),
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontWeight: FontWeight.w500,
+                      ),
                       decoration: InputDecoration(
-                        hintText: '부서 또는 건물명 검색...',
+                        hintText: '부서명, 업무, 직책 등 검색...',
                         hintStyle: TextStyle(
-                          fontSize: 13,
-                          color: isDark ? Colors.white38 : Colors.black38,
+                          fontSize: 15,
+                          color: isDark ? Colors.white24 : Colors.black26,
                         ),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 11,
-                        ),
-                      ),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark ? Colors.white : Colors.black87,
                       ),
                     ),
                   ),
+                  if (adminSearchQuery.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => setLocal(() => adminSearchQuery = ''),
+                      color: isDark ? Colors.white30 : Colors.black26,
+                    ),
                 ],
               ),
             ),
           ),
         );
 
-        // 부서 아이템 위젯 생성 헬퍼
-        Widget buildAdminItem(DeptOffice d, Color color) {
-          final isFav = _favoriteAdmins.contains(d.dept);
-          return Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withValues(alpha: 0.15)),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(14, 6, 12, 6),
-              leading: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    if (isFav) {
-                      _favoriteAdmins.remove(d.dept);
-                    } else {
-                      if (_favoriteAdmins.length < 2) {
-                        _favoriteAdmins.add(d.dept);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('관심 부서는 최대 2개까지만 등록할 수 있습니다.'),
-                          ),
-                        );
-                      }
-                    }
-                    _saveFavoritesAndCategories();
-                  });
-                },
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: isFav
-                        ? Colors.amber.withValues(alpha: 0.15)
-                        : color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: Icon(
-                      isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-                      color: isFav ? Colors.amber : color,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
-              title: Text(
-                d.dept,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-              subtitle: Text(
-                '${d.building} ${d.room}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.white54 : Colors.black54,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: d.phone.split(',').map((p) {
-                  final phoneNum = p.trim();
-                  return GestureDetector(
-                    onTap: () async {
-                      final now = TimeOfDay.now();
-                      final isLunch =
-                          now.hour == 12 ||
-                          (now.hour == 11 && now.minute >= 55);
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (c) => AlertDialog(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          backgroundColor: isDark
-                              ? const Color(0xFF1C1C2E)
-                              : Colors.white,
-                          title: Row(
-                            children: [
-                              Icon(Icons.phone_rounded, color: color, size: 20),
-                              const SizedBox(width: 8),
-                              const Expanded(
-                                child: Text(
-                                  '전화 시 매너',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (isLunch)
-                                Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(
-                                      alpha: 0.12,
-                                    ),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: Colors.orange.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    children: [
-                                      Icon(
-                                        Icons.warning_amber_rounded,
-                                        color: Colors.orange,
-                                        size: 16,
-                                      ),
-                                      SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          '점심시간(12:00~13:00)입니다.\n연결이 안 될 수 있어요.',
-                                          style: TextStyle(
-                                            color: Colors.orange,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF2A2A3D)
-                                      : const Color(0xFFF8F9FA),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: color.withValues(alpha: 0.3),
-                                    width: 1.5,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: color.withValues(alpha: 0.1),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.format_quote_rounded,
-                                          color: color,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            '이렇게 말해보세요',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w700,
-                                              color: color,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text.rich(
-                                      TextSpan(
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          height: 1.6,
-                                          color: isDark
-                                              ? Colors.white
-                                              : Colors.black87,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        children: [
-                                          const TextSpan(text: '"안녕하세요, '),
-                                          TextSpan(
-                                            text: '김청람 학생',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: color,
-                                              backgroundColor: color.withValues(
-                                                alpha: 0.1,
-                                              ),
-                                            ),
-                                          ),
-                                          const TextSpan(text: '입니다.\n'),
-                                          const TextSpan(text: '다름이 아니라 '),
-                                          TextSpan(
-                                            text: '[용건]',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: color,
-                                              backgroundColor: color.withValues(
-                                                alpha: 0.1,
-                                              ),
-                                            ),
-                                          ),
-                                          const TextSpan(
-                                            text: ' 때문에 연락드렸습니다."',
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: color.withValues(alpha: 0.15),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.access_time_rounded,
-                                      size: 14,
-                                      color: color,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '운영시간 09:00~17:30 (점심 12:00~13:00)',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: color.withValues(alpha: 0.8),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(c, false),
-                              child: Text(
-                                '취소',
-                                style: TextStyle(
-                                  color: isDark
-                                      ? Colors.white54
-                                      : Colors.black45,
-                                ),
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () => Navigator.pop(c, true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: color,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(Icons.call_rounded, size: 16),
-                              label: const Text('전화하기'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (confirm == true) {
-                        final uri = Uri.parse('tel:$phoneNum');
-                        if (await canLaunchUrl(uri)) launchUrl(uri);
-                      }
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(left: 6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.call_rounded, size: 13, color: color),
-                          const SizedBox(height: 2),
-                          Text(
-                            phoneNum.replaceFirst('043-', ''),
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              onTap: () {
-                final building = kBuildings.firstWhere(
-                  (b) => b.name.contains(
-                    d.building.replaceAll('관', '').replaceAll('학관', ''),
-                  ),
-                  orElse: () => kBuildings.first,
-                );
-                _tabController.animateTo(0);
-                Future.delayed(
-                  const Duration(milliseconds: 200),
-                  () => _animatedMove(building.position, 18.5),
-                );
-              },
-            ),
-          );
-        }
-
-        // 2. 즐겨찾기 (관심 부서)
-        if (query.isEmpty && _favoriteAdmins.isNotEmpty) {
-          final favs = kAdminOffices
-              .where((d) => _favoriteAdmins.contains(d.dept))
-              .toList();
-          if (favs.isNotEmpty) {
-            tabItems.add(
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.star_rounded,
-                        size: 15,
-                        color: Colors.amber,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '나의 관심 부서',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-            tabItems.add(
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  children: favs.map((d) => buildAdminItem(d, color)).toList(),
-                ),
-              ),
-            );
-          }
-        }
-
-        // 3. 전체 부서 목록 (행정 부서)
-        final admins = kAdminOffices.where((d) {
-          if (query.isEmpty) return true;
-          return d.dept.contains(query) || d.building.contains(query);
-        }).toList();
-
-        if (admins.isNotEmpty) {
-          tabItems.add(
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Row(
+        if (grouped.isEmpty) {
+          items.add(
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 80),
+              child: Column(
                 children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(icon, size: 15, color: color),
+                  Icon(
+                    Icons.search_off_rounded,
+                    size: 64,
+                    color:
+                        isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(height: 16),
                   Text(
-                    '행정 부서',
+                    '찾으시는 부서가 없습니다',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${admins.length}개 부서',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? Colors.white38 : Colors.black38,
+                      color: isDark ? Colors.white30 : Colors.black26,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
           );
-          tabItems.add(
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: admins.map((d) => buildAdminItem(d, color)).toList(),
+        }
+
+        // 4. 부서별 아코디언 목록
+        for (final dept in orderedDepts) {
+          final staffList = grouped[dept]!;
+          final isFav = _favoriteAdmins.contains(dept);
+          final isExpanded =
+              _expandedAdminDepts.contains(dept) || query.isNotEmpty;
+
+          items.add(
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  if (isFav)
+                    BoxShadow(
+                      color: Colors.amber.withValues(alpha: isDark ? 0.1 : 0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                ],
+                border: Border.all(
+                  color: isFav
+                      ? Colors.amber.withValues(alpha: 0.5)
+                      : (isExpanded
+                          ? color.withValues(alpha: 0.3)
+                          : isDark
+                              ? Colors.white10
+                              : Colors.black.withValues(alpha: 0.05)),
+                  width: isFav || isExpanded ? 1.5 : 1.0,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Column(
+                  children: [
+                    // Header
+                    InkWell(
+                      onTap: () => setLocal(() {
+                        if (_expandedAdminDepts.contains(dept)) {
+                          _expandedAdminDepts.remove(dept);
+                        } else {
+                          _expandedAdminDepts.add(dept);
+                        }
+                      }),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (isFav) {
+                                    _favoriteAdmins.remove(dept);
+                                  } else {
+                                    if (_favoriteAdmins.length < 5) {
+                                      _favoriteAdmins.add(dept);
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content:
+                                              Text('관심 부서는 최대 5개까지 등록 가능합니다.'),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                  _saveFavoritesAndCategories();
+                                });
+                                setLocal(() {});
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isFav
+                                      ? Colors.amber.withValues(alpha: 0.15)
+                                      : (isDark
+                                          ? Colors.white.withValues(alpha: 0.05)
+                                          : const Color(0xFFF0F2F5)),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  isFav
+                                      ? Icons.star_rounded
+                                      : Icons.star_outline_rounded,
+                                  color: isFav
+                                      ? Colors.amber
+                                      : (isDark ? Colors.white24 : Colors.black26),
+                                  size: 18,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    dept,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
+                                      color:
+                                          isDark ? Colors.white : Colors.black87,
+                                      letterSpacing: -0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${staffList.length}명의 담당자',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark
+                                          ? Colors.white38
+                                          : Colors.black38,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            AnimatedRotation(
+                              turns: isExpanded ? 0.5 : 0,
+                              duration: const Duration(milliseconds: 300),
+                              child: Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: isDark ? Colors.white24 : Colors.black26,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Content
+                    if (isExpanded)
+                      Container(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.02)
+                            : const Color(0xFFFAFAFB),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: staffList.length,
+                          separatorBuilder: (c, i) => Divider(
+                            height: 1,
+                            indent: 16,
+                            endIndent: 16,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : Colors.black.withValues(alpha: 0.03),
+                          ),
+                          itemBuilder: (c, idx) {
+                            final s = staffList[idx];
+                            // 직책 표시 여부: 조교, 교수, 주무관이 아니면 표시
+                            final hideCategory = ['조교', '교수', '주무관'].contains(s.category);
+                            final showCategory = !hideCategory;
+
+                            return Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            if (showCategory)
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 2,
+                                                ),
+                                                margin: const EdgeInsets.only(
+                                                  right: 8,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: color.withValues(alpha: 0.1),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  s.category,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w900,
+                                                    color: color,
+                                                  ),
+                                                ),
+                                              ),
+                                            const Text(
+                                              '담당 업무',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                color: color,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          s.duties.isEmpty ? '업무 정보 없음' : s.duties,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            height: 1.4,
+                                            color: s.duties.isEmpty
+                                                ? (isDark
+                                                    ? Colors.white24
+                                                    : Colors.black26)
+                                                : (isDark
+                                                    ? Colors.white
+                                                        .withValues(alpha: 0.9)
+                                                    : Colors.black87),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  IconButton.filledTonal(
+                                    onPressed: () => callPhone(s.phone),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: color.withValues(alpha: 0.1),
+                                      foregroundColor: color,
+                                      padding: const EdgeInsets.all(10),
+                                    ),
+                                    icon: const Icon(Icons.phone_rounded, size: 20),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           );
         }
 
+        items.add(const SizedBox(height: 80));
+
         return ListView(
-          padding: const EdgeInsets.only(bottom: 24),
-          children: tabItems,
+          padding: EdgeInsets.zero,
+          physics: const BouncingScrollPhysics(),
+          children: items,
         );
       },
     );
   }
+
+
 
   void _showReorderSheet(bool isDark, Color primary) {
     final tempOrder = List<int>.from(_buildingOrder);
