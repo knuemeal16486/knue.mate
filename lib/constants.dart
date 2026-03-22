@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as htmlParser;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -122,7 +122,7 @@ Future<void> shareMenu(
     shareText += "\n\n⚡ 예상: $calories";
   }
 
-  await Share.share(shareText.trim());
+  await SharePlus.instance.share(ShareParams(text: shareText.trim()));
 }
 
 void showToast(BuildContext context, String msg) {
@@ -168,11 +168,12 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
       : 'https://pot.knue.ac.kr/enview/knue/mobileMenu.html#';
 
   try {
-    // 1. 파이어베이스에서 먼저 확인
+    // 1. 파이어베이스에서 먼저 확인 (타임아웃 단축 - 3초로 충분히 확인 가능)
     final cachedMeal = await FirebaseSyncService.getMealFromFirestore(
       date,
       source,
-    );
+    ).timeout(const Duration(seconds: 3), onTimeout: () => null);
+
     if (cachedMeal != null) {
       if (DateUtils.isSameDay(date, getWidgetTargetDate(source))) {
         // 위젯 업데이트는 비동기로 진행하고 데이터를 즉시 반환
@@ -181,6 +182,7 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
       return cachedMeal;
     }
 
+    // 2. 직접 스크래핑 시도
     final response = await http
         .get(
           Uri.parse(url),
@@ -189,7 +191,7 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
             'Accept': 'text/html,*/*',
           },
         )
-        .timeout(const Duration(seconds: 15)); // 타임아웃 단축 (30s -> 15s)
+        .timeout(const Duration(seconds: 20)); // 스크래핑은 조금 더 여유를 줌 (20초)
 
     if (response.statusCode == 200) {
       final html = utf8.decode(response.bodyBytes, allowMalformed: true);
@@ -344,7 +346,8 @@ Future<void> _updateWidgetDataInternal(
   try {
     final now = DateTime.now();
     final hour = now.hour;
-    final isTomorrow = requestedDate.day != now.day || requestedDate.month != now.month;
+    final isTomorrow =
+        requestedDate.day != now.day || requestedDate.month != now.month;
 
     String timeText = "";
     String mealKey = "";
@@ -400,7 +403,9 @@ Future<void> _updateWidgetDataInternal(
 
     // 학생회관의 경우, "내일"이 주말(토/일)이거나 공휴일이면 예외 문구 처리
     if (source == MealSource.b && isTomorrow) {
-      final isWeekend = requestedDate.weekday == DateTime.saturday || requestedDate.weekday == DateTime.sunday;
+      final isWeekend =
+          requestedDate.weekday == DateTime.saturday ||
+          requestedDate.weekday == DateTime.sunday;
       // Note: 간단히 주말만 체크. 공휴일을 완벽히 체크하려면 법정공휴일 API가 필요하지만, 데이터(menuItems)가 없으면 엎어버릴 수 있음
       if (isWeekend || menuItems.isEmpty) {
         menuText = "내일은 식당을 운영하지 않아요 🥺";
@@ -563,6 +568,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
+    if (kIsWeb) return;
     if (!Platform.isAndroid && !Platform.isIOS) return;
     tz.initializeTimeZones();
     try {
@@ -571,24 +577,33 @@ class NotificationService {
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const ios = DarwinInitializationSettings();
-    await flutterLocalNotificationsPlugin.initialize(
-      const InitializationSettings(android: android, iOS: ios),
-    );
+    try {
+      await flutterLocalNotificationsPlugin.initialize(
+        const InitializationSettings(android: android, iOS: ios),
+      );
+    } catch (e) {
+      debugPrint("Local Notifications initialize error: $e");
+    }
   }
 
   Future<void> requestPermissions() async {
-    if (Platform.isAndroid) {
-      await flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.requestNotificationsPermission();
-    } else if (Platform.isIOS) {
-      await flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin
-          >()
-          ?.requestPermissions(alert: true, badge: true, sound: true);
+    if (kIsWeb) return;
+    try {
+      if (Platform.isAndroid) {
+        await flutterLocalNotificationsPlugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.requestNotificationsPermission();
+      } else if (Platform.isIOS || Platform.isMacOS) {
+        await flutterLocalNotificationsPlugin
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >()
+            ?.requestPermissions(alert: true, badge: true, sound: true);
+      }
+    } catch (e) {
+      debugPrint("Notification permission request error: $e");
     }
   }
 

@@ -8,7 +8,7 @@ import 'constants.dart';
 import 'bus_model.dart';
 
 class FirebaseSyncService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   /// [건물 정보] 로컬 JSON 데이터를 Firestore로 업로드합니다.
   static Future<void> uploadBuildingsToFirestore() async {

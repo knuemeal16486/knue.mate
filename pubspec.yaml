@@ -96,6 +96,7 @@ flutter:
   assets:
     - .env
     - assets/buildings/knue_buildings.json
+    - assets/icons/knuesquare.png
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

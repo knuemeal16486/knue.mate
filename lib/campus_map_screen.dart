@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'dart:convert';
 import 'building_data.dart';
@@ -375,7 +374,6 @@ const List<DeptOffice> kAdminOffices = [];
 // 행정직원 데이터는 admin_staff_data.dart에서 불러온 kAdminStaff 리스트를 사용합니다.
 
 // Building data is now loaded dynamically from assets.
-
 
 final List<MapFacility> kFacilities = [
   // 사용자 제공 실제 좌표
@@ -3664,7 +3662,9 @@ class _CampusMapScreenState extends State<CampusMapScreen>
             final color = collegeColors[i];
             final icon = collegeIcons[i];
 
-            final depts = kDeptOffices.where((d) => d.college == college).toList();
+            final depts = kDeptOffices
+                .where((d) => d.college == college)
+                .toList();
             if (depts.isEmpty) continue;
 
             tabItems.add(
@@ -3763,7 +3763,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         final Map<String, List<AdminStaff>> grouped = {};
         for (final s in kAdminStaff) {
           if (query.isNotEmpty) {
-            final matches = s.dept.contains(query) ||
+            final matches =
+                s.dept.contains(query) ||
                 s.duties.contains(query) ||
                 s.category.contains(query);
             if (!matches) continue;
@@ -3775,15 +3776,15 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         final favDepts = grouped.keys
             .where((d) => _favoriteAdmins.contains(d))
             .toList();
-        final otherDepts = grouped.keys
-            .where((d) => !_favoriteAdmins.contains(d))
-            .toList()
-          ..sort();
+        final otherDepts =
+            grouped.keys.where((d) => !_favoriteAdmins.contains(d)).toList()
+              ..sort();
         final orderedDepts = [...favDepts, ...otherDepts];
 
         Future<void> callPhone(String phoneNum) async {
           final now = TimeOfDay.now();
-          final isLunch = now.hour == 12 || (now.hour == 11 && now.minute >= 55);
+          final isLunch =
+              now.hour == 12 || (now.hour == 11 && now.minute >= 55);
           final confirm = await showDialog<bool>(
             context: context,
             builder: (c) => AlertDialog(
@@ -4053,8 +4054,9 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                   Icon(
                     Icons.search_off_rounded,
                     size: 64,
-                    color:
-                        isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                    color: isDark
+                        ? Colors.white10
+                        : Colors.black.withValues(alpha: 0.05),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -4097,10 +4099,10 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                   color: isFav
                       ? Colors.amber.withValues(alpha: 0.5)
                       : (isExpanded
-                          ? color.withValues(alpha: 0.3)
-                          : isDark
-                              ? Colors.white10
-                              : Colors.black.withValues(alpha: 0.05)),
+                            ? color.withValues(alpha: 0.3)
+                            : isDark
+                            ? Colors.white10
+                            : Colors.black.withValues(alpha: 0.05)),
                   width: isFav || isExpanded ? 1.5 : 1.0,
                 ),
               ),
@@ -4130,10 +4132,13 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                     if (_favoriteAdmins.length < 5) {
                                       _favoriteAdmins.add(dept);
                                     } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
-                                          content:
-                                              Text('관심 부서는 최대 5개까지 등록 가능합니다.'),
+                                          content: Text(
+                                            '관심 부서는 최대 5개까지 등록 가능합니다.',
+                                          ),
                                         ),
                                       );
                                     }
@@ -4148,8 +4153,10 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                   color: isFav
                                       ? Colors.amber.withValues(alpha: 0.15)
                                       : (isDark
-                                          ? Colors.white.withValues(alpha: 0.05)
-                                          : const Color(0xFFF0F2F5)),
+                                            ? Colors.white.withValues(
+                                                alpha: 0.05,
+                                              )
+                                            : const Color(0xFFF0F2F5)),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
@@ -4158,7 +4165,9 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                       : Icons.star_outline_rounded,
                                   color: isFav
                                       ? Colors.amber
-                                      : (isDark ? Colors.white24 : Colors.black26),
+                                      : (isDark
+                                            ? Colors.white24
+                                            : Colors.black26),
                                   size: 18,
                                 ),
                               ),
@@ -4173,8 +4182,9 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                     style: TextStyle(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 16,
-                                      color:
-                                          isDark ? Colors.white : Colors.black87,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black87,
                                       letterSpacing: -0.5,
                                     ),
                                   ),
@@ -4225,7 +4235,11 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                           itemBuilder: (c, idx) {
                             final s = staffList[idx];
                             // 직책 표시 여부: 조교, 교수, 주무관이 아니면 표시
-                            final hideCategory = ['조교', '교수', '주무관'].contains(s.category);
+                            final hideCategory = [
+                              '조교',
+                              '교수',
+                              '주무관',
+                            ].contains(s.category);
                             final showCategory = !hideCategory;
 
                             return Padding(
@@ -4235,21 +4249,25 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
                                             if (showCategory)
                                               Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
-                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
                                                 margin: const EdgeInsets.only(
                                                   right: 8,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: color.withValues(alpha: 0.1),
+                                                  color: color.withValues(
+                                                    alpha: 0.1,
+                                                  ),
                                                   borderRadius:
                                                       BorderRadius.circular(4),
                                                 ),
@@ -4274,18 +4292,21 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                         ),
                                         const SizedBox(height: 6),
                                         Text(
-                                          s.duties.isEmpty ? '업무 정보 없음' : s.duties,
+                                          s.duties.isEmpty
+                                              ? '업무 정보 없음'
+                                              : s.duties,
                                           style: TextStyle(
                                             fontSize: 14,
                                             height: 1.4,
                                             color: s.duties.isEmpty
                                                 ? (isDark
-                                                    ? Colors.white24
-                                                    : Colors.black26)
+                                                      ? Colors.white24
+                                                      : Colors.black26)
                                                 : (isDark
-                                                    ? Colors.white
-                                                        .withValues(alpha: 0.9)
-                                                    : Colors.black87),
+                                                      ? Colors.white.withValues(
+                                                          alpha: 0.9,
+                                                        )
+                                                      : Colors.black87),
                                           ),
                                         ),
                                       ],
@@ -4295,11 +4316,16 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                                   IconButton.filledTonal(
                                     onPressed: () => callPhone(s.phone),
                                     style: IconButton.styleFrom(
-                                      backgroundColor: color.withValues(alpha: 0.1),
+                                      backgroundColor: color.withValues(
+                                        alpha: 0.1,
+                                      ),
                                       foregroundColor: color,
                                       padding: const EdgeInsets.all(10),
                                     ),
-                                    icon: const Icon(Icons.phone_rounded, size: 20),
+                                    icon: const Icon(
+                                      Icons.phone_rounded,
+                                      size: 20,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -4324,8 +4350,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
       },
     );
   }
-
-
 
   void _showReorderSheet(bool isDark, Color primary) {
     final tempOrder = List<int>.from(_buildingOrder);
@@ -5913,15 +5937,11 @@ class _ScreenshotShareDialogState extends State<_ScreenshotShareDialog> {
                   try {
                     final image = await _screenshotController.capture();
                     if (image != null) {
-                      final file = XFile.fromData(
-                        image,
-                        mimeType: 'image/png',
-                        name: 'trail.png',
-                      );
-                      await Share.shareXFiles(
-                        [file],
-                        text:
-                            '📍 산책로: ${widget.name}\n경유지 ${widget.trail.length}개\n── 한국교원대학교 캠퍼스맵 앱에서 공유 ──',
+                      await SharePlus.instance.share(
+                        ShareParams(
+                          text:
+                              '📍 산책로: ${widget.name}\n경유지 ${widget.trail.length}개\n── 한국교원대학교 캠퍼스맵 앱에서 공유 ──',
+                        ),
                       );
                       if (context.mounted) Navigator.pop(context);
                     }
@@ -6306,8 +6326,12 @@ class _BuildingFloorSectionState extends State<_BuildingFloorSection> {
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
                                         color: isDark
-                                            ? Colors.white.withValues(alpha: 0.9)
-                                            : Colors.black.withValues(alpha: 0.8),
+                                            ? Colors.white.withValues(
+                                                alpha: 0.9,
+                                              )
+                                            : Colors.black.withValues(
+                                                alpha: 0.8,
+                                              ),
                                       ),
                                     ),
                                   ),

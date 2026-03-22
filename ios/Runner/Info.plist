@@ -72,7 +72,13 @@
 	<array>
 		<string>location</string>
 		<string>fetch</string>
+		<string>processing</string>
 		<string>remote-notification</string>
 	</array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>widget_update</string>
+        <string>meal_widget_update_task</string>
+    </array>
 </dict>
 </plist>

@@ -9,6 +9,8 @@ import 'campus_run_screen.dart';
 import 'campus_map_screen.dart';
 import 'gemini_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 // =============================================================================
 // 1. 메인 스크린 (탭 관리)
@@ -367,8 +369,11 @@ class _TodayMealPageState extends State<TodayMealPage>
         body: SingleChildScrollView(
           child: Column(
             children: [
+              // [수정] Firebase 앱 초기화 여부 확인 후 Stream 사용
               StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
+                stream: Firebase.apps.isEmpty 
+                  ? const Stream.empty() 
+                  : FirebaseFirestore.instance
                     .collection('notices')
                     .orderBy('createdAt', descending: true)
                     .limit(1)

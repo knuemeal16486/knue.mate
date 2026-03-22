@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -36,66 +37,194 @@ void callbackDispatcher() {
   });
 }
 
+class StartupErrorApp extends StatelessWidget {
+  final Object error;
+  final StackTrace stackTrace;
+  const StartupErrorApp(this.error, this.stackTrace, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  "앱 초기화 오류",
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "문제가 발생하여 앱을 시작할 수 없습니다.\n아래 내용을 개발자에게 전달해 주세요.",
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+                const Divider(height: 32),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    "$error\n\n$stackTrace",
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.redAccent),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 void main() async {
+  // 1. 바인딩 초기화
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 워크매니저 초기화 및 정기적 위젯 업데이트 등록 (최소 15분 주기)
-  Workmanager().initialize(
-    callbackDispatcher,
-    isInDebugMode: false,
+  // [추가] UI 에러 핸들러 설정 (화이트 스크린 방지용 최후의 보루)
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return StartupErrorApp(details.exception, details.stack ?? StackTrace.empty);
+  };
+
+  try {
+    // 2. 초기 로딩 화면 표시 (하얀 화면 방지)
+    // [중요] 앱이 실행되자마자 UI를 먼저 그려서 OS와의 연결을 유지함
+    runApp(
+      const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        builder: _buildLoadingScreen,
+        home: Scaffold(backgroundColor: Colors.white),
+      ),
+    );
+
+    // 3. 최우선 순위: Firebase 초기화
+    // 다른 모든 서비스(Firestore 등)가 Firebase에 의존하므로 가장 먼저 처리
+    await _initializeFirebase();
+
+    // 4. 나머지 중요 설정 병렬 로드
+    await Future.wait([
+      initializeDateFormatting(),
+      dotenv.load(fileName: ".env"),
+      loadBuildingData(), // 이제 Firebase가 있으므로 내부에서 Firestore 접근 가능
+      PreferencesService.loadSettings(),
+    ]);
+
+    // 5. 플러그인 및 기타 비필수 초기화
+    try {
+      _initializeBackgroundTasks();
+      await _initializeHomeWidget();
+      await NotificationService().init();
+    } catch (e) {
+      debugPrint("Plugin initialization error: $e");
+    }
+
+    // 6. 워크매니저 초기화
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      try {
+        await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+        await Workmanager().registerPeriodicTask(
+          "meal_widget_update_task",
+          "widget_update",
+          frequency: const Duration(minutes: 15),
+          constraints: Constraints(networkType: NetworkType.connected),
+        );
+      } catch (e) {
+        debugPrint("Workmanager setup error: $e");
+      }
+    }
+
+    // 7. 메인 앱 실행
+    runApp(const MyApp());
+  } catch (e, stackTrace) {
+    debugPrint("Native/Fatal Init Error: $e\n$stackTrace");
+    // 치명적 오류 시 전전용 에러 앱 표시
+    runApp(StartupErrorApp(e, stackTrace));
+  }
+}
+
+Widget _buildLoadingScreen(BuildContext context, Widget? child) {
+  return Scaffold(
+    backgroundColor: Colors.white,
+    body: Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // 앱 로고 이미지가 있다면 여기에 배치 (assets/icons/knuesquare.png)
+          Image.asset('assets/icons/knuesquare.png', width: 100, height: 100, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
+          const SizedBox(height: 24),
+          const CircularProgressIndicator(strokeWidth: 3),
+          const SizedBox(height: 16),
+          const Text("캠퍼스 데이터를 불러오는 중...", style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    ),
   );
-  Workmanager().registerPeriodicTask(
-    "meal_widget_update_task",
-    "widget_update",
-    frequency: const Duration(minutes: 15),
-    constraints: Constraints(networkType: NetworkType.connected),
-  );
-
-  // [개선] 초기화 작업을 병렬로 실행하여 앱 시작 시간 단축
-
-  await Future.wait([
-    // Firebase 초기화
-    _initializeFirebase(),
-    // 날짜 형식 초기화
-    initializeDateFormatting(),
-    // dotenv 로드
-    dotenv.load(fileName: ".env"),
-    // Gebäude 데이터 로드
-    loadBuildingData(),
-    // 설정 로드
-    PreferencesService.loadSettings(),
-  ]);
-
-  // 백그라운드 작업들 (병렬로 실행해도 무방)
-  _initializeBackgroundTasks();
-
-  // HomeWidget 초기화 (UI Blocking 방지)
-  _initializeHomeWidget();
-
-  // 알림 서비스 초기화
-  await NotificationService().init();
-
-  runApp(const MyApp());
 }
 
 Future<void> _initializeFirebase() async {
   try {
+    // 1. Firebase 초기화 완료 대기
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    
+    // 2. 초기화 완료 후 서비스 설정
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // FCM 권한 요청 및 토큰 가져오기
+    // FCM 설정 (비동기, 메인 루프 방해 안 함)
+    _setupFirebaseMessaging();
+  } catch (e) {
+    debugPrint("Firebase init error: $e");
+  }
+}
+
+Future<void> _setupFirebaseMessaging() async {
+  try {
     final messaging = FirebaseMessaging.instance;
-    final settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    NotificationSettings settings;
+    try {
+      settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (e) {
+      debugPrint("Firebase Messaging requestPermission error: $e");
+      return;
+    }
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      final fcmToken = await messaging.getToken();
-      debugPrint("FCM Token: ${fcmToken?.substring(0, 20)}...");
+      // iOS에서는 APNS 토큰이 먼저 준비되어야 FCM 토큰을 정상적으로 받아올 수 있음
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        try {
+          final apnsToken = await messaging.getAPNSToken();
+          if (apnsToken == null) {
+            debugPrint("APNS Token not yet available. FCM token might fail.");
+            return;
+          }
+        } catch (e) {
+          debugPrint("APNS Token fetch error: $e");
+          return;
+        }
+      }
+      
+      try {
+        final fcmToken = await messaging.getToken();
+        if (fcmToken != null) {
+          final displayToken = fcmToken.length > 20 ? fcmToken.substring(0, 20) : fcmToken;
+          debugPrint("FCM Token: $displayToken...");
+        }
+      } catch (e) {
+        debugPrint("FCM Token fetch error: $e");
+      }
     }
 
     // 포그라운드 메시지 리스너
@@ -109,7 +238,7 @@ Future<void> _initializeFirebase() async {
       }
     });
   } catch (e) {
-    debugPrint("Firebase init error: $e");
+    debugPrint("Firebase messaging setup error: $e");
   }
 }
 
@@ -120,16 +249,15 @@ void _initializeBackgroundTasks() {
 
 Future<void> _initializeHomeWidget() async {
   try {
+    debugPrint("HomeWidget 초기화 시도...");
     await HomeWidget.setAppGroupId('group.knue.meal');
-    final launchedFromWidget =
-        await HomeWidget.initiallyLaunchedFromHomeWidget();
-    if (launchedFromWidget == true) {
-      // Uri? 타입이므로 == true로 비교
+    final launchedFromWidget = await HomeWidget.initiallyLaunchedFromHomeWidget();
+    if (launchedFromWidget != null) {
       final title = await HomeWidget.getWidgetData<String>('title');
       debugPrint("위젯 데이터 - title: $title");
     }
   } catch (e) {
-    debugPrint("HomeWidget 초기화 오류: $e");
+    debugPrint("HomeWidget 초기화 건너뜀 (플랫폼 제약 가능성): $e");
   }
 }
 
