@@ -293,7 +293,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
 
       const LocationSettings locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 0,
+        distanceFilter: 1, // 1m 이상 이동 시에만 업데이트하여 UI 멈춤 방지
       );
 
       _positionStream =

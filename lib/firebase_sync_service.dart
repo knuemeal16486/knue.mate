@@ -16,17 +16,19 @@ class FirebaseSyncService {
       final String jsonString = await rootBundle.loadString(
         'assets/buildings/knue_buildings.json',
       );
-      final Map<String, dynamic> jsonData = json.decode(jsonString);
+      final dynamic decoded = json.decode(jsonString);
+      final Map<String, dynamic> jsonData = Map<String, dynamic>.from(decoded);
       final List<dynamic> buildingsJson = jsonData['buildings'];
 
       final batch = _firestore.batch();
       final collection = _firestore.collection('knue_buildings');
 
       for (var bJson in buildingsJson) {
-        final String name = bJson['name'];
+        final Map<String, dynamic> buildingData = Map<String, dynamic>.from(bJson);
+        final String name = buildingData['name'];
         final docRef = collection.doc(name);
         batch.set(docRef, {
-          ...bJson,
+          ...buildingData,
           'lastUpdated': FieldValue.serverTimestamp(),
         });
       }
