@@ -11,6 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:home_widget/home_widget.dart';
+import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
 
 // [1] 전역 설정
@@ -139,12 +140,6 @@ void showToast(BuildContext context, String msg) {
 }
 
 // [3] API 및 위젯 로직
-/// 요일을 요일 파라미터로 변환
-String _weekdayToDayParam(DateTime d) {
-  const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-  return days[d.weekday % 7];
-}
-
 DateTime getWidgetTargetDate(MealSource source) {
   final now = DateTime.now();
   final hour = now.hour;
@@ -576,11 +571,20 @@ class NotificationService {
     } catch (_) {}
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const ios = DarwinInitializationSettings();
+    // [수정] 초기화 시점에 자동으로 권한을 요청하지 않음.
+    // 권한이 거부된 상태에서 requestAlert/Badge/SoundPermission: true(기본값)이면
+    // initialize() 자체가 PlatformException을 던집니다.
+    const ios = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
     try {
       await flutterLocalNotificationsPlugin.initialize(
         const InitializationSettings(android: android, iOS: ios),
       );
+    } on PlatformException catch (e) {
+      debugPrint("Native Notification Platform Error (Likely permission denied): $e");
     } catch (e) {
       debugPrint("Local Notifications initialize error: $e");
     }
@@ -607,11 +611,50 @@ class NotificationService {
     }
   }
 
-  Future<void> cancelAll() async =>
-      await flutterLocalNotificationsPlugin.cancelAll();
+  /// 권한을 요청하고 실제 허가 여부를 반환합니다.
+  /// iOS는 requestPermissions()의 결과(bool?)를 직접 사용,
+  /// Android는 예외 없이 완료되면 granted로 간주합니다.
+  Future<bool> checkAndRequestPermission() async {
+    if (kIsWeb) return false;
+    try {
+      if (Platform.isAndroid) {
+        final result = await flutterLocalNotificationsPlugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.requestNotificationsPermission();
+        return result ?? true; // null이면 이미 허용된 것으로 간주
+      } else if (Platform.isIOS) {
+        final result = await flutterLocalNotificationsPlugin
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >()
+            ?.requestPermissions(alert: true, badge: true, sound: true);
+        return result ?? false;
+      }
+    } catch (e) {
+      debugPrint("checkAndRequestPermission error: $e");
+      return false;
+    }
+    return false;
+  }
 
-  Future<void> cancelAlarm(int id) async =>
+
+  Future<void> cancelAll() async {
+    try {
+      await flutterLocalNotificationsPlugin.cancelAll();
+    } catch (e) {
+      debugPrint("cancelAll error: $e");
+    }
+  }
+
+  Future<void> cancelAlarm(int id) async {
+    try {
       await flutterLocalNotificationsPlugin.cancel(id);
+    } catch (e) {
+      debugPrint("cancelAlarm error: $e");
+    }
+  }
 
   Future<void> scheduleAlarm({
     required int id,
@@ -646,7 +689,7 @@ class NotificationService {
     }
   }
 
-  // FCM 포그라운드 수신용 즉시 알림 메서드 추가
+  // FCM 포그라운드 수신용 즉시 알림 메서드
   Future<void> showNotification(int id, String title, String body) async {
     const android = AndroidNotificationDetails(
       'fcm_general_channel',
@@ -659,11 +702,16 @@ class NotificationService {
       presentBadge: true,
       presentSound: true,
     );
-    await flutterLocalNotificationsPlugin.show(
-      id,
-      title,
-      body,
-      const NotificationDetails(android: android, iOS: ios),
-    );
+    try {
+      await flutterLocalNotificationsPlugin.show(
+        id,
+        title,
+        body,
+        const NotificationDetails(android: android, iOS: ios),
+      );
+    } catch (e) {
+      // 알림 권한이 없거나 플랫폼 제약으로 실패한 경우 — 앱 크래시 방지
+      debugPrint("showNotification 실패 (권한 없음 또는 플랫폼 오류): $e");
+    }
   }
 }

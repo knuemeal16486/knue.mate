@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -172,7 +173,7 @@ Widget _buildLoadingScreen(BuildContext context, Widget? child) {
 Future<void> _initializeFirebase() async {
   try {
     // 1. Firebase 초기화 완료 대기
-    await Firebase.initializeApp(
+    await Firebase. initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
     
@@ -215,28 +216,32 @@ Future<void> _setupFirebaseMessaging() async {
           return;
         }
       }
-      
+
       try {
         final fcmToken = await messaging.getToken();
         if (fcmToken != null) {
           final displayToken = fcmToken.length > 20 ? fcmToken.substring(0, 20) : fcmToken;
           debugPrint("FCM Token: $displayToken...");
         }
+      } on PlatformException catch (e) {
+        debugPrint("FCM Token fetch PlatformException (Denied/Disabled): $e");
       } catch (e) {
         debugPrint("FCM Token fetch error: $e");
       }
-    }
 
-    // 포그라운드 메시지 리스너
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (message.notification != null) {
-        NotificationService().showNotification(
-          message.notification.hashCode,
-          message.notification!.title ?? '알림',
-          message.notification!.body ?? '',
-        );
-      }
-    });
+      // [수정] 포그라운드 메시지 리스너 — 권한이 허가된 경우에만 등록
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        if (message.notification != null) {
+          NotificationService().showNotification(
+            message.notification.hashCode,
+            message.notification!.title ?? '알림',
+            message.notification!.body ?? '',
+          );
+        }
+      });
+    } else {
+      debugPrint("FCM 알림 권한 없음 (status: ${settings.authorizationStatus}). 포그라운드 알림 비활성화.");
+    }
   } catch (e) {
     debugPrint("Firebase messaging setup error: $e");
   }

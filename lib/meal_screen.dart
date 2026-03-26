@@ -238,7 +238,18 @@ class _TodayMealPageState extends State<TodayMealPage>
     setState(() => _alarmOn = newState);
 
     if (newState) {
-      await NotificationService().requestPermissions();
+      // [수정] 권한을 먼저 요청하고, 그 결과(bool)를 받아 허가된 경우에만 알람 예약
+      final bool isGranted = await NotificationService().checkAndRequestPermission();
+
+      if (!isGranted) {
+        // 권한 거부 — 알람 상태를 OFF로 되돌리고 안내
+        await prefs.setBool('alarm_enabled', false);
+        if (!mounted) return;
+        setState(() => _alarmOn = false);
+        showToast(context, "알림 권한이 필요합니다. 설정 > 앱 > 알림에서 허용해주세요.");
+        return;
+      }
+
       await _scheduleAlarmsBySource(_source);
       if (!mounted) return;
       final restaurantName = _source == MealSource.a ? "기숙사" : "학생회관";

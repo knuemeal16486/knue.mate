@@ -153,7 +153,7 @@ class BusService {
       final results = await Future.wait(
         _kRoutes.map(
           (cfg) => _fetchRouteRemaining(cfg).timeout(
-            const Duration(seconds: 7), // 전체 병렬 작업에 대한 약간 긴 타임아웃
+            const Duration(seconds: 12), // 전체 병렬 작업에 대한 약간 긴 타임아웃
             onTimeout: () =>
                 RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []),
           ),
@@ -222,14 +222,31 @@ class BusService {
     try {
       final res = await http
           .get(uri, headers: {"Accept": "application/json"})
-          .timeout(const Duration(seconds: 5)); // [개선] 개별 API 타임아웃 단축
+          .timeout(const Duration(seconds: 10)); // 개별 API 타임아웃 연장
 
       if (res.statusCode != 200) {
         return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []);
       }
 
       final decoded = jsonDecode(utf8.decode(res.bodyBytes));
-      final items = decoded["response"]?["body"]?["items"]?["item"];
+      if (decoded is! Map) return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []);
+      
+      final dynamic response = decoded["response"];
+      if (response == null || response is! Map) {
+        return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []);
+      }
+      
+      final dynamic bodyObj = response["body"];
+      if (bodyObj == null || bodyObj is! Map) {
+        return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []);
+      }
+      
+      final dynamic itemsObj = bodyObj["items"];
+      if (itemsObj == null || itemsObj is! Map) {
+        return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []);
+      }
+      
+      final dynamic items = itemsObj["item"];
 
       List<dynamic> list;
       if (items == null) {
@@ -371,7 +388,18 @@ class BusService {
       if (res.statusCode != 200) return [];
 
       final decoded = jsonDecode(utf8.decode(res.bodyBytes));
-      final items = decoded["response"]?["body"]?["items"]?["item"];
+      if (decoded is! Map) return [];
+      
+      final dynamic response = decoded["response"];
+      if (response == null || response is! Map) return [];
+      
+      final dynamic bodyObj = response["body"];
+      if (bodyObj == null || bodyObj is! Map) return [];
+      
+      final dynamic itemsObj = bodyObj["items"];
+      if (itemsObj == null || itemsObj is! Map) return [];
+      
+      final dynamic items = itemsObj["item"];
 
       List<dynamic> list;
       if (items == null) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_route_data.dart';
@@ -9,528 +10,6 @@ class BusCard extends StatelessWidget {
   final BusSummary bus;
 
   const BusCard({super.key, required this.bus});
-
-  // 주요 정류장 정보 데이터
-  // 노선별 상행/하행 정류장 데이터
-  static const Map<String, dynamic> _fullRouteStops = {
-    "513": {
-      "상행": [
-        "동부종점",
-        "금천배수지",
-        "국제테니스장",
-        "금천중학교",
-        "세영첼시빌",
-        "장자마을5단지아파트",
-        "금천초등학교",
-        "금천새마을금고",
-        "금천동행정복지센터",
-        "제1금탑교",
-        "일신여자고등학교",
-        "육거리",
-        "서운동",
-        "도청",
-        "청주대교",
-        "사직사거리.시립미술관",
-        "청주체육관",
-        "시계탑",
-        "중앙여고.사창시장",
-        "사창사거리",
-        "청주고등학교",
-        "충북대학교입구",
-        "산업단지입구",
-        "서원초등학교",
-        "복대가경시장",
-        "서부소방서.가경터미널시장",
-        "고속.시외버스터미널",
-        "고속버스터미널",
-        "강서1동행정복지센터",
-        "비하대광로제비앙아파트",
-        "주봉",
-        "대한적십자사",
-        "휴암동.푸르미환경공원",
-        "충렬사",
-        "석소",
-        "월곡리",
-        "월곡리.충청대학교",
-        "월곡초등학교",
-        "탑연리",
-        "강내면행정복지센터",
-        "한빛아파트",
-        "월탄1리",
-        "한국교원대학교",
-      ],
-      "하행": [
-        "한국교원대학교",
-        "한국교원대정문",
-        "월탄1리",
-        "한국교원대후문",
-        "강내면행정복지센터",
-        "탑연리",
-        "탑연삼거리",
-        "월곡초등학교",
-        "월곡리.충청대학교",
-        "월곡.상월곡",
-        "석소",
-        "충렬사",
-        "휴암동.푸르미환경공원",
-        "대한적십자사",
-        "주봉",
-        "비하대광로제비앙아파트",
-        "강서1동행정복지센터",
-        "시외버스터미널",
-        "가경세원3차아파트",
-        "복대가경시장",
-        "서원초등학교",
-        "산업단지입구",
-        "충북대학교입구",
-        "청주고등학교",
-        "사창사거리",
-        "중앙여고.사창시장",
-        "시계탑",
-        "서원구청.청주체육관",
-        "사직사거리.시립미술관",
-        "지하상가",
-        "도청",
-        "육거리.산림조합",
-        "일신여자고등학교",
-        "금천동행정복지센터",
-        "금천새마을금고",
-        "청주동중학교",
-        "장자마을5단지아파트",
-        "장자마을현대아파트",
-        "동주초등학교",
-        "국제테니스장",
-        "한라비발디",
-        "금천배수지",
-        "동부종점",
-      ],
-    },
-    "514": {
-      "상행": [
-        "동부종점",
-        "국제테니스장",
-        "장자마을5단지",
-        "금천초교",
-        "금천동행정복지센터",
-        "일신여고",
-        "석교육거리",
-        "충북도청",
-        "지하상가",
-        "청주체육관",
-        "사창사거리",
-        "산업단지입구",
-        "삼화전기",
-        "솔밭공원.청소년수련관",
-        "현대백화점",
-        "지동1구",
-        "지서",
-        "지동2구",
-        "마래마을",
-        "서촌동",
-        "청주역",
-        "정봉동",
-        "학천과선교",
-        "학천리",
-        "석소",
-        "흥덕구청",
-        "월곡리.충청대학교",
-        "월곡초등학교",
-        "탑연리",
-        "강내면행정복지센터",
-        "한빛아파트",
-        "월탄1리",
-        "한국교원대학교",
-      ],
-      "하행": [
-        "한국교원대학교",
-        "한국교원대정문",
-        "월탄1리",
-        "한국교원대후문",
-        "강내면행정복지센터",
-        "탑연리",
-        "탑연삼거리",
-        "월곡초등학교",
-        "충청대학교",
-        "흥덕구청",
-        "석소",
-        "더빈컨벤션",
-        "학천리",
-        "학천과선교",
-        "정봉동",
-        "청주역",
-        "서촌동",
-        "마래마을",
-        "지동2구",
-        "지서",
-        "지동1구",
-        "지웰시티아파트",
-        "현대백화점",
-        "솔밭공원",
-        "삼화전기",
-        "산업단지입구",
-        "사창사거리",
-        "청주체육관",
-        "지하상가",
-        "충북도청",
-        "육거리",
-        "일신여고",
-        "금천동행정복지센터",
-        "장자마을5단지",
-        "국제테니스장",
-        "동부종점",
-      ],
-    },
-    "518": {
-      "상행": [
-        "한국교원대학교",
-        "한국교원대정문",
-        "월탄1리",
-        "한국교원대후문",
-        "강내면행정복지센터",
-        "청원쌍용예가1단지아파트",
-        "월곡초등학교",
-        "탑연삼거리",
-        "궁평1리",
-        "궁평2리",
-        "오송역",
-        "궁평2리(궁말)",
-        "오송중학교",
-        "만수공원",
-        "오송119안전센터",
-        "충북경제자유구역청",
-        "보건의료행정타운",
-        "한국보건복지인재원",
-      ],
-      "하행": [
-        "한국보건복지인재원",
-        "보건의료행정타운",
-        "충북경제자유구역청",
-        "오송119안전센터",
-        "만수공원",
-        "오송휴먼시아아파트",
-        "궁평2리(궁말)",
-        "오송역",
-        "궁평2리",
-        "궁평1리",
-        "탑연삼거리",
-        "월곡초등학교",
-        "청원쌍용예가1단지아파트",
-        "강내면행정복지센터",
-        "한빛아파트",
-        "월탄1리",
-        "한국교원대학교입구",
-        "한국교원대학교",
-      ],
-    },
-    "913": {
-      "상행": [
-        "정북동",
-        "정하동",
-        "곰두리체육관",
-        "사천신동아아파트",
-        "율량금호어울림",
-        "중앙여중",
-        "덕벌초교",
-        "북부시장",
-        "청주시청",
-        "상당공원",
-        "지하상가",
-        "청주체육관",
-        "사창사거리",
-        "산업단지입구",
-        "복대가경시장",
-        "고속.시외터미널",
-        "강서1동행정복지센터",
-        "휴암동",
-        "충렬사",
-        "수의동",
-        "현암동",
-        "동막동",
-        "다락2리.당산마을",
-        "다락1리",
-        "한국교원대학교",
-      ],
-      "하행": [
-        "한국교원대학교",
-        "다락1리",
-        "다락2리.당산마을",
-        "동막동",
-        "현암동",
-        "수의동",
-        "충렬사",
-        "휴암동",
-        "강서1동행정복지센터",
-        "고속.시외터미널",
-        "복대가경시장",
-        "산업단지입구",
-        "사창사거리",
-        "청주체육관",
-        "지하상가",
-        "상당공원",
-        "청주시청",
-        "북부시장",
-        "덕벌초교",
-        "중앙여중",
-        "율량금호어울림",
-        "사천신동아아파트",
-        "곰두리체육관",
-        "정하동",
-        "정북동",
-      ],
-    },
-    "500": {
-      "상행": [
-        "동부종점",
-        "예비군훈련장",
-        "상리",
-        "청주대석우문화체육관",
-        "신흥고등학교",
-        "성모병원",
-        "신동아아파트",
-        "새터초등학교",
-        "테크노폴리스",
-        "송화로",
-        "청주흥덕경찰서",
-        "SK하이닉스.LG화학",
-        "솔밭공원",
-        "지웰시티2차",
-        "청주역",
-        "정봉동",
-        "학천리",
-        "석소",
-        "흥덕구청",
-        "충청대학교",
-        "월곡초등학교",
-        "탑연삼거리",
-        "만수공원",
-        "오송역북문",
-        "오송역종점",
-      ],
-      "하행": [
-        "오송역종점",
-        "오송역북문",
-        "만수공원",
-        "탑연삼거리",
-        "월곡초등학교",
-        "충청대학교",
-        "흥덕구청",
-        "석소",
-        "학천리",
-        "정봉동",
-        "청주역",
-        "지웰시티2차",
-        "솔밭공원",
-        "SK하이닉스.LG화학",
-        "청주흥덕경찰서",
-        "송화로",
-        "테크노폴리스",
-        "새터초등학교",
-        "신동아아파트",
-        "성모병원",
-        "신흥고등학교",
-        "청주대석우문화체육관",
-        "상리",
-        "예비군훈련장",
-        "동부종점",
-      ],
-    },
-    "502": {
-      "상행": [
-        "동부종점",
-        "용성초등학교",
-        "용암부영2차",
-        "용암초등학교",
-        "영운동행정복지센터",
-        "석교동",
-        "육거리",
-        "도청",
-        "사직사거리",
-        "시계탑",
-        "사창사거리",
-        "산업단지입구",
-        "고속버스터미널",
-        "휴암동.푸르미환경공원",
-        "석소",
-        "충청대학교",
-        "탑연삼거리",
-        "오송역북문",
-        "오송역",
-        "오송2리",
-        "봉산리",
-        "조치원버스터미널",
-        "조치원역",
-      ],
-      "하행": [
-        "조치원역",
-        "조치원버스터미널",
-        "봉산리",
-        "오송2리",
-        "오송역",
-        "오송역북문",
-        "탑연삼거리",
-        "충청대학교",
-        "석소",
-        "휴암동.푸르미환경공원",
-        "고속버스터미널",
-        "산업단지입구",
-        "사창사거리",
-        "시계탑",
-        "사직사거리",
-        "도청",
-        "육거리",
-        "석교동",
-        "영운동행정복지센터",
-        "용암초등학교",
-        "용암부영2차",
-        "용성초등학교",
-        "동부종점",
-      ],
-    },
-    "503": {
-      "상행": [
-        "동부종점",
-        "우진1차고지",
-        "대원칸타빌더테라스",
-        "동남파라곤",
-        "분평휴먼시아",
-        "수곡우체국",
-        "수곡중학교",
-        "산남중학교",
-        "서남교회",
-        "가경주공2단지",
-        "서부소방서.가경터미널시장",
-        "고속.시외버스터미널",
-        "강서1동행정복지센터",
-        "휴암동.푸르미환경공원",
-        "석소",
-        "충청대학교",
-        "탑연삼거리",
-        "오송역",
-        "오송파라곤센트럴시티",
-        "노바렉스",
-        "송산공원",
-      ],
-      "하행": [
-        "송산공원",
-        "노바렉스",
-        "오송파라곤센트럴시티",
-        "오송역",
-        "탑연삼거리",
-        "충청대학교",
-        "석소",
-        "휴암동.푸르미환경공원",
-        "강서1동행정복지센터",
-        "고속.시외버스터미널",
-        "서부소방서.가경터미널시장",
-        "가경주공2단지",
-        "서남교회",
-        "산남중학교",
-        "수곡중학교",
-        "수곡우체국",
-        "분평휴먼시아",
-        "동남파라곤",
-        "대원칸타빌더테라스",
-        "우진1차고지",
-        "동부종점",
-      ],
-    },
-    "509": {
-      "상행": [
-        "동부종점",
-        "방서두진하트리움",
-        "청주교육대학교",
-        "산남동행정복지센터",
-        "충북대학교병원",
-        "가경터미널시장",
-        "고속.시외버스터미널",
-        "강서1동행정복지센터",
-        "석소",
-        "충청대학교",
-        "탑연삼거리",
-        "오송역",
-        "조치원역",
-      ],
-      "하행": [
-        "조치원역",
-        "오송역",
-        "탑연삼거리",
-        "충청대학교",
-        "석소",
-        "강서1동행정복지센터",
-        "고속.시외버스터미널",
-        "가경터미널시장",
-        "충북대학교병원",
-        "산남동행정복지센터",
-        "청주교육대학교",
-        "방서두진하트리움",
-        "동부종점",
-      ],
-    },
-    "511": {
-      "상행": [
-        "정하동",
-        "사천동",
-        "청주대",
-        "청주시청",
-        "상당공원",
-        "도청",
-        "사창사거리",
-        "산업단지입구",
-        "고속.시외버스터미널",
-        "강서1동행정복지센터",
-        "석소",
-        "충청대학교",
-        "탑연삼거리",
-        "오송역",
-        "조치원역",
-      ],
-      "하행": [
-        "조치원역",
-        "오송역",
-        "탑연삼거리",
-        "충청대학교",
-        "석소",
-        "강서1동행정복지센터",
-        "고속.시외버스터미널",
-        "산업단지입구",
-        "사창사거리",
-        "도청",
-        "상당공원",
-        "청주시청",
-        "청주대",
-        "사천동",
-        "정하동",
-      ],
-    },
-    "747": {
-      "상행": [
-        "청주국제공항",
-        "발산교",
-        "청주여고",
-        "문화제조창.시청임시청사",
-        "상당공원",
-        "사창사거리",
-        "산업단지입구",
-        "고속.시외버스터미널",
-        "충청대학교",
-        "오송역",
-        "오송보건의료행정타운",
-      ],
-      "하행": [
-        "오송보건의료행정타운",
-        "오송역",
-        "충청대학교",
-        "고속.시외버스터미널",
-        "산업단지입구",
-        "사창사거리",
-        "상당공원",
-        "문화제조창.시청임시청사",
-        "청주여고",
-        "발산교",
-        "청주국제공항",
-      ],
-    },
-  };
 
   // 정류장 좌표 정보 (가장 가까운 정류장 계산용)
   static const Map<String, List<double>> _stopCoordinates = {
@@ -578,8 +57,12 @@ class BusCard extends StatelessWidget {
   }
 
   void _showRouteDetail(BuildContext context) {
+    debugPrint("BusCard: 노선 상세보기 시도 - 버스 번호: ${bus.number}");
     final routeData = BusRouteData.routeStops[bus.number];
-    if (routeData == null) return;
+    if (routeData == null) {
+      debugPrint("BusCard Error: '${bus.number}' 노선의 정류장 데이터를 BusRouteData에서 찾을 수 없습니다.");
+      return;
+    }
 
     showModalBottomSheet(
       context: context,
@@ -694,76 +177,79 @@ class BusCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   // 버스 번호 + (i) 버튼
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: bus.color,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          bus.number,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (hasInfo)
+                  Expanded(
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
+                            horizontal: 10,
+                            vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            color: (isUpbound ? Colors.green : Colors.orange)
-                                .withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
+                            color: bus.color,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            bus.number,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        if (hasInfo)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
                               color: (isUpbound ? Colors.green : Colors.orange)
-                                  .withOpacity(0.3),
+                                  .withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: (isUpbound ? Colors.green : Colors.orange)
+                                    .withOpacity(0.3),
+                              ),
+                            ),
+                            child: Text(
+                              directionTag,
+                              style: TextStyle(
+                                color: isUpbound ? Colors.green : Colors.orange,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                          child: Text(
-                            directionTag,
-                            style: TextStyle(
-                              color: isUpbound ? Colors.green : Colors.orange,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                        if (arrivals.length > 1)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white10
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              "${arrivals.length}대 운행",
+                              style: TextStyle(
+                                color: isDark ? Colors.white54 : Colors.grey[600],
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
-                      if (arrivals.length > 1) ...[
-                        const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white10
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            "${arrivals.length}대 운행",
-                            style: TextStyle(
-                              color: isDark ? Colors.white54 : Colors.grey[600],
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
                       ],
-                    ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   if (hasInfo && etaText.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -979,6 +465,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
   bool _isLoadingStops = true;
   String _trafficCondition = "smooth";
   String _congestion = "normal";
+  Set<String> _favStops = {}; // 즐겨찾기(주요) 정류장
 
   @override
   void initState() {
@@ -986,8 +473,29 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     _determineInitialDirection();
     _getUserLocation();
     _loadApiStops();
+    _loadFavStops();
     _trafficCondition = BusService.estimateTrafficCondition(DateTime.now());
     _congestion = BusService.estimateCongestion(DateTime.now(), widget.bus.id);
+  }
+
+  Future<void> _loadFavStops() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'fav_stops_${widget.bus.number}';
+    final saved = prefs.getStringList(key) ?? [];
+    if (mounted) setState(() => _favStops = saved.toSet());
+  }
+
+  Future<void> _toggleFavStop(String stopName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'fav_stops_${widget.bus.number}';
+    setState(() {
+      if (_favStops.contains(stopName)) {
+        _favStops.remove(stopName);
+      } else {
+        _favStops.add(stopName);
+      }
+    });
+    await prefs.setStringList(key, _favStops.toList());
   }
 
   /// API에서 정류장 데이터를 불러옴
@@ -1011,16 +519,25 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
   }
 
   void _determineInitialDirection() {
-    final routeData = BusRouteData.routeStops[widget.bus.number];
+    final dynamic routeData = BusRouteData.routeStops[widget.bus.number];
+    if (routeData == null) return;
+
     if (routeData is List) {
       _selectedDirection = "순환";
     } else if (routeData is Map) {
       final arrivals = widget.bus.arrivals;
       if (arrivals.isNotEmpty) {
+        // 도착 예정 버스 중 상행(점수 >=0)이 하나라도 있으면 상행을 기본 탭으로
         final hasApproaching = arrivals.any((a) => a.remainStops >= 0);
         _selectedDirection = hasApproaching ? "상행" : "하행";
       } else {
-        _selectedDirection = "상행";
+        // 운영 정보 없을 때: 맵의 첫 번째 키(보통 '상행') 사용
+        _selectedDirection = routeData.keys.first.toString();
+      }
+      
+      // 혹시라도 설정된 방향이 맵에 없는 경우 안전하게 첫 번째 키로 교정
+      if (!routeData.containsKey(_selectedDirection)) {
+        _selectedDirection = routeData.keys.first.toString();
       }
     }
   }
@@ -1127,13 +644,24 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     );
     if (index != -1) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         if (_scrollController.hasClients) {
-          final offset = (index * 72.0) - 150.0;
-          _scrollController.animateTo(
-            offset < 0 ? 0 : offset,
-            duration: const Duration(milliseconds: 1000),
-            curve: Curves.easeInOutCubic,
-          );
+          try {
+            // [방어] position이 완전히 부착되어 있고 dimension이 결정되었는지 확인
+            if (!_scrollController.position.hasContentDimensions) return;
+            
+            final offset = (index * 72.0) - 150.0;
+            final maxScroll = _scrollController.position.maxScrollExtent;
+            final double targetOffset = offset.clamp(0.0, maxScroll);
+            
+            _scrollController.animateTo(
+              targetOffset,
+              duration: const Duration(milliseconds: 1000),
+              curve: Curves.easeInOutCubic,
+            );
+          } catch (e) {
+            debugPrint("Scroll error: $e");
+          }
         }
       });
     }
@@ -1215,15 +743,21 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     // API 정류장이 있으면 통합 노선으로 표시 (상행/하행 토글 없음)
     final bool useUnifiedRoute = _apiStops != null && _apiStops!.isNotEmpty;
 
-    List<String> stops;
+    List<String> stops = [];
     if (useUnifiedRoute) {
-      // API: 전체 노선 통합 표시
+      // API: 전체 노선 통합 표시 (NodeOrd 순서대로)
       stops = _apiStops!.map((s) => s.nodeName).toList();
     } else if (hasFallbackDirections) {
-      // Fallback: 상행/하행 분리
-      stops = List<String>.from(routeData[_selectedDirection] ?? []);
-    } else {
-      stops = List<String>.from(routeData as Iterable? ?? []);
+      // routeData는 Map<String, List<String>> 타입임
+      final Map<String, List<String>> routeMap = routeData;
+      final List<String>? list = routeMap[_selectedDirection];
+      
+      if (list != null) {
+        stops = List<String>.from(list);
+      } else if (routeMap.isNotEmpty) {
+        // 현재 선택된 방향의 데이터가 없으면 첫 번째 가용한 방향 사용
+        stops = List<String>.from(routeMap.values.first);
+      }
     }
 
     // 방향 토글은 API 없이 fallback만 사용하고 방향 데이터가 있을 때만 표시
@@ -1273,14 +807,50 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
             );
           }).toList();
         } else {
-          // 방향 모드 — 선택된 방향의 정류장에만 매칭
+          // 방향 모드 — remainStops로 추측하되, 이름 매칭을 더 우선함
           filteredArrivals = currentArrivals.where((a) {
             final n = _normalize(a.currentStopName);
+            // 정류장 이름이 현재 보여주는 목록(stops)에 있는가?
             return stops.any(
-              (s) => _normalize(s).contains(n) || n.contains(_normalize(s)),
+              (s) => _normalize(s) == n || _normalize(s).contains(n) || n.contains(_normalize(s)),
             );
           }).toList();
         }
+
+        // ── Exclusive assignment ──────────────────────────────────────────
+        // 각 버스(BusArrival)를 stops 목록 중 가장 가까운 정류장 하나에만 배분
+        // 같은 버스가 두 정류장에 동시에 표시되는 문제 방지
+        final Map<int, List<BusArrival>> busStopMap = {}; // key: stops index
+        for (final arrival in filteredArrivals) {
+          int bestIdx = -1;
+          if (_apiStops != null && _apiStops!.isNotEmpty && arrival.nodeOrd != null) {
+            // API stops: nodeOrd로 정확히 매칭
+            bestIdx = _apiStops!.indexWhere((s) => s.nodeOrd == arrival.nodeOrd);
+            // 정확 매칭 없으면 가장 가까운 nodeOrd 정류장
+            if (bestIdx == -1) {
+              int minDiff = 9999;
+              for (int i = 0; i < _apiStops!.length; i++) {
+                final diff = (_apiStops![i].nodeOrd - arrival.nodeOrd!).abs();
+                if (diff < minDiff) { minDiff = diff; bestIdx = i; }
+              }
+            }
+          } else {
+            // fallback stops: 이름 매칭으로 가장 긴 공통 부분 가진 정류장 선택
+            final n = _normalize(arrival.currentStopName);
+            int bestScore = -1;
+            for (int i = 0; i < stops.length; i++) {
+              final s = _normalize(stops[i]);
+              if (s.contains(n) || n.contains(s)) {
+                final score = s.length + n.length;
+                if (score > bestScore) { bestScore = score; bestIdx = i; }
+              }
+            }
+          }
+          if (bestIdx >= 0) {
+            busStopMap.putIfAbsent(bestIdx, () => []).add(arrival);
+          }
+        }
+        // ─────────────────────────────────────────────────────────────────
 
         if (!_hasInitialScrolled && filteredArrivals.isNotEmpty) {
           _hasInitialScrolled = true;
@@ -1619,12 +1189,8 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                           vertical: 1,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: widget.bus.color.withOpacity(
-                                            0.15,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
+                                          color: widget.bus.color.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
                                           "$dirCount",
@@ -1647,7 +1213,8 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                   ),
                 ),
 
-              const Divider(height: 1, thickness: 1),
+              const SizedBox(height: 8),
+
               Expanded(
                 child: stops.isEmpty
                     ? Center(
@@ -1663,9 +1230,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                             Text(
                               "정류장 정보를 가져올 수 없습니다.",
                               style: TextStyle(
-                                color: isDark
-                                    ? Colors.white54
-                                    : Colors.grey[500],
+                                color: isDark ? Colors.white54 : Colors.grey[500],
                               ),
                             ),
                           ],
@@ -1682,32 +1247,12 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                             itemCount: stops.length,
                             itemBuilder: (context, index) {
                               final stopName = stops[index];
-                              final normalizedStop = _normalize(stopName);
 
-                              // 버스 위치 매칭 (API stopList일 때 nodeOrd, fallback일 때 이름)
-                              List<BusArrival> busesAtStop;
-                              if (_apiStops != null &&
-                                  _apiStops!.isNotEmpty &&
-                                  index < _apiStops!.length) {
-                                final apiStop = _apiStops![index];
-                                busesAtStop = filteredArrivals.where((a) {
-                                  if (a.nodeOrd != null)
-                                    return a.nodeOrd == apiStop.nodeOrd;
-                                  final n = _normalize(a.currentStopName);
-                                  return n.contains(normalizedStop) ||
-                                      normalizedStop.contains(n);
-                                }).toList();
-                              } else {
-                                busesAtStop = filteredArrivals.where((a) {
-                                  final n = _normalize(a.currentStopName);
-                                  return n.contains(normalizedStop) ||
-                                      normalizedStop.contains(n);
-                                }).toList();
-                              }
+                              // exclusive assignment로 미리 계산된 버스 목록 사용
+                              final List<BusArrival> busesAtStop =
+                                  busStopMap[index] ?? [];
 
-                              final bool isTarget =
-                                  stopName.contains("교원대") ||
-                                  stopName.contains("탑연삼거리");
+                              final bool isTarget = _favStops.contains(stopName);
                               final bool isNearest = stopName == nearestStop;
                               final bool isFirst = index == 0;
                               final bool isLast = index == stops.length - 1;
@@ -1715,262 +1260,190 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                               // 교통 상황 색상 (수직 라인)
                               final lineColor = _trafficColor(isDark);
 
-                              return SizedBox(
-                                height: 72,
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // 좌측 노선 라인 + 버스 아이콘
-                                    SizedBox(
-                                      width: 32,
-                                      child: Stack(
-                                        alignment: Alignment.topCenter,
-                                        children: [
-                                          // 교통 상황 반영 수직선
-                                          Center(
-                                            child: Container(
-                                              width: 3,
-                                              margin: EdgeInsets.only(
-                                                top: isFirst ? 36 : 0,
-                                                bottom: isLast ? 36 : 0,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: lineColor.withOpacity(
-                                                  0.5,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(1.5),
-                                              ),
-                                            ),
-                                          ),
-                                          // 정류장 점
-                                          Positioned(
-                                            top: 30,
-                                            child: Container(
-                                              width: isTarget ? 14 : 12,
-                                              height: isTarget ? 14 : 12,
-                                              decoration: BoxDecoration(
-                                                color: busesAtStop.isNotEmpty
-                                                    ? widget.bus.color
-                                                    : (isTarget
-                                                          ? Colors.orange
-                                                          : (isFirst || isLast
-                                                                ? Colors.grey
-                                                                : (isDark
-                                                                      ? const Color(
-                                                                          0xFF3A3A3C,
-                                                                        )
-                                                                      : Colors
-                                                                            .grey[300]))),
-                                                shape: BoxShape.circle,
-                                                border: Border.all(
-                                                  color: isDark
-                                                      ? const Color(0xFF1C1C1E)
-                                                      : Colors.white,
-                                                  width: 2,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          // 버스 아이콘들 (여러 대일 경우 겹쳐서 표시)
-                                          if (busesAtStop.isNotEmpty)
-                                            ...List.generate(busesAtStop.length, (
-                                              busIndex,
-                                            ) {
-                                              return TweenAnimationBuilder<
-                                                double
-                                              >(
-                                                tween: Tween<double>(
-                                                  begin: 0,
-                                                  end: 1,
-                                                ),
-                                                duration: Duration(
-                                                  milliseconds:
-                                                      1500 + (busIndex * 300),
-                                                ),
-                                                curve: Curves.elasticOut,
-                                                builder:
-                                                    (context, value, child) {
-                                                      return Positioned(
-                                                        top:
-                                                            20 +
-                                                            (10 * (1 - value)) -
-                                                            (busIndex * 6),
-                                                        child: Transform.scale(
-                                                          scale:
-                                                              (0.8 +
-                                                                  (0.2 *
-                                                                      value)) *
-                                                              (1 -
-                                                                  (busIndex *
-                                                                      0.05)),
-                                                          child: child,
-                                                        ),
-                                                      );
-                                                    },
+                              return InkWell(
+                                onLongPress: () {
+                                  _toggleFavStop(stopName);
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  constraints: const BoxConstraints(minHeight: 72),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // 좌측 노선 라인 + 버스 아이콘
+                                      SizedBox(
+                                        width: 32,
+                                        child: Stack(
+                                          alignment: Alignment.topCenter,
+                                          children: [
+                                            // 교통 상황 반영 수직선 부모 꽉 채움
+                                            Positioned.fill(
+                                              child: Container(
+                                                alignment: Alignment.center,
                                                 child: Container(
-                                                  padding: const EdgeInsets.all(
-                                                    4,
+                                                  width: 3,
+                                                  margin: EdgeInsets.only(
+                                                    top: isFirst ? 28 : 0,
+                                                    bottom: isLast ? 28 : 0,
                                                   ),
                                                   decoration: BoxDecoration(
-                                                    color: widget.bus.color,
-                                                    shape: BoxShape.circle,
-                                                    border: Border.all(
-                                                      color: Colors.white,
-                                                      width: 1.5,
-                                                    ),
-                                                    boxShadow: [
-                                                      BoxShadow(
-                                                        color: widget.bus.color
-                                                            .withOpacity(0.4),
-                                                        blurRadius: 4,
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  child: const Icon(
-                                                    Icons
-                                                        .directions_bus_rounded,
-                                                    color: Colors.white,
-                                                    size: 14,
+                                                    color: lineColor.withOpacity(0.5),
+                                                    borderRadius: BorderRadius.circular(1.5),
                                                   ),
                                                 ),
-                                              );
-                                            }),
-                                        ],
+                                              ),
+                                            ),
+                                            // 정류장 점
+                                            Positioned(
+                                              top: 22,
+                                              child: Container(
+                                                width: isTarget ? 14 : 12,
+                                                height: isTarget ? 14 : 12,
+                                                decoration: BoxDecoration(
+                                                  color: busesAtStop.isNotEmpty
+                                                      ? widget.bus.color
+                                                      : (isTarget
+                                                            ? Colors.orange
+                                                            : (isFirst || isLast
+                                                                  ? Colors.grey
+                                                                  : (isDark
+                                                                        ? const Color(0xFF3A3A3C)
+                                                                        : Colors.grey[300]))),
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(
+                                                    color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                                                    width: 2,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            // 버스 아이콘들 (여러 대일 경우 겹쳐서 표시)
+                                            if (busesAtStop.isNotEmpty)
+                                              ...List.generate(busesAtStop.length, (busIndex) {
+                                                return TweenAnimationBuilder<double>(
+                                                  tween: Tween<double>(begin: 0, end: 1),
+                                                  duration: Duration(milliseconds: 1500 + (busIndex * 300)),
+                                                  curve: Curves.elasticOut,
+                                                  builder: (context, value, child) {
+                                                    return Positioned(
+                                                      top: 12 + (10 * (1 - value)) - (busIndex * 6),
+                                                      child: Transform.scale(
+                                                        scale: (0.8 + (0.2 * value)) * (1 - (busIndex * 0.05)),
+                                                        child: child,
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(4),
+                                                    decoration: BoxDecoration(
+                                                      color: widget.bus.color,
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(
+                                                        color: Colors.white,
+                                                        width: 1.5,
+                                                      ),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                          color: widget.bus.color.withOpacity(0.4),
+                                                          blurRadius: 4,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.directions_bus_rounded,
+                                                      color: Colors.white,
+                                                      size: 14,
+                                                    ),
+                                                  ),
+                                                );
+                                              }),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    // 정류장 이름 및 정보
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Flexible(
-                                                child: Text(
+                                      const SizedBox(width: 16),
+                                      // 정류장 이름 및 정보
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Wrap(
+                                              crossAxisAlignment: WrapCrossAlignment.center,
+                                              spacing: 8,
+                                              runSpacing: 4,
+                                              children: [
+                                                Text(
                                                   stopName,
                                                   style: TextStyle(
-                                                    fontSize: 17,
+                                                    fontSize: 16,
                                                     height: 1.2,
-                                                    fontWeight:
-                                                        busesAtStop
-                                                                .isNotEmpty ||
-                                                            isTarget ||
-                                                            isNearest
+                                                    fontWeight: busesAtStop.isNotEmpty || isTarget || isNearest
                                                         ? FontWeight.w700
                                                         : FontWeight.w500,
-                                                    color:
-                                                        busesAtStop.isNotEmpty
+                                                    color: busesAtStop.isNotEmpty
                                                         ? widget.bus.color
                                                         : (isDark
                                                               ? Colors.white
                                                               : (isTarget
-                                                                    ? Colors
-                                                                          .orange[800]
+                                                                    ? Colors.orange[800]
                                                                     : (isNearest
                                                                           ? Colors.blue[800]
                                                                           : Colors.black87))),
                                                   ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
                                                 ),
-                                              ),
-                                              if (isNearest) ...[
-                                                const SizedBox(width: 8),
-                                                Flexible(
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 2,
-                                                        ),
+                                                if (isNearest)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                     decoration: BoxDecoration(
-                                                      color: Colors.blue
-                                                          .withOpacity(0.1),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            4,
-                                                          ),
-                                                      border: Border.all(
-                                                        color: Colors.blue
-                                                            .withOpacity(0.3),
-                                                      ),
+                                                      color: Colors.blue.withOpacity(0.1),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
                                                     ),
                                                     child: const Text(
                                                       "가까움",
-                                                      style: TextStyle(
-                                                        color: Colors.blue,
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
+                                                      style: TextStyle(color: Colors.blue, fontSize: 10, fontWeight: FontWeight.bold),
                                                     ),
                                                   ),
-                                                ),
-                                              ],
-                                              if (isTarget && !isNearest) ...[
-                                                const SizedBox(width: 8),
-                                                Flexible(
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 2,
-                                                        ),
+                                                if (isTarget)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                     decoration: BoxDecoration(
-                                                      color: Colors.orange
-                                                          .withOpacity(0.1),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            4,
-                                                          ),
-                                                      border: Border.all(
-                                                        color: Colors.orange
-                                                            .withOpacity(0.3),
-                                                      ),
+                                                      color: Colors.orange.withOpacity(0.1),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
                                                     ),
-                                                    child: const Text(
-                                                      "주요거점",
-                                                      style: TextStyle(
-                                                        color: Colors.orange,
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: const [
+                                                        Icon(Icons.star, color: Colors.orange, size: 10),
+                                                        SizedBox(width: 2),
+                                                        Text(
+                                                          "주요거점",
+                                                          style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ),
-                                                ),
                                               ],
-                                            ],
-                                          ),
-                                          if (busesAtStop.isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 4.0,
-                                              ),
-                                              child: Text(
-                                                _buildBusAtStopText(
-                                                  busesAtStop,
-                                                ),
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: widget.bus.color
-                                                      .withOpacity(0.8),
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
                                             ),
-                                        ],
+                                            if (busesAtStop.isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.only(top: 4.0),
+                                                child: Text(
+                                                  _buildBusAtStopText(busesAtStop),
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: widget.bus.color.withOpacity(0.8),
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               );
                             },

@@ -6036,12 +6036,13 @@ class _UserLocationMarkerState extends State<_UserLocationMarker>
 
 class _CustomReorderableDragStartListener extends ReorderableDragStartListener {
   final Duration delay;
+  // ignore: unused_element_parameter
   const _CustomReorderableDragStartListener({
     super.key,
     required super.child,
     required super.index,
-    super.enabled,
-    this.delay = const Duration(milliseconds: 700),
+    super.enabled, // ignore: unused_element_parameter
+    this.delay = const Duration(milliseconds: 700), // ignore: unused_element_parameter
   });
 
   @override
