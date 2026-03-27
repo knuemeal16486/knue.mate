@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'bus_model.dart';
@@ -9,9 +10,11 @@ import 'firebase_sync_service.dart';
 class BusService {
   // API 키를 .env에서 안전하게 가져오기
   static String get _serviceKey {
-    final key = dotenv.env['BUS_API_KEY'];
+    // 1) 빌드 타임 주입(권장): --dart-define=BUS_API_KEY=...
+    const definedKey = String.fromEnvironment('BUS_API_KEY');
+    final key = definedKey.isNotEmpty ? definedKey : dotenv.env['BUS_API_KEY'];
     if (key == null || key.isEmpty) {
-      print("⚠️ BUS_API_KEY가 .env 파일에 설정되지 않았습니다.");
+      debugPrint("⚠️ BUS_API_KEY가 .env 파일에 설정되지 않았습니다.");
       return "";
     }
     return key;
@@ -90,6 +93,10 @@ class BusService {
   // 노선별 정류장 캐시 (세션 내 유지)
   static final Map<String, List<RouteStop>> _routeStopsCache = {};
 
+  /// 설정 문제(예: BUS_API_KEY 누락)를 UI에서 에러로 구분하기 위한 예외
+  static StateError missingApiKeyError() =>
+      StateError('BUS_API_KEY가 설정되어 있지 않습니다. (--dart-define 또는 .env 설정 필요)');
+
   /// 노선 ID로 노선번호 매핑 (BusCard에서 사용)
   static String? getRouteId(int routeNumber) {
     try {
@@ -102,6 +109,7 @@ class BusService {
   Future<List<BusSummary>> fetchAllBuses() async {
     final now = DateTime.now();
     final cacheKey = 'all_buses';
+    List<BusSummary>? firebaseCached;
 
     // 1. 로컬 메모리 캐시 먼저 확인 (가장 빠름)
     if (_cache.containsKey(cacheKey)) {
@@ -118,28 +126,37 @@ class BusService {
       final fbDoc = await FirebaseFirestore.instance
           .collection('realtime')
           .doc('bus_locations')
-          .get(const GetOptions(source: Source.serverAndCache)); // 캐시 우선 확인
+          .get(const GetOptions(source: Source.serverAndCache)) // 캐시 우선 확인
+          .timeout(
+            const Duration(seconds: 4),
+            onTimeout: () => throw TimeoutException('Firestore get timeout'),
+          );
 
       if (fbDoc.exists) {
         final data = fbDoc.data();
         final Timestamp? lastUpdated = data?['lastUpdated'];
-        if (lastUpdated != null) {
+        final dynamic summariesRaw = data?['summaries'];
+        if (summariesRaw is List) {
+          firebaseCached = summariesRaw
+              .whereType<Map>()
+              .map((e) => BusSummary.fromJson(e.cast<String, dynamic>()))
+              .toList();
+        }
+
+        if (lastUpdated != null && firebaseCached != null) {
           final diff = now.difference(lastUpdated.toDate());
 
           // [개선] 캐시 유효 시간을 45초로 연장하고, 클라이언트별 지터(Random) 추가
           // 여러 사용자가 동시에 API를 호출하는 현상 방지
           final int threshold = 45 + (now.millisecond % 15);
 
-          if (diff.inSeconds < threshold && data?['summaries'] != null) {
-            final List<dynamic> list = data!['summaries'];
-            final cachedList = list.map((e) => BusSummary.fromJson(e)).toList();
-
+          if (diff.inSeconds < threshold) {
             // 메모리 캐시 업데이트
-            _cache[cacheKey] = cachedList;
+            _cache[cacheKey] = firebaseCached;
             _cacheTimestamps[cacheKey] = now;
 
             debugPrint("BusService: 파이어베이스 캐시 히트 (${diff.inSeconds}초 전)");
-            return cachedList;
+            return firebaseCached;
           }
         }
       }
@@ -148,6 +165,12 @@ class BusService {
     }
 
     try {
+      // 2.5) API 키가 없으면 빈 결과를 정상으로 취급하지 않음
+      if (_serviceKey.isEmpty) {
+        if (firebaseCached != null) return firebaseCached;
+        throw missingApiKeyError();
+      }
+
       // 3. API 호출 (실제 전국버스 API 사용)
       // [개선] 개별 요청 타임아웃 단축 (10s -> 5s) 및 병렬 실행
       final results = await Future.wait(
@@ -161,6 +184,7 @@ class BusService {
       );
 
       final List<Map<String, dynamic>> summariesJson = [];
+      int totalArrivals = 0;
       for (final r in results) {
         final config = _kRoutes.firstWhere(
           (e) => e.routeNumber == r.routeNumber,
@@ -176,6 +200,7 @@ class BusService {
           congestion: _calculateCongestion(now, r.routeNumber),
           isDirect: config.isDirect,
         );
+        totalArrivals += r.arrivals.length;
         summariesJson.add(summary.toJson());
       }
 
@@ -184,19 +209,30 @@ class BusService {
           .toList();
 
       // 4. 결과 파이어베이스에 업데이트
-      // 마지막 업데이트 후 30초 경과 시에만 업데이트 수행
-      if (_lastFirebaseUpdateTime == null ||
-          now.difference(_lastFirebaseUpdateTime!) >
-              const Duration(seconds: 30)) {
-        _lastFirebaseUpdateTime = now;
-        FirebaseFirestore.instance
-            .collection('realtime')
-            .doc('bus_locations')
-            .set({
-              'lastUpdated': FieldValue.serverTimestamp(),
-              'summaries': summariesJson,
-            })
-            .catchError((e) => debugPrint("BusService: 파이어베이스 업데이트 실패: $e"));
+      // 전 노선이 모두 0대이고 Firebase 캐시도 없으면,
+      // 설정/응답 오류 가능성이 높아 '빈 값 덮어쓰기'를 방지
+      final bool looksLikeFailure = totalArrivals == 0 && firebaseCached == null;
+      if (!looksLikeFailure) {
+        // 마지막 업데이트 후 30초 경과 시에만 업데이트 수행
+        if (_lastFirebaseUpdateTime == null ||
+            now.difference(_lastFirebaseUpdateTime!) >
+                const Duration(seconds: 30)) {
+          _lastFirebaseUpdateTime = now;
+          FirebaseFirestore.instance
+              .collection('realtime')
+              .doc('bus_locations')
+              .set({
+                'lastUpdated': FieldValue.serverTimestamp(),
+                'summaries': summariesJson,
+              })
+              .catchError(
+                (e) => debugPrint("BusService: 파이어베이스 업데이트 실패: $e"),
+              );
+        }
+      } else {
+        debugPrint(
+          "BusService: 전체 결과가 비어 Firestore 업데이트를 건너뜁니다(설정/응답 오류 가능).",
+        );
       }
 
       // 5. 로컬 메모리 캐싱
@@ -206,7 +242,7 @@ class BusService {
       return summaryList;
     } catch (e) {
       debugPrint("BusService: 전체 버스 정보 로드 실패: $e");
-      return _cache[cacheKey] ?? [];
+      return firebaseCached ?? _cache[cacheKey] ?? [];
     }
   }
 

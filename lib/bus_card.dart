@@ -466,6 +466,9 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
   String _trafficCondition = "smooth";
   String _congestion = "normal";
   Set<String> _favStops = {}; // 즐겨찾기(주요) 정류장
+  Map<String, int> _lastVehicleStopIndex = {};
+  final Map<String, int> _lastVehicleNodeOrd = {};
+  final Map<String, String> _lastVehicleDirection = {}; // "상행"/"하행"
 
   @override
   void initState() {
@@ -516,6 +519,27 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
 
   String _normalize(String name) {
     return name.replaceAll(RegExp(r'[^가-힣a-zA-Z0-9]'), '');
+  }
+
+  String _vehicleKey(BusArrival arrival) {
+    final vehicleNo = (arrival.vehicleNo ?? '').trim();
+    if (vehicleNo.isNotEmpty) return vehicleNo;
+    return "${widget.bus.number}:${arrival.nodeOrd ?? -1}:${_normalize(arrival.currentStopName)}";
+  }
+
+  String? _inferDirectionFromNodeOrd(BusArrival arrival) {
+    final nodeOrd = arrival.nodeOrd;
+    if (nodeOrd == null) return null;
+    final key = _vehicleKey(arrival);
+    final prevOrd = _lastVehicleNodeOrd[key];
+    _lastVehicleNodeOrd[key] = nodeOrd;
+
+    if (prevOrd == null || prevOrd == nodeOrd) {
+      return _lastVehicleDirection[key];
+    }
+    final dir = nodeOrd > prevOrd ? "상행" : "하행";
+    _lastVehicleDirection[key] = dir;
+    return dir;
   }
 
   void _determineInitialDirection() {
@@ -807,13 +831,22 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
             );
           }).toList();
         } else {
-          // 방향 모드 — remainStops로 추측하되, 이름 매칭을 더 우선함
+          // 방향 모드 — "겹치는 정류장명" 때문에 상/하행에 동시에 찍히는 문제 방지:
+          // 1) 우선 정류장명 매칭으로 포함
+          // 2) nodeOrd 변화로 차량 진행방향을 추정해, 선택된 방향과 다르면 제외
           filteredArrivals = currentArrivals.where((a) {
             final n = _normalize(a.currentStopName);
-            // 정류장 이름이 현재 보여주는 목록(stops)에 있는가?
-            return stops.any(
-              (s) => _normalize(s) == n || _normalize(s).contains(n) || n.contains(_normalize(s)),
+            final bool nameMatched = stops.any(
+              (s) =>
+                  _normalize(s) == n ||
+                  _normalize(s).contains(n) ||
+                  n.contains(_normalize(s)),
             );
+            if (!nameMatched) return false;
+
+            final inferred = _inferDirectionFromNodeOrd(a);
+            if (inferred == null) return true; // 초기에 방향 추정 불가하면 일단 표시
+            return inferred == _selectedDirection;
           }).toList();
         }
 
@@ -821,6 +854,8 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
         // 각 버스(BusArrival)를 stops 목록 중 가장 가까운 정류장 하나에만 배분
         // 같은 버스가 두 정류장에 동시에 표시되는 문제 방지
         final Map<int, List<BusArrival>> busStopMap = {}; // key: stops index
+        final previousVehicleStopIndex = Map<String, int>.from(_lastVehicleStopIndex);
+        final Map<String, int> currentVehicleStopIndex = {};
         for (final arrival in filteredArrivals) {
           int bestIdx = -1;
           if (_apiStops != null && _apiStops!.isNotEmpty && arrival.nodeOrd != null) {
@@ -848,8 +883,10 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
           }
           if (bestIdx >= 0) {
             busStopMap.putIfAbsent(bestIdx, () => []).add(arrival);
+            currentVehicleStopIndex[_vehicleKey(arrival)] = bestIdx;
           }
         }
+        _lastVehicleStopIndex = currentVehicleStopIndex;
         // ─────────────────────────────────────────────────────────────────
 
         if (!_hasInitialScrolled && filteredArrivals.isNotEmpty) {
@@ -1135,6 +1172,10 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                         final dirCount = dir == "상행"
                             ? upboundCount
                             : downboundCount;
+                        final isTapyeonVia = !widget.bus.isDirect;
+                        final displayDir = !isTapyeonVia
+                            ? dir
+                            : (dir == "상행" ? "오송 방면" : "청주 방면");
                         return Expanded(
                           child: GestureDetector(
                             onTap: () {
@@ -1166,7 +1207,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      dir,
+                                      displayDir,
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: isSelected
@@ -1274,6 +1315,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                       // 좌측 노선 라인 + 버스 아이콘
                                       SizedBox(
                                         width: 32,
+                                        height: 56,
                                         child: Stack(
                                           alignment: Alignment.topCenter,
                                           children: [
@@ -1321,16 +1363,39 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                             // 버스 아이콘들 (여러 대일 경우 겹쳐서 표시)
                                             if (busesAtStop.isNotEmpty)
                                               ...List.generate(busesAtStop.length, (busIndex) {
+                                                final arrival = busesAtStop[busIndex];
+                                                final key = _vehicleKey(arrival);
+                                                final prevIndex = previousVehicleStopIndex[key];
+                                                final bool moved = prevIndex != null && prevIndex != index;
+                                                final double beginDy = !moved
+                                                    ? 0.0
+                                                    : (prevIndex < index ? -0.7 : 0.7);
+
                                                 return TweenAnimationBuilder<double>(
+                                                  key: ValueKey("$key:$index"),
                                                   tween: Tween<double>(begin: 0, end: 1),
                                                   duration: Duration(milliseconds: 1500 + (busIndex * 300)),
                                                   curve: Curves.elasticOut,
                                                   builder: (context, value, child) {
                                                     return Positioned(
                                                       top: 12 + (10 * (1 - value)) - (busIndex * 6),
-                                                      child: Transform.scale(
-                                                        scale: (0.8 + (0.2 * value)) * (1 - (busIndex * 0.05)),
+                                                      child: TweenAnimationBuilder<Offset>(
+                                                        tween: Tween(
+                                                          begin: Offset(0, beginDy),
+                                                          end: Offset.zero,
+                                                        ),
+                                                        duration: const Duration(milliseconds: 700),
+                                                        curve: Curves.easeOutCubic,
                                                         child: child,
+                                                        builder: (context, offset, slideChild) {
+                                                          return Transform.translate(
+                                                            offset: Offset(0, offset.dy * 18),
+                                                            child: Transform.scale(
+                                                              scale: (0.8 + (0.2 * value)) * (1 - (busIndex * 0.05)),
+                                                              child: slideChild,
+                                                            ),
+                                                          );
+                                                        },
                                                       ),
                                                     );
                                                   },

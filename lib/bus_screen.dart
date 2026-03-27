@@ -370,30 +370,62 @@ class _BusAppScreenState extends State<BusAppScreen>
         .doc('bus_locations')
         .snapshots()
         .listen((snapshot) {
-      if (snapshot.exists) {
-        final data = snapshot.data() as Map<String, dynamic>;
-        final List<dynamic>? summaries = data['summaries'];
-        if (summaries != null) {
-          final newList = summaries
-              .map((e) => BusSummary.fromJson(e as Map<String, dynamic>))
-              .toList();
-          
-          if (!listEquals(_realtimeBusList, newList)) {
-            if (mounted) {
-              setState(() {
-                _realtimeBusList = newList;
-                _isLoading = false;
-                _hasError = false;
-              });
+      try {
+        if (snapshot.exists) {
+          final raw = snapshot.data();
+          if (raw is! Map<String, dynamic>) {
+            if (mounted && _isLoading) {
+              setState(() => _isLoading = false);
             }
-          } else if (_isLoading) {
+            return;
+          }
+
+          final dynamic summariesRaw = raw['summaries'];
+          if (summariesRaw is List) {
+            final newList = summariesRaw
+                .whereType<Map>()
+                .map((e) => BusSummary.fromJson(e.cast<String, dynamic>()))
+                .toList();
+
+            if (!listEquals(_realtimeBusList, newList)) {
+              if (mounted) {
+                setState(() {
+                  _realtimeBusList = newList;
+                  _isLoading = false;
+                  _hasError = false;
+                });
+              }
+            } else if (_isLoading && mounted) {
+              setState(() => _isLoading = false);
+            }
+          } else {
+            // 문서는 있으나 summaries가 비어있거나 형식이 다르면 로딩 해제
+            if (mounted && _isLoading) {
+              setState(() => _isLoading = false);
+            }
+            // 초기 빈 문서 상태일 수 있어 API로 한 번 폴백
+            if (_realtimeBusList.isEmpty) {
+              _fetchBusData(isQuietRefetch: true);
+            }
+          }
+        } else {
+          // 데이터가 없는 경우 로딩 종료 후 API 폴백
+          if (_isLoading && mounted) {
             setState(() => _isLoading = false);
           }
+          if (_realtimeBusList.isEmpty) {
+            _fetchBusData(isQuietRefetch: true);
+          }
         }
-      } else {
-        // 데이터가 없는 경우 로딩 종료
-        if (_isLoading && mounted) {
-          setState(() => _isLoading = false);
+      } catch (e) {
+        debugPrint("Realtime snapshot parse error: $e");
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            if (_realtimeBusList.isEmpty) {
+              _hasError = true;
+            }
+          });
         }
       }
     }, onError: (e) {
@@ -449,7 +481,9 @@ class _BusAppScreenState extends State<BusAppScreen>
     }
 
     try {
-      final buses = await _busService.fetchAllBuses();
+      final buses = await _busService
+          .fetchAllBuses()
+          .timeout(const Duration(seconds: 18));
       if (mounted) {
         setState(() {
           _realtimeBusList = buses;
