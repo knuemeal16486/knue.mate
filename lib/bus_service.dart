@@ -409,7 +409,10 @@ class BusService {
 
     // 2. API 호출
     final key = _serviceKey;
-    if (key.isEmpty) return [];
+    if (key.isEmpty) {
+      debugPrint("BusService: API 키 누락으로 정류장 조회를 건너뜁니다 ($routeId)");
+      return [];
+    }
 
     final uri = Uri.parse(
       "https://apis.data.go.kr/1613000/BusRouteInfoInqireService/getRouteAcctoThrghSttnList"
@@ -419,9 +422,12 @@ class BusService {
     try {
       final res = await http
           .get(uri, headers: {"Accept": "application/json"})
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 5)); // 10s -> 5s로 단축 (사용자 체감 성능 향상)
 
-      if (res.statusCode != 200) return [];
+      if (res.statusCode != 200) {
+        debugPrint("BusService: API 응답 오류 (${res.statusCode}) - $routeId");
+        return [];
+      }
 
       final decoded = jsonDecode(utf8.decode(res.bodyBytes));
       if (decoded is! Map) return [];
@@ -459,6 +465,9 @@ class BusService {
       debugPrint("BusService: $routeId 노선 정류장 ${stops.length}개 로드 완료");
 
       return stops;
+    } on TimeoutException {
+      debugPrint("BusService: 노선 정류장 조회 타임아웃 ($routeId)");
+      return [];
     } catch (e) {
       debugPrint("BusService: 노선 정류장 조회 실패 ($routeId): $e");
       return [];

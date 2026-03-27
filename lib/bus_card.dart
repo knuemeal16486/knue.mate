@@ -503,16 +503,21 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
 
   /// API에서 정류장 데이터를 불러옴
   Future<void> _loadApiStops() async {
-    final routeId = BusService.getRouteId(widget.bus.id);
-    if (routeId != null) {
-      final stops = await BusService.fetchRouteStops(routeId);
-      if (mounted) {
-        setState(() {
-          _apiStops = stops.isNotEmpty ? stops : null;
-          _isLoadingStops = false;
-        });
+    try {
+      final routeId = BusService.getRouteId(widget.bus.id);
+      if (routeId != null) {
+        final stops = await BusService.fetchRouteStops(routeId);
+        if (mounted) {
+          setState(() {
+            _apiStops = stops.isNotEmpty ? stops : null;
+            _isLoadingStops = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoadingStops = false);
       }
-    } else {
+    } catch (e) {
+      debugPrint("BusCard: 정류장 데이터 로드 예외 - $e");
       if (mounted) setState(() => _isLoadingStops = false);
     }
   }
@@ -974,26 +979,63 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                   letterSpacing: -0.5,
                                 ),
                               ),
-                              if (_apiStops != null)
-                                Text(
-                                  "${_apiStops!.length}개 정류장",
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark
-                                        ? Colors.white38
-                                        : Colors.grey,
-                                  ),
-                                ),
+                              Row(
+                                children: [
+                                  if (_apiStops != null)
+                                    Text(
+                                      "${_apiStops!.length}개 정류장",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark
+                                            ? Colors.white38
+                                            : Colors.grey,
+                                      ),
+                                    )
+                                  else if (hasFallbackDirections)
+                                    Text(
+                                      "정류장 목록 (로컬)",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark
+                                            ? Colors.white24
+                                            : Colors.grey.shade400,
+                                      ),
+                                    ),
+                                  if (snapshot.hasData) ...[
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "실시간",
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.green.withOpacity(0.7),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ],
                           ),
                         ),
-                        if (snapshot.connectionState ==
-                                ConnectionState.waiting ||
-                            _isLoadingStops)
+                        // [개선] 로딩 조건 최적화 — 데이터가 이미 있는 경우(탭에서 클릭) 스피너를 공격적으로 노출하지 않음
+                        if ((snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) ||
+                            (_isLoadingStops && !hasFallbackDirections))
                           const SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2.5),
+                          )
+                        else if (snapshot.connectionState == ConnectionState.waiting || _isLoadingStops)
+                          // 데이터는 있지만 백그라운드 갱신 중일 때 작고 투명한 인디케이터
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                (isDark ? Colors.white : Colors.black12).withOpacity(0.3),
+                              ),
+                            ),
                           ),
                       ],
                     ),
