@@ -1,0 +1,72 @@
+﻿Analyzing 3 items...                                            
+
+   info - Unnecessary braces in a string interpolation - lib\bus_card.dart:163:24 - unnecessary_brace_in_string_interps
+   info - Unnecessary braces in a string interpolation - lib\bus_card.dart:163:31 - unnecessary_brace_in_string_interps
+   info - Unnecessary braces in a string interpolation - lib\bus_card.dart:165:24 - unnecessary_brace_in_string_interps
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:190:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:235:36 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:239:38 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:286:49 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:288:48 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:290:61 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:291:55 - deprecated_member_use
+   info - 'desiredAccuracy' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings - lib\bus_card.dart:605:9 - deprecated_member_use
+   info - 'timeLimit' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings - lib\bus_card.dart:606:9 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:940:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:975:57 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1033:61 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1059:74 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1071:44 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1230:42 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1263:63 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1298:67 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1398:70 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1478:83 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1529:74 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1531:93 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1542:76 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1544:95 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1567:77 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_card.dart:1597:46 - deprecated_member_use
+   info - Unnecessary braces in a string interpolation - lib\bus_model.dart:103:15 - unnecessary_brace_in_string_interps
+   info - Unnecessary braces in a string interpolation - lib\bus_model.dart:103:26 - unnecessary_brace_in_string_interps
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:667:35 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:713:64 - deprecated_member_use
+   info - The parameter name 'sum' matches a visible type name - lib\bus_screen.dart:751:55 - avoid_types_as_parameter_names
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:876:45 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:901:44 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1221:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1255:45 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1261:50 - deprecated_member_use
+   info - Statements in an if should be enclosed in a block - lib\bus_screen.dart:1438:17 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\bus_screen.dart:1440:17 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\bus_screen.dart:1448:19 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\bus_screen.dart:1450:19 - curly_braces_in_flow_control_structures
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1477:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1478:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1489:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1490:42 - deprecated_member_use
+   info - Unnecessary braces in a string interpolation - lib\bus_screen.dart:1535:36 - unnecessary_brace_in_string_interps
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1552:61 - deprecated_member_use
+   info - Unnecessary braces in a string interpolation - lib\bus_screen.dart:1603:10 - unnecessary_brace_in_string_interps
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1668:38 - deprecated_member_use
+   info - Unnecessary braces in a string interpolation - lib\bus_screen.dart:1725:10 - unnecessary_brace_in_string_interps
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\bus_screen.dart:1844:37 - deprecated_member_use
+
+flutter : 52 issues found. 
+(ran in 1.8s)
+위치 줄:1 문자:1
++ flutter analyze lib/bus_c
+ard.dart lib/bus_screen.dar
+t lib/bus_model.d ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (52   
+  issues found. (ran in    
+ 1.8s):String) [], Remo    
+teException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 

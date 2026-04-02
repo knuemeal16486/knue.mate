@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_route_data.dart';
+import 'favorite_service.dart';
+import 'congestion_indicator.dart';
 
 class BusCard extends StatelessWidget {
   final BusSummary bus;
@@ -12,7 +14,7 @@ class BusCard extends StatelessWidget {
   const BusCard({super.key, required this.bus});
 
   // 정류장 좌표 정보 (가장 가까운 정류장 계산용)
-  static const Map<String, List<double>> _stopCoordinates = {
+  static const Map<String, List<double>> stopCoordinates = {
     "한국교원대학교": [36.6067, 127.3564],
     "한국교원대정문": [36.6065, 127.3568],
     "한국교원대후문": [36.6081, 127.3542],
@@ -56,6 +58,14 @@ class BusCard extends StatelessWidget {
     }
   }
 
+  // 운행 정보가 없을 때 시간대별 메시지
+  String _getNoInfoMessage() {
+    final hour = DateTime.now().hour;
+    if (hour >= 23 || hour < 5) return "운행 종료";
+    if (hour >= 5 && hour < 6) return "곧 운행 시작";
+    return "위치 대기 중";
+  }
+
   void _showRouteDetail(BuildContext context) {
     debugPrint("BusCard: 노선 상세보기 시도 - 버스 번호: ${bus.number}");
     final routeData = BusRouteData.routeStops[bus.number];
@@ -81,14 +91,29 @@ class BusCard extends StatelessWidget {
     final bool isArrived = best != null && best.remainStops == 0;
     final bool hasInfo = best != null;
 
-    String currentStopName = hasInfo ? best.currentStopName : "운행 정보 없음";
+    String currentStopName = hasInfo ? best.currentStopName : _getNoInfoMessage();
 
-    // 버스 방향 추측 (양수면 학교행(상행), 음수면 종점행(하행))
+    // 버스 방향 추측 (양수면 상행, 음수면 하행)
     final bool isUpbound = best != null && best.remainStops >= 0;
-    final String directionTag = isUpbound ? "상행" : "하행";
-    final String directionSubText = isUpbound ? "학교행" : "종점행";
+    // 직행/경유에 따라 목적지 라벨 및 정류장 명을 구분
+    String directionSubText = "";
+    String targetStation = "";
+    if (bus.isDirect) {
+      directionSubText = isUpbound ? "교원대 정문행" : "종점 방면";
+      targetStation = "한국교원대 정류장";
+    } else {
+      bool is747 = bus.number == "747";
+      // 일반 경유 노선은 상행이 오송 방면, 하행이 청주 방면. 747은 반대.
+      bool isOsongBound = is747 ? !isUpbound : isUpbound;
+      if (isOsongBound) {
+        directionSubText = "오송 방면";
+        targetStation = "탑연삼거리 (궁평3리 방면)";
+      } else {
+        directionSubText = "청주 방면";
+        targetStation = "탑연삼거리 (월곡초등학교 방면)";
+      }
+    }
 
-    String targetStation = bus.isDirect ? "한국교원대 정류장" : "탑연삼거리 정류장";
     String remainText = "-";
     if (hasInfo) {
       if (isUpbound) {
@@ -96,9 +121,41 @@ class BusCard extends StatelessWidget {
             ? "$targetStation 진입 중"
             : "$targetStation까지 ${best.remainStops}정거장 전";
       } else {
-        // 주요 정류장을 지나쳤을 때 (하행)
-        remainText = best.statusText;
+        // 하행일 때 현재 위치와 방면을 명시
+        remainText = "$targetStation 방면 운행 중 (현재: ${best.currentStopName})";
       }
+    } else {
+      // 운행 정보가 없을 때 시간대별 메시지
+      final hour = DateTime.now().hour;
+      if (hour >= 23 || hour < 5) {
+        remainText = "운행 종료 시간대";
+      } else {
+        remainText = "운행 정보 대기 중";
+      }
+    }
+
+    // 뒤차 정보 (상행 우선 표시)
+    String secondBusInfo = "";
+    if (arrivals.length > 1) {
+      final upboundBuses = arrivals.where((a) => a.remainStops >= 0).toList();
+      if (upboundBuses.length >= 2) {
+        upboundBuses.sort((a, b) => a.remainStops.compareTo(b.remainStops));
+        final second = upboundBuses[1];
+        if (second.estimatedMinutes > 0) {
+          secondBusInfo = "뒤차 약 ${second.estimatedMinutes.round()}분 후";
+        } else {
+          secondBusInfo = "뒤차 ${second.remainStops}정거장 전";
+        }
+      } else if (upboundBuses.length == 1) {
+        final downbound = arrivals.where((a) => a.remainStops < 0).toList();
+        if (downbound.isNotEmpty) {
+          secondBusInfo = "+ ${downbound.length}대 반대 방면";
+        }
+      } else {
+        secondBusInfo = "모든 차량 종점 방면";
+      }
+    } else if (arrivals.length == 1 && !isUpbound) {
+      secondBusInfo = "종점 이동 후 되돌아옵니다";
     }
 
     // ETA: BusService에서 교통/시간대/날씨를 반영하여 계산한 estimatedMinutes 사용
@@ -124,32 +181,8 @@ class BusCard extends StatelessWidget {
       etaText = best.statusText;
     }
 
-    // 뒤차 정보 (상행 우선 표시)
-    String secondBusInfo = "";
-    if (arrivals.length > 1) {
-      // 상행 버스가 2대 이상이면 상행 2번째를 표시
-      final upboundBuses = arrivals.where((a) => a.remainStops >= 0).toList();
-      if (upboundBuses.length >= 2) {
-        final second = upboundBuses[1];
-        if (second.estimatedMinutes > 0) {
-          secondBusInfo = "+ 뒤차 약 ${second.estimatedMinutes.round()}분 후";
-        } else {
-          secondBusInfo = "+ 뒤차 ${second.remainStops}정거장 전";
-        }
-      } else if (upboundBuses.length == 1) {
-        // 상행 1대, 나머지는 하행 → 하행 정보 표시
-        final downbound = arrivals.where((a) => a.remainStops < 0).toList();
-        if (downbound.isNotEmpty) {
-          secondBusInfo = "+ ${downbound.length}대 종점 방면 운행 중";
-        }
-      } else {
-        // 모두 하행
-        secondBusInfo = "모든 차량 종점 방면";
-      }
-    }
-
     return Semantics(
-      label: _buildSemanticsLabel(best, targetStation),
+      label: "버스 ${bus.number}, $directionSubText, $remainText, $etaText",
       child: GestureDetector(
         onTap: () => _showRouteDetail(context),
         child: Container(
@@ -164,7 +197,7 @@ class BusCard extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                color: Colors.black.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.04),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -201,30 +234,7 @@ class BusCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (hasInfo)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: (isUpbound ? Colors.green : Colors.orange)
-                                  .withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: (isUpbound ? Colors.green : Colors.orange)
-                                    .withOpacity(0.3),
-                              ),
-                            ),
-                            child: Text(
-                              directionTag,
-                              style: TextStyle(
-                                color: isUpbound ? Colors.green : Colors.orange,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
+                          CongestionIndicator(bus.congestion),
                         if (arrivals.length > 1)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -250,6 +260,28 @@ class BusCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // 즐겨찾기 버튼
+                  FutureBuilder<bool>(
+                    future: FavoriteService.isFavorite(bus.number),
+                    builder: (context, snapshot) {
+                      final isFav = snapshot.data ?? false;
+                      return IconButton(
+                        icon: Icon(
+                          isFav ? Icons.star : Icons.star_border,
+                          color: isFav ? Colors.amber : Colors.grey,
+                          size: 20,
+                        ),
+                        onPressed: () async {
+                          if (isFav) {
+                            await FavoriteService.remove(bus.number);
+                          } else {
+                            await FavoriteService.add(bus.number);
+                          }
+                          // Note: In a stateless widget, the UI updates on the next rebuild.
+                        },
+                      );
+                    },
+                  ),
                   if (hasInfo && etaText.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -591,7 +623,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     String? nearest;
     double minDistance = double.infinity;
     for (final stop in stops) {
-      final coords = BusCard._stopCoordinates[stop];
+      final coords = BusCard.stopCoordinates[stop];
       if (coords != null) {
         final distance = Geolocator.distanceBetween(
           _userPosition!.latitude,

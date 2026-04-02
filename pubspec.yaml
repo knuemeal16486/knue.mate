@@ -38,7 +38,7 @@ dependencies:
   flutter_local_notifications: ^17.0.0
   timezone: ^0.9.2
   home_widget: ^0.8.1
-  shared_preferences: ^2.5.4
+  shared_preferences: ^2.5.5
   share_plus: ^12.0.1
   geolocator: ^14.0.2
   intl: ^0.20.2
@@ -54,7 +54,7 @@ dependencies:
   screenshot: ^3.0.0
   firebase_core: ^4.5.0
   cloud_firestore: ^6.1.3
-  firebase_messaging: ^16.1.2
+  firebase_messaging: ^16.1.3
   workmanager: ^0.9.0+3
 
 dev_dependencies:
@@ -72,18 +72,18 @@ dev_dependencies:
   
 flutter_native_splash:
   color: "#FFFFFF"            # 배경색 (흰색은 #FFFFFF, 검정은 #000000)
-  image: "assets/icons/knuesquare.png"    # 가운데 띄울 이미지 경로
-  branding: "assets/icons/knuesquare.png" # (선택) 로고 아래에 브랜드 이미지 추가하고 싶을 때
+  image: "assets/icons/knue_icon.png"    # 가운데 띄울 이미지 경로
+  branding: "assets/icons/knue_icon.png" # (선택) 로고 아래에 브랜드 이미지 추가하고 싶을 때
   color_dark: "#000000"       # (선택) 다크모드일 때 배경색
-  image_dark: "assets/icons/knuesquare.png" # (선택) 다크모드일 때 이미지
+  image_dark: "assets/icons/knue_icon.png" # (선택) 다크모드일 때 이미지
   
   android_12:                 # 안드로이드 12 이상을 위한 설정
-    image: "assets/icons/knuesquare.png"
+    image: "assets/icons/knue_icon.png"
     color: "#FFFFFF"
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icons/knuesquare.png" # C드라이브 파일을 프로젝트 폴더로 옮겨야 합니다.
+  image_path: "assets/icons/knue_icon.png" # C드라이브 파일을 프로젝트 폴더로 옮겨야 합니다.
   min_sdk_android: 21
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -96,7 +96,7 @@ flutter:
   assets:
     - .env
     - assets/buildings/knue_buildings.json
-    - assets/icons/knuesquare.png
+    - assets/icons/knue_icon.png
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

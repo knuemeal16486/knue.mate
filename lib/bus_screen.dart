@@ -9,7 +9,6 @@ import 'constants.dart';
 import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_card.dart';
-import 'meal_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BusAppScreen extends StatefulWidget {
@@ -32,7 +31,10 @@ class _BusAppScreenState extends State<BusAppScreen>
   List<BusSummary> _realtimeBusList = [];
   bool _isLoading = true;
   bool _hasError = false;
-  Timer? _timer; 
+  bool _isRefreshing = false; // 백그라운드 갱신 중 표시용
+  DateTime? _lastUpdateTime; // 마지막 데이터 갱신 시간
+  Timer? _timer;
+  Timer? _tickTimer; // UI 갱신 시간 표시용
   StreamSubscription<DocumentSnapshot>? _busSub; // 실시간 구독 변수 추가
 
   String _selectedBus = "513";
@@ -360,6 +362,10 @@ class _BusAppScreenState extends State<BusAppScreen>
     // [개선] 초기 로딩을 백그라운드에서 수행하고 Firestore 리스너가 UI를 관리하도록 함
     _fetchBusData(isQuietRefetch: true); 
     _startAutoRefresh();
+    // 1초마다 UI 갱신 (마지막 갱신 시간 표시용)
+    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _lastUpdateTime != null) setState(() {});
+    });
     _loadAlarms();
     _startRealtimeTracking();
   }
@@ -392,11 +398,16 @@ class _BusAppScreenState extends State<BusAppScreen>
                 setState(() {
                   _realtimeBusList = newList;
                   _isLoading = false;
+                  _isRefreshing = false;
                   _hasError = false;
+                  _lastUpdateTime = DateTime.now();
                 });
               }
             } else if (_isLoading && mounted) {
-              setState(() => _isLoading = false);
+              setState(() {
+                _isLoading = false;
+                _lastUpdateTime = DateTime.now();
+              });
             }
           } else {
             // 문서는 있으나 summaries가 비어있거나 형식이 다르면 로딩 해제
@@ -443,6 +454,7 @@ class _BusAppScreenState extends State<BusAppScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _tickTimer?.cancel();
     _busSub?.cancel();
     _tabController.dispose();
     _scrollController.dispose();
@@ -478,6 +490,9 @@ class _BusAppScreenState extends State<BusAppScreen>
         _isLoading = true;
         _hasError = false;
       });
+    } else if (isQuietRefetch && _realtimeBusList.isNotEmpty) {
+      // 백그라운드 갱신 중 표시
+      if (mounted) setState(() => _isRefreshing = true);
     }
 
     try {
@@ -488,7 +503,9 @@ class _BusAppScreenState extends State<BusAppScreen>
         setState(() {
           _realtimeBusList = buses;
           _isLoading = false;
+          _isRefreshing = false;
           _hasError = false;
+          _lastUpdateTime = DateTime.now();
         });
 
         // 수동 새로고침일 때 && 데이터가 갱신되었을 때만 토스트
@@ -503,7 +520,10 @@ class _BusAppScreenState extends State<BusAppScreen>
           setState(() {
             _hasError = true;
             _isLoading = false;
+            _isRefreshing = false;
           });
+        } else {
+          setState(() => _isRefreshing = false);
         }
         debugPrint("Bus Fetch Error: $e");
       }
@@ -563,12 +583,7 @@ class _BusAppScreenState extends State<BusAppScreen>
             title: const Text("청람버스"),
             backgroundColor: color,
             iconTheme: const IconThemeData(color: Colors.white),
-            leading: Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () => showAppSwitchDialog(context, "청람버스"),
-              ),
-            ),
+            leading: null, // 햄버거 메뉴 제거
             actions: [
               IconButton(
                 onPressed: () => _fetchBusData(), // [수정] 수동 새로고침 연결
@@ -613,10 +628,31 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
+  // 시간대에 따른 운행 안내 메시지
+  String _getEmptyStateMessage() {
+    final hour = DateTime.now().hour;
+    if (hour >= 23 || hour < 5) {
+      return "운행이 종료된 시간대입니다.\n첫차는 05:30부터 운행됩니다.";
+    } else if (hour >= 5 && hour < 6) {
+      return "곧 운행이 시작됩니다.\n잠시 후 다시 확인해주세요.";
+    }
+    return "현재 운행 중인 버스가 없습니다.\n잠시 후 다시 확인해주세요.";
+  }
+
+  // 마지막 갱신 시간 포맷
+  String _formatLastUpdate() {
+    if (_lastUpdateTime == null) return "";
+    final diff = DateTime.now().difference(_lastUpdateTime!);
+    if (diff.inSeconds < 5) return "방금 갱신";
+    if (diff.inSeconds < 60) return "${diff.inSeconds}초 전 갱신";
+    if (diff.inMinutes < 5) return "${diff.inMinutes}분 전 갱신";
+    return "${diff.inMinutes}분 전 (갱신 필요)";
+  }
+
   Widget _buildRealtimeContent(bool isDark) {
-    // 1. 초기 로딩 중
+    // 1. 초기 로딩 중 → 스켈레톤 UI
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildSkeletonLoading(isDark);
     }
 
     // 2. 에러 발생 시
@@ -625,44 +661,85 @@ class _BusAppScreenState extends State<BusAppScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text(
-              "데이터 로드 실패\n(네트워크 확인)",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.wifi_off_rounded, size: 40, color: Colors.redAccent),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
+            const SizedBox(height: 20),
+            Text(
+              "버스 정보를 불러오지 못했어요",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "네트워크 연결을 확인해주세요",
+              style: TextStyle(fontSize: 13, color: isDark ? Colors.white38 : Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
               onPressed: () => _fetchBusData(),
-              child: const Text("다시 시도"),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text("다시 시도"),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
           ],
         ),
       );
     }
 
-    // 3. 데이터 없음
+    // 3. 데이터 없음 → 시간대별 안내 메시지
     if (_realtimeBusList.isEmpty) {
+      final hour = DateTime.now().hour;
+      final isNight = hour >= 23 || hour < 5;
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.directions_bus_outlined,
-              size: 48,
-              color: Colors.grey,
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: (isNight ? Colors.indigo : Colors.blue).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isNight ? Icons.nightlight_round : Icons.directions_bus_outlined,
+                size: 40,
+                color: isNight ? Colors.indigo : Colors.blue,
+              ),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              "현재 운행 중인 버스가 없습니다.",
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+            const SizedBox(height: 20),
+            Text(
+              _getEmptyStateMessage(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.5,
+                color: isDark ? Colors.white60 : Colors.grey[600],
+              ),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => _fetchBusData(),
-              child: const Text("새로고침"),
-            ),
+            const SizedBox(height: 20),
+            if (!isNight)
+              ElevatedButton.icon(
+                onPressed: () => _fetchBusData(),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text("새로고침"),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
           ],
         ),
       );
@@ -682,15 +759,62 @@ class _BusAppScreenState extends State<BusAppScreen>
         children: [
           // === 실시간 요약 카드 ===
           _buildRealtimeSummaryCard(isDark, traffic, totalBuses),
-          
+
+          // === 마지막 갱신 시간 + 갱신 중 표시 ===
+          if (_lastUpdateTime != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Row(
+                children: [
+                  if (_isRefreshing) ...[
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          isDark ? Colors.white24 : Colors.grey.shade400,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      "갱신 중...",
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.white38 : Colors.grey.shade500,
+                      ),
+                    ),
+                  ] else ...[
+                    Icon(
+                      Icons.update,
+                      size: 12,
+                      color: isDark ? Colors.white24 : Colors.grey.shade400,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatLastUpdate(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _lastUpdateTime != null &&
+                                DateTime.now().difference(_lastUpdateTime!).inMinutes >= 3
+                            ? Colors.orange
+                            : (isDark ? Colors.white24 : Colors.grey.shade400),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
           if (directBuses.isNotEmpty) ...[
-            _buildSectionHeader("교원대 직행", isDark),
+            _buildSectionHeader("🎯 교원대 직행", isDark, subtitle: "정문까지 직통"),
             ...directBuses.map((b) => BusCard(bus: b)),
             const SizedBox(height: 20),
           ],
 
           if (tapyeonBuses.isNotEmpty) ...[
-            _buildSectionHeader("탑연삼거리 경유", isDark),
+            _buildSectionHeader("🔄 탑연삼거리 경유", isDark, subtitle: "탑연삼거리 하차 후 환승"),
             ...tapyeonBuses.map((b) => BusCard(bus: b)),
             const SizedBox(height: 20),
           ],
@@ -907,26 +1031,153 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
-  Widget _buildSectionHeader(String title, bool isDark) {
+  Widget _buildSectionHeader(String title, bool isDark, {String? subtitle}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
       child: Row(
         children: [
-          Icon(
-            Icons.label_important,
-            size: 18,
-            color: isDark ? Colors.white70 : Colors.blueGrey,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white70 : Colors.blueGrey,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white70 : Colors.blueGrey.shade700,
+                  ),
+                ),
+                if (subtitle != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.white24 : Colors.grey.shade500,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // 스켈레톤 로딩 UI (초기 로딩 시 보여줄 플레이스홀더)
+  Widget _buildSkeletonLoading(bool isDark) {
+    return ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      children: [
+        // 요약 카드 스켈레톤
+        _buildSkeletonCard(isDark, height: 80, margin: const EdgeInsets.fromLTRB(16, 0, 16, 12)),
+        // 섹션 헤더 스켈레톤
+        _buildSkeletonBar(isDark, width: 100, height: 16, margin: const EdgeInsets.fromLTRB(20, 12, 20, 8)),
+        // 버스 카드 스켈레톤 x4
+        for (int i = 0; i < 4; i++)
+          _buildSkeletonBusCard(isDark),
+        // 두 번째 섹션 헤더
+        _buildSkeletonBar(isDark, width: 120, height: 16, margin: const EdgeInsets.fromLTRB(20, 20, 20, 8)),
+        // 버스 카드 스켈레톤 x3
+        for (int i = 0; i < 3; i++)
+          _buildSkeletonBusCard(isDark),
+      ],
+    );
+  }
+
+  Widget _buildSkeletonBusCard(bool isDark) {
+    final shimmerBase = isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEEEEEE);
+    final shimmerHighlight = isDark ? const Color(0xFF3A3A3A) : const Color(0xFFF5F5F5);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildShimmerBox(shimmerBase, shimmerHighlight, width: 56, height: 28, radius: 8),
+              _buildShimmerBox(shimmerBase, shimmerHighlight, width: 100, height: 28, radius: 12),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _buildShimmerBox(shimmerBase, shimmerHighlight, width: 8, height: 44, radius: 4),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildShimmerBox(shimmerBase, shimmerHighlight, width: 80, height: 12, radius: 4),
+                  const SizedBox(height: 6),
+                  _buildShimmerBox(shimmerBase, shimmerHighlight, width: 140, height: 18, radius: 4),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildShimmerBox(shimmerBase, shimmerHighlight, width: double.infinity, height: 1, radius: 0),
+          const SizedBox(height: 10),
+          _buildShimmerBox(shimmerBase, shimmerHighlight, width: 200, height: 14, radius: 4),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShimmerBox(Color base, Color highlight, {required double width, required double height, required double radius}) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 1500),
+      builder: (context, value, child) {
+        return Container(
+          width: width == double.infinity ? null : width,
+          height: height,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [base, highlight, base],
+              stops: [0.0, 0.5, 1.0],
+              begin: Alignment(-1.0 + (2 * value), 0),
+              end: Alignment(1.0 + (2 * value), 0),
+            ),
+            borderRadius: radius > 0 ? BorderRadius.circular(radius) : null,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSkeletonCard(bool isDark, {double height = 60, EdgeInsets margin = EdgeInsets.zero}) {
+    return Container(
+      margin: margin,
+      height: height,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonBar(bool isDark, {double width = 100, double height = 14, EdgeInsets margin = EdgeInsets.zero}) {
+    return Container(
+      margin: margin,
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(4),
       ),
     );
   }

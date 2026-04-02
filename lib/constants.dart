@@ -69,6 +69,19 @@ enum MealType {
 
 enum ServeStatus { open, waiting, closed, notToday }
 
+enum AppTab {
+  meal("식단", Icons.restaurant_menu_rounded, Colors.orange),
+  bus("버스", Icons.directions_bus_rounded, Colors.blue),
+  run("런", Icons.directions_run_rounded, Colors.green),
+  map("지도", Icons.map_rounded, Colors.deepPurple),
+  settings("설정", Icons.settings_rounded, Colors.grey);
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  const AppTab(this.label, this.icon, this.color);
+}
+
 // [2] 유틸리티
 bool isSameDate(DateTime dt1, DateTime dt2) =>
     dt1.year == dt2.year && dt1.month == dt2.month && dt1.day == dt2.day;
@@ -494,6 +507,15 @@ class PreferencesService {
   static const String keyWidgetTrans = 'widget_trans';
   static const String keyWidgetTheme = 'widget_theme';
   static const String keyWidgetSource = 'widget_source';
+  static const String keyTabOrder = 'tab_order_v1';
+
+  static final ValueNotifier<List<AppTab>> tabOrder = ValueNotifier([
+    AppTab.meal,
+    AppTab.bus,
+    AppTab.run,
+    AppTab.map,
+    AppTab.settings,
+  ]);
 
   static Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -511,6 +533,23 @@ class PreferencesService {
     if (wTheme != null) widgetTheme.value = ThemeMode.values[wTheme];
     final int? wSource = prefs.getInt(keyWidgetSource);
     if (wSource != null) widgetSource.value = MealSource.values[wSource];
+
+    final List<String>? savedOrder = prefs.getStringList(keyTabOrder);
+    if (savedOrder != null) {
+      try {
+        tabOrder.value = savedOrder
+            .map((e) => AppTab.values.firstWhere((t) => t.name == e))
+            .toList();
+      } catch (e) {
+        debugPrint("PreferencesService: 탭 순서 로드 실패 - $e");
+      }
+    }
+  }
+
+  static Future<void> saveTabOrder(List<AppTab> order) async {
+    final prefs = await SharedPreferences.getInstance();
+    tabOrder.value = order;
+    await prefs.setStringList(keyTabOrder, order.map((e) => e.name).toList());
   }
 
   static Future<void> saveThemeMode(ThemeMode mode) async {

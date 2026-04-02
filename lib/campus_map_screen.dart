@@ -16,7 +16,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'constants.dart';
-import 'meal_screen.dart';
 import 'admin_staff_data.dart';
 
 // ─────────────────────────────────────────────────── 데이터 모델 ──
@@ -985,12 +984,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                   padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
                   child: Row(
                     children: [
-                      _TopBarBtn(
-                        icon: Icons.menu,
-                        active: false,
-                        isDark: isDark,
-                        onTap: () => showAppSwitchDialog(context, "캠퍼스맵"),
-                      ),
+                      const SizedBox(width: 16),
                       Text(
                         '캠퍼스맵',
                         style: TextStyle(
@@ -4222,114 +4216,188 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                             : const Color(0xFFFAFAFB),
                         child: ListView.separated(
                           shrinkWrap: true,
+                          padding: EdgeInsets.zero,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: staffList.length,
-                          separatorBuilder: (c, i) => Divider(
-                            height: 1,
-                            indent: 16,
-                            endIndent: 16,
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.05)
-                                : Colors.black.withValues(alpha: 0.03),
-                          ),
+                          separatorBuilder: (c, i) => const SizedBox.shrink(),
                           itemBuilder: (c, idx) {
                             final s = staffList[idx];
-                            // 직책 표시 여부: 조교, 교수, 주무관이 아니면 표시
-                            final hideCategory = [
-                              '조교',
-                              '교수',
-                              '주무관',
-                            ].contains(s.category);
-                            final showCategory = !hideCategory;
+                            final isDutyEmpty = s.duties.isEmpty;
 
-                            return Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                            return Container(
+                              margin: EdgeInsets.only(
+                                left: 12,
+                                right: 12,
+                                top: idx == 0 ? 0 : 6,
+                                bottom: idx == staffList.length - 1 ? 12 : 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.04)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.07)
+                                      : Colors.black.withValues(alpha: 0.06),
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Row 1: 직책 배지
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
                                       children: [
-                                        Row(
-                                          children: [
-                                            if (showCategory)
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 2,
-                                                    ),
-                                                margin: const EdgeInsets.only(
-                                                  right: 8,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: color.withValues(
-                                                    alpha: 0.1,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  s.category,
-                                                  style: const TextStyle(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w900,
-                                                    color: color,
-                                                  ),
-                                                ),
-                                              ),
-                                            const Text(
-                                              '담당 업무',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                                color: color,
-                                              ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: color.withValues(alpha: 0.12),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            s.category,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w800,
+                                              color: color,
                                             ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          s.duties.isEmpty
-                                              ? '업무 정보 없음'
-                                              : s.duties,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            height: 1.4,
-                                            color: s.duties.isEmpty
-                                                ? (isDark
-                                                      ? Colors.white24
-                                                      : Colors.black26)
-                                                : (isDark
-                                                      ? Colors.white.withValues(
-                                                          alpha: 0.9,
-                                                        )
-                                                      : Colors.black87),
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  IconButton.filledTonal(
-                                    onPressed: () => callPhone(s.phone),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: color.withValues(
-                                        alpha: 0.1,
+                                    const SizedBox(height: 10),
+                                    // Row 2: 연락처
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.phone_rounded,
+                                          size: 15,
+                                          color: isDark ? Colors.white54 : Colors.black54,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            s.phone,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? Colors.white70
+                                                  : Colors.black87,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ),
+                                        // 전화 버튼
+                                        GestureDetector(
+                                          onTap: () => callPhone(s.phone),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 8,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: color.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(20),
+                                            ),
+                                            child: const Text(
+                                              '통화',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: color,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    // Row 2: 담당 업무
+                                    if (!isDutyEmpty) ...[
+                                      const SizedBox(height: 10),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.04,
+                                                )
+                                              : const Color(0xFFF5F6FA),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Icon(
+                                              Icons.task_alt_rounded,
+                                              size: 14,
+                                              color:
+                                                  color.withValues(alpha: 0.6),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                s.duties,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  height: 1.5,
+                                                  color: isDark
+                                                      ? Colors.white
+                                                          .withValues(
+                                                            alpha: 0.8,
+                                                          )
+                                                      : Colors.black.withValues(
+                                                          alpha: 0.75,
+                                                        ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      foregroundColor: color,
-                                      padding: const EdgeInsets.all(10),
-                                    ),
-                                    icon: const Icon(
-                                      Icons.phone_rounded,
-                                      size: 20,
-                                    ),
-                                  ),
-                                ],
+                                    ] else ...[
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.info_outline_rounded,
+                                            size: 13,
+                                            color: isDark
+                                                ? Colors.white24
+                                                : Colors.black26,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '담당 업무 정보 없음',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark
+                                                  ? Colors.white24
+                                                  : Colors.black26,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
                             );
+
                           },
                         ),
                       ),

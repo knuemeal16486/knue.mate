@@ -1,42 +1,33 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'constants.dart';
-import 'bus_screen.dart';
-import 'campus_run_screen.dart';
-import 'campus_map_screen.dart';
 import 'gemini_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'tab_edit_screen.dart';
+import 'root_screen.dart';
 
-// =============================================================================
-// 1. 메인 스크린 (탭 관리)
-// =============================================================================
-class MealMainScreen extends StatefulWidget {
-  const MealMainScreen({super.key});
+// [개편] 식단 탭 전용 페이지 (기존 MealMainScreen)
+// [복원] 식단 탭 전용 페이지 (기존 스타일 복구)
+class MealTabPage extends StatefulWidget {
+  const MealTabPage({super.key});
   @override
-  State<MealMainScreen> createState() => _MealMainScreenState();
+  State<MealTabPage> createState() => _MealTabPageState();
 }
 
-class _MealMainScreenState extends State<MealMainScreen> {
+class _MealTabPageState extends State<MealTabPage> {
   int _currentIndex = 0;
   late final PageController _pageController;
 
-  // 페이지를 필드로 고정 — build마다 새 인스턴스가 생성되지 않도록
-  final List<Widget> _pages = [
-    const TodayMealPage(),
-    const MonthlyMealPage(),
-    const SettingsPage(),
-  ];
+  final List<Widget> _pages = [const TodayMealPage(), const MonthlyMealPage()];
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _currentIndex);
-    NotificationService().init();
   }
 
   @override
@@ -46,9 +37,7 @@ class _MealMainScreenState extends State<MealMainScreen> {
   }
 
   void _onTabTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
+    setState(() => _currentIndex = index);
     _pageController.animateToPage(
       index,
       duration: const Duration(milliseconds: 300),
@@ -56,30 +45,52 @@ class _MealMainScreenState extends State<MealMainScreen> {
     );
   }
 
-  void _onPageChanged(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Color>(
-      valueListenable: themeColor,
-      builder: (context, color, child) {
-        return Scaffold(
-          body: PageView(
-            controller: _pageController,
-            onPageChanged: _onPageChanged,
-            physics: const PageScrollPhysics(),
-            children: _pages,
-          ),
-          bottomNavigationBar: _BottomNavBar(
-            currentIndex: _currentIndex,
-            onTap: _onTabTapped,
-          ),
-        );
-      },
+    return Scaffold(
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (idx) => setState(() => _currentIndex = idx),
+        children: _pages,
+      ),
+      // 식단 탭 내부의 보조 내비게이션
+      bottomNavigationBar: Container(
+        height: 60,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.1))),
+        ),
+        child: Row(
+          children: [
+            _buildSubTab(0, Icons.restaurant, "오늘"),
+            _buildSubTab(1, Icons.calendar_month, "월간"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubTab(int index, IconData icon, String label) {
+    final isSel = _currentIndex == index;
+    final color = themeColor.value;
+    return Expanded(
+      child: InkWell(
+        onTap: () => _onTabTapped(index),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: isSel ? color : Colors.grey, size: 20),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                color: isSel ? color : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -239,7 +250,8 @@ class _TodayMealPageState extends State<TodayMealPage>
 
     if (newState) {
       // [수정] 권한을 먼저 요청하고, 그 결과(bool)를 받아 허가된 경우에만 알람 예약
-      final bool isGranted = await NotificationService().checkAndRequestPermission();
+      final bool isGranted = await NotificationService()
+          .checkAndRequestPermission();
 
       if (!isGranted) {
         // 권한 거부 — 알람 상태를 OFF로 되돌리고 안내
@@ -298,10 +310,7 @@ class _TodayMealPageState extends State<TodayMealPage>
                   bottom: Radius.circular(30),
                 ),
               ),
-              leading: IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white),
-                onPressed: () => showAppSwitchDialog(context, "청람밥상"),
-              ),
+              leading: null, // 햄버거 메뉴 제거
               title: Row(
                 children: [
                   const Text(
@@ -382,13 +391,13 @@ class _TodayMealPageState extends State<TodayMealPage>
             children: [
               // [수정] Firebase 앱 초기화 여부 확인 후 Stream 사용
               StreamBuilder<QuerySnapshot>(
-                stream: Firebase.apps.isEmpty 
-                  ? const Stream.empty() 
-                  : FirebaseFirestore.instance
-                    .collection('notices')
-                    .orderBy('createdAt', descending: true)
-                    .limit(1)
-                    .snapshots(),
+                stream: Firebase.apps.isEmpty
+                    ? const Stream.empty()
+                    : FirebaseFirestore.instance
+                          .collection('notices')
+                          .orderBy('createdAt', descending: true)
+                          .limit(1)
+                          .snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return const SizedBox.shrink();
@@ -1303,7 +1312,7 @@ class _SettingsPageState extends State<SettingsPage> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 120,
+            expandedHeight: 80,
             pinned: true,
             backgroundColor: currentColor,
             centerTitle: Platform.isIOS ? false : null,
@@ -1326,6 +1335,21 @@ class _SettingsPageState extends State<SettingsPage> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
+                    _buildSectionTitle("맞춤 설정"),
+                    _buildAppInfoItem(
+                      context: context,
+                      icon: Icons.swap_calls_rounded,
+                      title: "하단 탭 순서 및 시작화면",
+                      subtitle: "내비게이션 탭의 순서를 변경하거나 시작 화면 설정",
+                      iconColor: Colors.deepPurple,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (c) => const TabEditScreen(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     _buildSectionTitle("앱 테마"),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -2181,73 +2205,7 @@ class DeveloperInfoPage extends StatelessWidget {
   }
 }
 
-class _BottomNavBar extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  const _BottomNavBar({required this.currentIndex, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).primaryColor;
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20),
-        ],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _item(context, 0, Icons.restaurant, "오늘의 식단", primary),
-              _item(context, 1, Icons.calendar_month, "월간 식단표", primary),
-              _item(context, 2, Icons.settings, "환경설정", primary),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _item(
-    BuildContext context,
-    int index,
-    IconData icon,
-    String label,
-    Color primary,
-  ) {
-    final isSel = index == currentIndex;
-    return GestureDetector(
-      onTap: () => onTap(index),
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: isSel ? primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: isSel ? Colors.white : Colors.grey),
-            if (isSel) ...[
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
+// _BottomNavBar 는 RootNavigationScreen으로 이전되었으므로 삭제됨
 
 class _CalendarGrid extends StatelessWidget {
   final DateTime focusedMonth;
@@ -3424,15 +3382,8 @@ void showAppSwitchDialog(BuildContext context, String currentLabel) {
               isSelected: currentLabel == "청람밥상",
               color: Colors.orange,
               onTap: () {
-                if (currentLabel == "청람밥상") {
-                  Navigator.pop(ctx);
-                  return;
-                }
                 Navigator.pop(ctx);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (c) => const MealMainScreen()),
-                );
+                RootNavigationScreen.switchTab(AppTab.meal);
               },
             ),
             const SizedBox(height: 12),
@@ -3442,15 +3393,8 @@ void showAppSwitchDialog(BuildContext context, String currentLabel) {
               color: Colors.blue,
               isSelected: currentLabel == "청람버스",
               onTap: () {
-                if (currentLabel == "청람버스") {
-                  Navigator.pop(ctx);
-                  return;
-                }
                 Navigator.pop(ctx);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (c) => const BusAppScreen()),
-                );
+                RootNavigationScreen.switchTab(AppTab.bus);
               },
             ),
             const SizedBox(height: 12),
@@ -3460,15 +3404,8 @@ void showAppSwitchDialog(BuildContext context, String currentLabel) {
               color: Colors.green,
               isSelected: currentLabel == "캠퍼스런",
               onTap: () {
-                if (currentLabel == "캠퍼스런") {
-                  Navigator.pop(ctx);
-                  return;
-                }
                 Navigator.pop(ctx);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (c) => const CampusRunScreen()),
-                );
+                RootNavigationScreen.switchTab(AppTab.run);
               },
             ),
             const SizedBox(height: 12),
@@ -3478,15 +3415,8 @@ void showAppSwitchDialog(BuildContext context, String currentLabel) {
               color: Colors.deepPurple,
               isSelected: currentLabel == "캠퍼스맵",
               onTap: () {
-                if (currentLabel == "캠퍼스맵") {
-                  Navigator.pop(ctx);
-                  return;
-                }
                 Navigator.pop(ctx);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (c) => const CampusMapScreen()),
-                );
+                RootNavigationScreen.switchTab(AppTab.map);
               },
             ),
           ],

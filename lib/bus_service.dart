@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_sync_service.dart';
+import 'offline_cache.dart';
 
 class BusService {
   // API 키를 .env에서 안전하게 가져오기
@@ -111,6 +112,13 @@ class BusService {
     final cacheKey = 'all_buses';
     List<BusSummary>? firebaseCached;
 
+    // 0. 오프라인 캐시 먼저 확인
+    final offline = await OfflineCache.load();
+    if (offline != null) {
+      debugPrint('🗂️ Offline cache 사용 (최근 5분)');
+      return offline;
+    }
+
     // 1. 로컬 메모리 캐시 먼저 확인 (가장 빠름)
     if (_cache.containsKey(cacheKey)) {
       final timestamp = _cacheTimestamps[cacheKey];
@@ -208,6 +216,15 @@ class BusService {
           .map((e) => BusSummary.fromJson(e))
           .toList();
 
+      // 도착 알림 로그
+      for (final summary in summaryList) {
+        final next = summary.nextArrival;
+        if (next != null && next.estimatedMinutes > 0 && next.estimatedMinutes <= 5) {
+          final topic = 'bus_${summary.number}';
+          debugPrint('🔔 알림: ${summary.number}번 버스 ${next.estimatedMinutes.round()}분 내 도착 (topic: $topic)');
+        }
+      }
+
       // 4. 결과 파이어베이스에 업데이트
       // 전 노선이 모두 0대이고 Firebase 캐시도 없으면,
       // 설정/응답 오류 가능성이 높아 '빈 값 덮어쓰기'를 방지
@@ -238,6 +255,9 @@ class BusService {
       // 5. 로컬 메모리 캐싱
       _cache[cacheKey] = summaryList;
       _cacheTimestamps[cacheKey] = now;
+
+      // 오프라인 캐시 저장
+      await OfflineCache.save(summaryList);
 
       return summaryList;
     } catch (e) {

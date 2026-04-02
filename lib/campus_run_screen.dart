@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'constants.dart';
-import 'meal_screen.dart';
 
 class Classroom {
   final String name;
@@ -123,10 +122,11 @@ class _CampusRunScreenState extends State<CampusRunScreen>
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Container(
           height: MediaQuery.of(context).size.height * 0.8,
           decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
@@ -143,7 +143,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey[700],
+                  color: isDark ? Colors.grey[700] : Colors.grey[300],
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -186,12 +186,13 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     showDialog(
       context: context,
       builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return AlertDialog(
-          backgroundColor: Colors.grey[900],
+          backgroundColor: isDark ? Colors.grey[900] : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text("목표 시간 설정", style: TextStyle(color: Colors.white)),
+          title: Text("목표 시간 설정", style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
           content: StatefulBuilder(
             builder: (context, setStateSB) {
               return Row(
@@ -207,8 +208,8 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       "$inputMinutes분",
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                       ),
@@ -230,7 +231,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                 setState(() => _targetDurationSeconds = null);
                 Navigator.pop(context);
               },
-              child: const Text("해제", style: TextStyle(color: Colors.grey)),
+              child: Text("해제", style: TextStyle(color: isDark ? Colors.grey : Colors.grey[600])),
             ),
             TextButton(
               onPressed: () {
@@ -404,26 +405,25 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     return ValueListenableBuilder<Color>(
       valueListenable: themeColor,
       builder: (builderContext, primaryColor, child) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         final neonColor = _getNeonVariant(primaryColor);
-        const bgDark = Color(0xFF121212);
-        const textWhite = Colors.white;
+        final bgBase = isDark ? const Color(0xFF121212) : const Color(0xFFF5F6FA);
+        final textMain = isDark ? Colors.white : Colors.black87;
+        final textSub = isDark ? Colors.white70 : Colors.black54;
 
         final bool isTargetSelected = _targetClassroom != null;
         final isArrived = _distanceRemaining < 20 && _distanceRemaining > 0;
 
         return Scaffold(
-          backgroundColor: bgDark,
+          backgroundColor: bgBase,
           appBar: AppBar(
-            backgroundColor: bgDark,
+            backgroundColor: bgBase,
             elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.menu, color: textWhite),
-              onPressed: () => showAppSwitchDialog(context, "캠퍼스런"),
-            ),
-            title: const Text(
+            leading: null, // 햄버거 메뉴 제거
+            title: Text(
               "CAMPUS RUN",
               style: TextStyle(
-                color: textWhite,
+                color: textMain,
                 fontWeight: FontWeight.w900,
                 fontStyle: FontStyle.italic,
               ),
@@ -440,13 +440,13 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                     horizontal: 16,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     "현재 시각  ${_formatTimeHHMM(_currentTime)}",
-                    style: const TextStyle(
-                      color: Colors.white70,
+                    style: TextStyle(
+                      color: textSub,
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
@@ -466,16 +466,16 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                     ),
                     margin: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.grey[900],
+                      color: isDark ? Colors.grey[900] : Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: isTargetSelected
                             ? neonColor.withOpacity(0.5)
-                            : Colors.white10,
+                            : (isDark ? Colors.white10 : Colors.black12),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.5),
+                          color: isDark ? Colors.black.withOpacity(0.5) : Colors.black.withOpacity(0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -491,7 +491,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                               Text(
                                 "목표",
                                 style: TextStyle(
-                                  color: Colors.grey[500],
+                                  color: isDark ? Colors.grey[500] : Colors.grey[600],
                                   fontSize: 12,
                                 ),
                               ),
@@ -501,7 +501,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                                 style: TextStyle(
                                   color: _targetClassroom == null
                                       ? Colors.grey
-                                      : textWhite,
+                                      : textMain,
                                   fontSize: isTargetSelected ? 16 : 18,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -567,23 +567,25 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                       _buildMiniStat(
                         "시작 시각",
                         _formatTimeHHMMSS(_runStartTime!),
-                        Colors.white,
+                        textMain,
+                        isDark,
                       ),
-                      Container(width: 1, height: 30, color: Colors.white24),
+                      Container(width: 1, height: 30, color: isDark ? Colors.white24 : Colors.black12),
                       _buildMiniStat(
                         "경과 시간",
                         _formatDurationMMSS(_elapsedDuration),
                         neonColor,
+                        isDark,
                       ),
                     ],
                   ),
-                  const Divider(color: Colors.white12, height: 30),
+                  Divider(color: isDark ? Colors.white12 : Colors.black12, height: 30),
                 ] else ...[
                   const Spacer(),
                 ],
                 Text(
                   "예상 도착까지",
-                  style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14),
                 ),
                 const SizedBox(height: 4),
                 AnimatedBuilder(
@@ -593,8 +595,8 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                       scale: isArrived ? _pulseAnimation.value : 1.0,
                       child: Text(
                         _formatDuration(_estimatedSeconds),
-                        style: const TextStyle(
-                          color: textWhite,
+                        style: TextStyle(
+                          color: textMain,
                           fontSize: 64,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -2.0,
@@ -619,7 +621,8 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                     _buildMetricBlock(
                       "남은 거리",
                       "${_distanceRemaining.toStringAsFixed(0)}m",
-                      textWhite,
+                      textMain,
+                      isDark,
                     ),
                     GestureDetector(
                       onTap: () => setState(() => _isPaceMode = !_isPaceMode),
@@ -627,6 +630,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                         _isPaceMode ? "현재 페이스" : "현재 속도",
                         _getSpeedOrPaceString(),
                         neonColor,
+                        isDark,
                         unit: _isPaceMode ? "min/km" : "km/h",
                       ),
                     ),
@@ -655,8 +659,8 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                         ),
                         Text(
                           _getRequiredSpeedString(),
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black87,
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
                           ),
@@ -708,10 +712,10 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     );
   }
 
-  Widget _buildMiniStat(String label, String value, Color color) {
+  Widget _buildMiniStat(String label, String value, Color color, bool isDark) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        Text(label, style: TextStyle(color: isDark ? Colors.grey : Colors.grey[600], fontSize: 12)),
         Text(
           value,
           style: TextStyle(color: color, fontWeight: FontWeight.bold),
@@ -723,7 +727,8 @@ class _CampusRunScreenState extends State<CampusRunScreen>
   Widget _buildMetricBlock(
     String label,
     String value,
-    Color valueColor, {
+    Color valueColor,
+    bool isDark, {
     String unit = "",
   }) {
     return Column(
@@ -732,7 +737,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
         Text(
           label,
           style: TextStyle(
-            color: Colors.grey[600],
+            color: isDark ? Colors.grey[600] : Colors.grey[700],
             fontSize: 12,
             fontWeight: FontWeight.bold,
           ),
@@ -754,7 +759,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
               Text(
                 unit,
                 style: TextStyle(
-                  color: Colors.grey[600],
+                  color: isDark ? Colors.grey[600] : Colors.grey[700],
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
@@ -799,6 +804,7 @@ class _ClassroomListState extends State<_ClassroomList> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     List<Classroom> filteredList = widget.allClassrooms.where((room) {
       return room.name.toLowerCase().contains(_query.toLowerCase());
     }).toList();
@@ -817,7 +823,7 @@ class _ClassroomListState extends State<_ClassroomList> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: TextField(
             controller: _controller,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
             onChanged: (value) {
               setState(() {
                 _query = value;
@@ -825,10 +831,10 @@ class _ClassroomListState extends State<_ClassroomList> {
             },
             decoration: InputDecoration(
               hintText: "장소 검색...",
-              hintStyle: TextStyle(color: Colors.grey[600]),
-              prefixIcon: const Icon(Icons.search, color: Colors.grey),
+              hintStyle: TextStyle(color: isDark ? Colors.grey[600] : Colors.grey[500]),
+              prefixIcon: Icon(Icons.search, color: isDark ? Colors.grey : Colors.grey[600]),
               filled: true,
-              fillColor: Colors.grey[900],
+              fillColor: isDark ? Colors.grey[900] : Colors.grey[200],
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -851,23 +857,27 @@ class _ClassroomListState extends State<_ClassroomList> {
               final isFav = widget.favoriteNames.contains(room.name);
               return Container(
                 decoration: BoxDecoration(
-                  color: Colors.grey[900],
+                  color: isDark ? Colors.grey[900] : Colors.white,
                   borderRadius: BorderRadius.circular(12),
+                  border: isDark ? null : Border.all(color: Colors.black12),
+                  boxShadow: isDark ? null : [
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))
+                  ],
                 ),
                 child: ListTile(
                   onTap: () => widget.onSelect(room),
-                  leading: Icon(Icons.location_on, color: Colors.grey[700]),
+                  leading: Icon(Icons.location_on, color: isDark ? Colors.grey[700] : Colors.grey[600]),
                   title: Text(
                     room.name,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
                       fontWeight: FontWeight.normal,
                     ),
                   ),
                   trailing: IconButton(
                     icon: Icon(
                       isFav ? Icons.star : Icons.star_border,
-                      color: isFav ? Colors.amber : Colors.grey[600],
+                      color: isFav ? Colors.amber : (isDark ? Colors.grey[600] : Colors.grey[400]),
                     ),
                     onPressed: () {
                       widget.onToggleFavorite(room.name);

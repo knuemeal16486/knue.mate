@@ -7,13 +7,14 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'constants.dart';
-import 'meal_screen.dart';
 import 'building_data.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'firebase_sync_service.dart';
+import 'root_screen.dart';
+import 'push_notification_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -87,17 +88,13 @@ class StartupErrorApp extends StatelessWidget {
 }
 
 void main() async {
-  // 1. 바인딩 초기화
   WidgetsFlutterBinding.ensureInitialized();
 
-  // [추가] UI 에러 핸들러 설정 (화이트 스크린 방지용 최후의 보루)
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return StartupErrorApp(details.exception, details.stack ?? StackTrace.empty);
   };
 
   try {
-    // 2. 초기 로딩 화면 표시 (하얀 화면 방지)
-    // [중요] 앱이 실행되자마자 UI를 먼저 그려서 OS와의 연결을 유지함
     runApp(
       const MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -106,28 +103,24 @@ void main() async {
       ),
     );
 
-    // 3. 최우선 순위: Firebase 초기화
-    // 다른 모든 서비스(Firestore 등)가 Firebase에 의존하므로 가장 먼저 처리
     await _initializeFirebase();
 
-    // 4. 나머지 중요 설정 병렬 로드
     await Future.wait([
       initializeDateFormatting(),
       dotenv.load(fileName: ".env"),
-      loadBuildingData(), // 이제 Firebase가 있으므로 내부에서 Firestore 접근 가능
+      loadBuildingData(),
       PreferencesService.loadSettings(),
     ]);
 
-    // 5. 플러그인 및 기타 비필수 초기화
     try {
       _initializeBackgroundTasks();
       await _initializeHomeWidget();
       await NotificationService().init();
+      await PushNotificationService.init();
     } catch (e) {
       debugPrint("Plugin initialization error: $e");
     }
 
-    // 6. 워크매니저 초기화
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       try {
         await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
@@ -142,11 +135,9 @@ void main() async {
       }
     }
 
-    // 7. 메인 앱 실행
     runApp(const MyApp());
   } catch (e, stackTrace) {
     debugPrint("Native/Fatal Init Error: $e\n$stackTrace");
-    // 치명적 오류 시 전전용 에러 앱 표시
     runApp(StartupErrorApp(e, stackTrace));
   }
 }
@@ -158,7 +149,6 @@ Widget _buildLoadingScreen(BuildContext context, Widget? child) {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // 앱 로고 이미지가 있다면 여기에 배치 (assets/icons/knuesquare.png)
           Image.asset('assets/icons/knuesquare.png', width: 100, height: 100, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
           const SizedBox(height: 24),
           const CircularProgressIndicator(strokeWidth: 3),
@@ -172,15 +162,10 @@ Widget _buildLoadingScreen(BuildContext context, Widget? child) {
 
 Future<void> _initializeFirebase() async {
   try {
-    // 1. Firebase 초기화 완료 대기
-    await Firebase. initializeApp(
+    await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    
-    // 2. 초기화 완료 후 서비스 설정
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // FCM 설정 (비동기, 메인 루프 방해 안 함)
     _setupFirebaseMessaging();
   } catch (e) {
     debugPrint("Firebase init error: $e");
@@ -203,7 +188,6 @@ Future<void> _setupFirebaseMessaging() async {
     }
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // iOS에서는 APNS 토큰이 먼저 준비되어야 FCM 토큰을 정상적으로 받아올 수 있음
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         try {
           final apnsToken = await messaging.getAPNSToken();
@@ -229,7 +213,6 @@ Future<void> _setupFirebaseMessaging() async {
         debugPrint("FCM Token fetch error: $e");
       }
 
-      // [수정] 포그라운드 메시지 리스너 — 권한이 허가된 경우에만 등록
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         if (message.notification != null) {
           NotificationService().showNotification(
@@ -248,7 +231,6 @@ Future<void> _setupFirebaseMessaging() async {
 }
 
 void _initializeBackgroundTasks() {
-  // Firebase에 건물 데이터 업로드 (백그라운드)
   FirebaseSyncService.uploadBuildingsToFirestore();
 }
 
@@ -366,7 +348,7 @@ class MyApp extends StatelessWidget {
                 ),
               ),
               themeMode: mode,
-              home: const MealMainScreen(),
+              home: const RootNavigationScreen(),
             );
           },
         );

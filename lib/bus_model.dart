@@ -204,7 +204,7 @@ class BusSummary {
       'direction': direction,
       'arrivals': arrivals
           .map(
-            (a) => {
+            (a) => <String, dynamic>{
               'remainStops': a.remainStops,
               'currentStopName': a.currentStopName,
               'estimatedMinutes': a.estimatedMinutes,
