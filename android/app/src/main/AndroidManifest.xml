@@ -77,7 +77,20 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/home_widget_info" /> </receiver>
-        
+
+        <receiver
+            android:name=".BusWidgetProvider"
+            android:exported="true"
+            android:label="KNUE 버스 위젯">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="es.antonborri.home_widget.UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bus_widget_info" />
+        </receiver>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

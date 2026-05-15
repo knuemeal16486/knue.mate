@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'tab_edit_screen.dart';
 import 'root_screen.dart';
 import 'skeleton_loader.dart';
+import 'weather_service.dart';
 
 // [개편] 식단 탭 전용 페이지 (기존 MealMainScreen)
 // [복원] 식단 탭 전용 페이지 (기존 스타일 복구)
@@ -120,6 +121,7 @@ class _TodayMealPageState extends State<TodayMealPage>
   };
   int _reqId = 0;
   late final ScrollController _scrollController;
+  WeatherData? _weather;
 
   @override
   bool get wantKeepAlive => true;
@@ -131,12 +133,18 @@ class _TodayMealPageState extends State<TodayMealPage>
     _updateSelectionByTime();
     _loadAlarmState();
     fetchMeals();
+    _loadWeather();
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadWeather() async {
+    final w = await WeatherService.getCurrent();
+    if (mounted) setState(() => _weather = w);
   }
 
   Future<void> _loadAlarmState() async {
@@ -311,7 +319,30 @@ class _TodayMealPageState extends State<TodayMealPage>
                   bottom: Radius.circular(30),
                 ),
               ),
-              leading: null, // 햄버거 메뉴 제거
+              leading: _weather == null
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _weather!.icon,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                          Text(
+                            '${_weather!.temperature.round()}°',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+              leadingWidth: 52,
               title: Row(
                 children: [
                   const Text(
@@ -3303,6 +3334,12 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                   ),
           ),
           if (!unavailable)
+            _EmojiReactionRow(
+              date: widget.date,
+              source: widget.source,
+              type: widget.type,
+            ),
+          if (!unavailable)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: BoxDecoration(
@@ -3419,6 +3456,205 @@ class _MealDetailCardState extends State<_MealDetailCard> {
   }
 }
 
+// =============================================================================
+// 이모지 반응 위젯
+// =============================================================================
+
+class _EmojiReactionRow extends StatefulWidget {
+  final DateTime date;
+  final MealSource source;
+  final MealType type;
+
+  const _EmojiReactionRow({
+    required this.date,
+    required this.source,
+    required this.type,
+  });
+
+  @override
+  State<_EmojiReactionRow> createState() => _EmojiReactionRowState();
+}
+
+class _EmojiReactionRowState extends State<_EmojiReactionRow> {
+  static const List<Map<String, String>> _emojis = [
+    {'emoji': '😋', 'label': '맛있어요'},
+    {'emoji': '👍', 'label': '보통이에요'},
+    {'emoji': '🤔', 'label': '아쉬워요'},
+    {'emoji': '🔥', 'label': '강추예요'},
+  ];
+
+  String? _myEmoji;
+  bool _isSubmitting = false;
+
+  String get _dateStr =>
+      '${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}';
+
+  String get _docId {
+    final fp = _fingerPrint ?? 'anon';
+    return '${fp}_${_dateStr}_${widget.source.name}_${widget.type.stdKey}';
+  }
+
+  String? _fingerPrint;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFingerPrintAndMyEmoji();
+  }
+
+  @override
+  void didUpdateWidget(_EmojiReactionRow old) {
+    super.didUpdateWidget(old);
+    if (old.date != widget.date ||
+        old.source != widget.source ||
+        old.type != widget.type) {
+      _myEmoji = null;
+      _loadFingerPrintAndMyEmoji();
+    }
+  }
+
+  Future<void> _loadFingerPrintAndMyEmoji() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? fp = prefs.getString('user_fingerprint');
+    if (fp == null) {
+      fp = DateTime.now().millisecondsSinceEpoch.toString();
+      await prefs.setString('user_fingerprint', fp);
+    }
+    _fingerPrint = fp;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('meal_emojis')
+          .doc(_docId)
+          .get();
+      if (doc.exists && mounted) {
+        setState(() => _myEmoji = doc.data()?['emoji'] as String?);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _submitEmoji(String emoji) async {
+    if (_isSubmitting) return;
+    if (!mounted) return;
+
+    final newEmoji = _myEmoji == emoji ? null : emoji;
+    setState(() {
+      _myEmoji = newEmoji;
+      _isSubmitting = true;
+    });
+
+    try {
+      final fp = _fingerPrint ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final ref = FirebaseFirestore.instance.collection('meal_emojis').doc(_docId);
+
+      if (newEmoji == null) {
+        await ref.delete();
+      } else {
+        await ref.set({
+          'fingerPrint': fp,
+          'date': _dateStr,
+          'source': widget.source.name,
+          'mealType': widget.type.stdKey,
+          'emoji': newEmoji,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('emoji submit error: $e');
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: Firebase.apps.isEmpty
+          ? const Stream.empty()
+          : FirebaseFirestore.instance
+                .collection('meal_emojis')
+                .where('date', isEqualTo: _dateStr)
+                .where('source', isEqualTo: widget.source.name)
+                .where('mealType', isEqualTo: widget.type.stdKey)
+                .snapshots(),
+      builder: (context, snapshot) {
+        final counts = <String, int>{};
+        if (snapshot.hasData) {
+          for (final doc in snapshot.data!.docs) {
+            final e = (doc.data() as Map<String, dynamic>)['emoji'] as String?;
+            if (e != null) counts[e] = (counts[e] ?? 0) + 1;
+          }
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: isDark ? Colors.white10 : Colors.grey.shade200,
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: _emojis.map((e) {
+              final emoji = e['emoji']!;
+              final label = e['label']!;
+              final count = counts[emoji] ?? 0;
+              final isSelected = _myEmoji == emoji;
+
+              return GestureDetector(
+                onTap: () => _submitEmoji(emoji),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Theme.of(context).primaryColor.withOpacity(0.12)
+                        : (isDark ? Colors.white.withOpacity(0.04) : Colors.grey.shade50),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSelected
+                          ? Theme.of(context).primaryColor.withOpacity(0.5)
+                          : (isDark ? Colors.white12 : Colors.grey.shade200),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        emoji,
+                        style: TextStyle(
+                          fontSize: isSelected ? 26 : 22,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        count > 0 ? '$count' : label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: isSelected ? FontWeight.w900 : FontWeight.normal,
+                          color: isSelected
+                              ? Theme.of(context).primaryColor
+                              : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+}
+
 void showAppSwitchDialog(BuildContext context, String currentLabel) {
   showDialog(
     context: context,
@@ -3459,6 +3695,17 @@ void showAppSwitchDialog(BuildContext context, String currentLabel) {
               onTap: () {
                 Navigator.pop(ctx);
                 RootNavigationScreen.switchTab(AppTab.bus);
+              },
+            ),
+            const SizedBox(height: 12),
+            AppSwitchOption(
+              icon: Icons.calendar_month_rounded,
+              label: "학사일정",
+              color: Colors.teal,
+              isSelected: currentLabel == "학사일정",
+              onTap: () {
+                Navigator.pop(ctx);
+                RootNavigationScreen.switchTab(AppTab.schedule);
               },
             ),
             const SizedBox(height: 12),

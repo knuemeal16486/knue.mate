@@ -5,6 +5,7 @@ import 'meal_screen.dart';
 import 'bus_screen.dart';
 import 'campus_map_screen.dart';
 import 'campus_run_screen.dart';
+import 'schedule_screen.dart';
 
 class RootNavigationScreen extends StatefulWidget {
   static final GlobalKey<RootNavigationScreenState> navKey =
@@ -66,6 +67,8 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
         return const MealTabPage();
       case AppTab.bus:
         return const BusAppScreen();
+      case AppTab.schedule:
+        return const ScheduleScreen();
       case AppTab.run:
         return const CampusRunScreen();
       case AppTab.map:
