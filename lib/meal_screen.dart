@@ -9,6 +9,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'tab_edit_screen.dart';
 import 'root_screen.dart';
+import 'skeleton_loader.dart';
 
 // [개편] 식단 탭 전용 페이지 (기존 MealMainScreen)
 // [복원] 식단 탭 전용 페이지 (기존 스타일 복구)
@@ -455,14 +456,12 @@ class _TodayMealPageState extends State<TodayMealPage>
               ),
               const SizedBox(height: 16),
               if (_loading)
-                SizedBox(
-                  height: 300,
-                  child: Center(
-                    child: CircularProgressIndicator(color: primaryColor),
-                  ),
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: MealSkeletonCard(),
                 )
               else if (_error != null)
-                _ErrorCard(message: _error!)
+                _ErrorCard(message: _error!, onRetry: fetchMeals)
               else
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
@@ -1127,14 +1126,12 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
             ),
             const SizedBox(height: 16),
             if (_loading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(40),
-                  child: CircularProgressIndicator(),
-                ),
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: MealSkeletonCard(),
               )
             else if (_error != null)
-              _ErrorCard(message: _error!)
+              _ErrorCard(message: _error!, onRetry: _fetchForSelectedDate)
             else
               _MealDetailCard(
                 status: statusFor(_selectedType, DateTime.now(), _selectedDate),
@@ -2468,11 +2465,78 @@ class _MealTabs extends StatelessWidget {
 
 class _ErrorCard extends StatelessWidget {
   final String message;
-  const _ErrorCard({required this.message});
+  final VoidCallback? onRetry;
+  const _ErrorCard({required this.message, this.onRetry});
+
   @override
-  Widget build(BuildContext context) => Center(
-    child: Text(message, style: const TextStyle(color: Colors.red)),
-  );
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).primaryColor;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E22) : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.wifi_off_rounded, color: Colors.red, size: 28),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              "식단 정보를 불러오지 못했어요",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "네트워크 연결을 확인하고 다시 시도해 주세요.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                height: 1.4,
+              ),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text("다시 시도"),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: primary,
+                    side: BorderSide(color: primary.withOpacity(0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // -----------------------------------------------------------------------------

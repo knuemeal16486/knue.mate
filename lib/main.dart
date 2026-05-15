@@ -143,21 +143,168 @@ void main() async {
 }
 
 Widget _buildLoadingScreen(BuildContext context, Widget? child) {
-  return Scaffold(
-    backgroundColor: Colors.white,
-    body: Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Image.asset('assets/icons/knuesquare.png', width: 100, height: 100, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
-          const SizedBox(height: 24),
-          const CircularProgressIndicator(strokeWidth: 3),
-          const SizedBox(height: 16),
-          const Text("캠퍼스 데이터를 불러오는 중...", style: TextStyle(color: Colors.grey)),
-        ],
+  return const _AnimatedSplashScreen();
+}
+
+class _AnimatedSplashScreen extends StatefulWidget {
+  const _AnimatedSplashScreen();
+  @override
+  State<_AnimatedSplashScreen> createState() => _AnimatedSplashScreenState();
+}
+
+class _AnimatedSplashScreenState extends State<_AnimatedSplashScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _fade;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      duration: const Duration(milliseconds: 900),
+      vsync: this,
+    );
+    _fade = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _ctrl, curve: const Interval(0, 0.6, curve: Curves.easeOut)),
+    );
+    _scale = Tween<double>(begin: 0.75, end: 1).animate(
+      CurvedAnimation(parent: _ctrl, curve: const Interval(0, 0.7, curve: Curves.elasticOut)),
+    );
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FE),
+      body: Center(
+        child: FadeTransition(
+          opacity: _fade,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ScaleTransition(
+                scale: _scale,
+                child: Container(
+                  width: 108,
+                  height: 108,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2563EB).withOpacity(0.35),
+                        blurRadius: 28,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: Image.asset(
+                      'assets/icons/knuesquare.png',
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, e, s) =>
+                          const Icon(Icons.school, size: 60, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              const Text(
+                "KNUE Mate",
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF1A1A2E),
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "한국교원대학교 올인원 캠퍼스",
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF9CA3AF),
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(height: 56),
+              const _PulsingDots(),
+            ],
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _PulsingDots extends StatefulWidget {
+  const _PulsingDots();
+  @override
+  State<_PulsingDots> createState() => _PulsingDotsState();
+}
+
+class _PulsingDotsState extends State<_PulsingDots>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (i) {
+            final phase = ((_ctrl.value - i * 0.25) % 1.0).clamp(0.0, 1.0);
+            final t = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
+            final scale = 0.6 + t * 0.7;
+            final opacity = 0.3 + t * 0.7;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              child: Transform.scale(
+                scale: scale,
+                child: Opacity(
+                  opacity: opacity,
+                  child: const CircleAvatar(
+                    radius: 5,
+                    backgroundColor: Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
 }
 
 Future<void> _initializeFirebase() async {
@@ -275,11 +422,11 @@ class MyApp extends StatelessWidget {
                 textTheme: GoogleFonts.notoSansKrTextTheme(
                   ThemeData(brightness: Brightness.light).textTheme,
                 ),
-                scaffoldBackgroundColor: const Color(0xFFF8F9FE),
+                scaffoldBackgroundColor: const Color(0xFFF5F5F7),
                 cardColor: Colors.white,
                 cardTheme: CardThemeData(
-                  elevation: 8,
-                  shadowColor: Colors.black.withOpacity(0.04),
+                  elevation: 0,
+                  shadowColor: Colors.black.withOpacity(0.06),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),
@@ -295,6 +442,35 @@ class MyApp extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
+                  ),
+                ),
+                navigationBarTheme: NavigationBarThemeData(
+                  labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return GoogleFonts.notoSansKr(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      );
+                    }
+                    return GoogleFonts.notoSansKr(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black38,
+                    );
+                  }),
+                  iconTheme: WidgetStateProperty.resolveWith((states) {
+                    return IconThemeData(
+                      size: 24,
+                      color: states.contains(WidgetState.selected)
+                          ? color
+                          : Colors.black38,
+                    );
+                  }),
+                  height: 72,
+                  indicatorColor: color.withOpacity(0.12),
+                  indicatorShape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
                 pageTransitionsTheme: const PageTransitionsTheme(
@@ -321,8 +497,8 @@ class MyApp extends StatelessWidget {
                 scaffoldBackgroundColor: const Color(0xFF0D0D0F),
                 cardColor: const Color(0xFF1E1E22),
                 cardTheme: CardThemeData(
-                  elevation: 8,
-                  shadowColor: Colors.black.withOpacity(0.2),
+                  elevation: 0,
+                  shadowColor: Colors.black.withOpacity(0.3),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),
@@ -338,6 +514,35 @@ class MyApp extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
+                  ),
+                ),
+                navigationBarTheme: NavigationBarThemeData(
+                  labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return GoogleFonts.notoSansKr(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      );
+                    }
+                    return GoogleFonts.notoSansKr(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white38,
+                    );
+                  }),
+                  iconTheme: WidgetStateProperty.resolveWith((states) {
+                    return IconThemeData(
+                      size: 24,
+                      color: states.contains(WidgetState.selected)
+                          ? color
+                          : Colors.white38,
+                    );
+                  }),
+                  height: 72,
+                  indicatorColor: color.withOpacity(0.2),
+                  indicatorShape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
                 pageTransitionsTheme: const PageTransitionsTheme(

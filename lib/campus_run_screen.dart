@@ -305,7 +305,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
               _updateMetrics(position);
             },
             onError: (error) {
-              print("위치 오류: $error");
+              debugPrint("위치 오류: $error");
               if (mounted) {
                 setState(() {
                   _statusMessage = "위치 정보를 가져올 수 없습니다";
