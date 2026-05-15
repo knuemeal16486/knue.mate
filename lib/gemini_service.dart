@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -6,7 +7,7 @@ class GeminiService {
   static String get apiKey {
     final key = dotenv.env['GEMINI_API_KEY'];
     if (key == null || key.isEmpty) {
-      print("⚠️ GEMINI_API_KEY가 .env 파일에 설정되지 않았습니다.");
+      debugPrint("⚠️ GEMINI_API_KEY가 .env 파일에 설정되지 않았습니다.");
       return "";
     }
     return key;
@@ -80,7 +81,7 @@ class GeminiService {
         return result;
       } catch (e) {
         retryCount++;
-        print("Gemini API 오류 (시도 $retryCount): $e");
+        debugPrint("Gemini API 오류 (시도 $retryCount): $e");
         if (retryCount >= 2) break;
         await Future.delayed(const Duration(milliseconds: 1000));
       }

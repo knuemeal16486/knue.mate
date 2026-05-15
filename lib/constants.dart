@@ -72,6 +72,7 @@ enum ServeStatus { open, waiting, closed, notToday }
 enum AppTab {
   meal("식단", Icons.restaurant_menu_rounded, Colors.orange),
   bus("버스", Icons.directions_bus_rounded, Colors.blue),
+  schedule("일정", Icons.calendar_month_rounded, Colors.teal),
   run("런", Icons.directions_run_rounded, Colors.green),
   map("지도", Icons.map_rounded, Colors.deepPurple),
   settings("설정", Icons.settings_rounded, Colors.grey);
@@ -139,15 +140,45 @@ Future<void> shareMenu(
   await SharePlus.instance.share(ShareParams(text: shareText.trim()));
 }
 
-void showToast(BuildContext context, String msg) {
+void showToast(BuildContext context, String msg, {bool isError = false}) {
   ScaffoldMessenger.of(context).clearSnackBars();
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final primary = Theme.of(context).primaryColor;
+  final bgColor = isError
+      ? Colors.red.shade700
+      : isDark
+          ? const Color(0xFF2C2C30)
+          : const Color(0xFF1A1A2E);
+
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
-      content: Text(msg, textAlign: TextAlign.center),
-      duration: const Duration(seconds: 1),
+      content: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isError)
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Icon(Icons.error_outline, color: Colors.white, size: 18),
+            ),
+          Flexible(
+            child: Text(
+              msg,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+      duration: Duration(seconds: isError ? 2 : 1),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-      backgroundColor: Colors.grey.withOpacity(0.9),
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: bgColor,
+      elevation: 4,
     ),
   );
 }
@@ -485,6 +516,32 @@ Future<void> forceUpdateWidgetWithCurrentSettings() async {
   await fetchMealApi(targetDate, defaultSourceNotifier.value);
 }
 
+Future<void> updateBusWidget({
+  required String outgoingNext,
+  required String incomingNext,
+  String upcoming = '',
+}) async {
+  try {
+    final now = DateTime.now();
+    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} 기준';
+
+    await HomeWidget.saveWidgetData<String>('bus_outgoing_next', outgoingNext);
+    await HomeWidget.saveWidgetData<String>('bus_incoming_next', incomingNext);
+    await HomeWidget.saveWidgetData<String>('bus_upcoming', upcoming);
+    await HomeWidget.saveWidgetData<String>('bus_updated_at', timeStr);
+    await HomeWidget.saveWidgetData<int>('themeMode', widgetTheme.value.index);
+
+    await HomeWidget.updateWidget(
+      name: 'BusWidgetProvider',
+      androidName: 'BusWidgetProvider',
+      qualifiedAndroidName: 'com.knue.knuemate.BusWidgetProvider',
+    );
+    debugPrint('버스 위젯 업데이트 완료');
+  } catch (e) {
+    debugPrint('버스 위젯 업데이트 실패: $e');
+  }
+}
+
 Future<void> testBasicWidgetFunction() async {
   // 테스트용 함수
   await HomeWidget.saveWidgetData<String>('widget_title', '테스트 식당');
@@ -512,6 +569,7 @@ class PreferencesService {
   static final ValueNotifier<List<AppTab>> tabOrder = ValueNotifier([
     AppTab.meal,
     AppTab.bus,
+    AppTab.schedule,
     AppTab.run,
     AppTab.map,
     AppTab.settings,
@@ -724,7 +782,7 @@ class NotificationService {
         matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {
-      print("알림 예약 실패: $e");
+      debugPrint("알림 예약 실패: $e");
     }
   }
 

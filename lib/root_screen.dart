@@ -5,11 +5,12 @@ import 'meal_screen.dart';
 import 'bus_screen.dart';
 import 'campus_map_screen.dart';
 import 'campus_run_screen.dart';
-import 'dart:ui';
+import 'schedule_screen.dart';
 
 class RootNavigationScreen extends StatefulWidget {
-  static final GlobalKey<RootNavigationScreenState> navKey = GlobalKey<RootNavigationScreenState>();
-  
+  static final GlobalKey<RootNavigationScreenState> navKey =
+      GlobalKey<RootNavigationScreenState>();
+
   const RootNavigationScreen({super.key});
 
   @override
@@ -19,9 +20,7 @@ class RootNavigationScreen extends StatefulWidget {
     final state = navKey.currentState;
     if (state != null) {
       final index = PreferencesService.tabOrder.value.indexOf(tab);
-      if (index != -1) {
-        state._onTabTapped(index);
-      }
+      if (index != -1) state._onTabTapped(index);
     }
   }
 }
@@ -34,8 +33,6 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _currentIndex);
-    
-    // 탭 순서가 바뀌었을 때 UI를 갱신하기 위한 리스너
     PreferencesService.tabOrder.addListener(_onTabOrderChanged);
   }
 
@@ -51,15 +48,16 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
   }
 
   void _onTabTapped(int index) {
-    if (index == _currentIndex) return;
+    if (index == _currentIndex) {
+      HapticFeedback.selectionClick();
+      return;
+    }
     HapticFeedback.selectionClick();
-    setState(() {
-      _currentIndex = index;
-    });
+    setState(() => _currentIndex = index);
     _pageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut, 
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOutCubic,
     );
   }
 
@@ -69,6 +67,8 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
         return const MealTabPage();
       case AppTab.bus:
         return const BusAppScreen();
+      case AppTab.schedule:
+        return const ScheduleScreen();
       case AppTab.run:
         return const CampusRunScreen();
       case AppTab.map:
@@ -88,52 +88,36 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
       key: RootNavigationScreen.navKey,
       body: PageView(
         controller: _pageController,
-        onPageChanged: (index) => setState(() => _currentIndex = index),
-        physics: const NeverScrollableScrollPhysics(), 
+        onPageChanged: (index) {
+          if (index != _currentIndex) setState(() => _currentIndex = index);
+        },
+        physics: const NeverScrollableScrollPhysics(),
         children: tabs.map((t) => _getScreenForTab(t)).toList(),
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: theme.scaffoldBackgroundColor.withOpacity(0.8),
-          border: Border(
-            top: BorderSide(
-              color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
-              width: 0.5,
-            ),
-          ),
+      bottomNavigationBar: NavigationBar(
+        onDestinationSelected: _onTabTapped,
+        selectedIndex: _currentIndex,
+        backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.black.withOpacity(0.08),
+        elevation: 0,
+        indicatorColor: theme.primaryColor.withOpacity(isDark ? 0.2 : 0.12),
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
         ),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-            child: BottomNavigationBar(
-              currentIndex: _currentIndex,
-              onTap: _onTabTapped,
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              selectedItemColor: theme.primaryColor,
-              unselectedItemColor: isDark ? Colors.white30 : Colors.black26,
-              selectedFontSize: 11,
-              unselectedFontSize: 11,
-              showSelectedLabels: true,
-              showUnselectedLabels: true,
-              items: tabs.map((tab) {
-                return BottomNavigationBarItem(
-                  icon: Icon(tab.icon),
-                  activeIcon: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: theme.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(tab.icon),
-                  ),
-                  label: tab.label,
-                );
-              }).toList(),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        animationDuration: const Duration(milliseconds: 300),
+        destinations: tabs.map((tab) {
+          return NavigationDestination(
+            icon: Icon(
+              tab.icon,
+              color: isDark ? Colors.white38 : Colors.black38,
             ),
-          ),
-        ),
+            selectedIcon: Icon(tab.icon, color: theme.primaryColor),
+            label: tab.label,
+            tooltip: tab.label,
+          );
+        }).toList(),
       ),
     );
   }

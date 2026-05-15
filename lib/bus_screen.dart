@@ -9,6 +9,7 @@ import 'constants.dart';
 import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_card.dart';
+import 'skeleton_loader.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BusAppScreen extends StatefulWidget {
@@ -1073,112 +1074,21 @@ class _BusAppScreenState extends State<BusAppScreen>
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 12),
       children: [
-        // 요약 카드 스켈레톤
-        _buildSkeletonCard(isDark, height: 80, margin: const EdgeInsets.fromLTRB(16, 0, 16, 12)),
-        // 섹션 헤더 스켈레톤
-        _buildSkeletonBar(isDark, width: 100, height: 16, margin: const EdgeInsets.fromLTRB(20, 12, 20, 8)),
-        // 버스 카드 스켈레톤 x4
-        for (int i = 0; i < 4; i++)
-          _buildSkeletonBusCard(isDark),
-        // 두 번째 섹션 헤더
-        _buildSkeletonBar(isDark, width: 120, height: 16, margin: const EdgeInsets.fromLTRB(20, 20, 20, 8)),
-        // 버스 카드 스켈레톤 x3
-        for (int i = 0; i < 3; i++)
-          _buildSkeletonBusCard(isDark),
-      ],
-    );
-  }
-
-  Widget _buildSkeletonBusCard(bool isDark) {
-    final shimmerBase = isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEEEEEE);
-    final shimmerHighlight = isDark ? const Color(0xFF3A3A3A) : const Color(0xFFF5F5F5);
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: SkeletonBox(width: double.infinity, height: 80, borderRadius: 20),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildShimmerBox(shimmerBase, shimmerHighlight, width: 56, height: 28, radius: 8),
-              _buildShimmerBox(shimmerBase, shimmerHighlight, width: 100, height: 28, radius: 12),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _buildShimmerBox(shimmerBase, shimmerHighlight, width: 8, height: 44, radius: 4),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildShimmerBox(shimmerBase, shimmerHighlight, width: 80, height: 12, radius: 4),
-                  const SizedBox(height: 6),
-                  _buildShimmerBox(shimmerBase, shimmerHighlight, width: 140, height: 18, radius: 4),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _buildShimmerBox(shimmerBase, shimmerHighlight, width: double.infinity, height: 1, radius: 0),
-          const SizedBox(height: 10),
-          _buildShimmerBox(shimmerBase, shimmerHighlight, width: 200, height: 14, radius: 4),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildShimmerBox(Color base, Color highlight, {required double width, required double height, required double radius}) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 1500),
-      builder: (context, value, child) {
-        return Container(
-          width: width == double.infinity ? null : width,
-          height: height,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [base, highlight, base],
-              stops: [0.0, 0.5, 1.0],
-              begin: Alignment(-1.0 + (2 * value), 0),
-              end: Alignment(1.0 + (2 * value), 0),
-            ),
-            borderRadius: radius > 0 ? BorderRadius.circular(radius) : null,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSkeletonCard(bool isDark, {double height = 60, EdgeInsets margin = EdgeInsets.zero}) {
-    return Container(
-      margin: margin,
-      height: height,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
-      ),
-    );
-  }
-
-  Widget _buildSkeletonBar(bool isDark, {double width = 100, double height = 14, EdgeInsets margin = EdgeInsets.zero}) {
-    return Container(
-      margin: margin,
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white10 : Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(4),
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          child: SkeletonBox(width: 100, height: 16),
+        ),
+        for (int i = 0; i < 4; i++) const BusSkeletonCard(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+          child: SkeletonBox(width: 120, height: 16),
+        ),
+        for (int i = 0; i < 3; i++) const BusSkeletonCard(),
+      ],
     );
   }
 
@@ -1727,8 +1637,11 @@ class _BusAppScreenState extends State<BusAppScreen>
     final parts = timeStr.split(':');
     if (parts.length != 2) return;
 
-    int hour = int.tryParse(parts[0]) ?? 0;
-    int minute = int.tryParse(parts[1]) ?? 0;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    // 유효하지 않은 시간 형식이거나 범위를 벗어나면 즉시 반환
+    if (hour == null || minute == null ||
+        hour < 0 || hour > 23 || minute < 0 || minute > 59) return;
 
     DateTime scheduledTime = DateTime(
       now.year,
