@@ -30,6 +30,9 @@ final ValueNotifier<double> widgetTransparency = ValueNotifier(0.0);
 final ValueNotifier<ThemeMode> widgetTheme = ValueNotifier(ThemeMode.system);
 final ValueNotifier<MealSource> widgetSource = ValueNotifier(MealSource.a);
 
+// premium_service.dart의 isPremiumNotifier를 constants.dart에서도 re-export
+// 실제 구현은 premium_service.dart에 있으며 main.dart에서 초기화됨
+
 const List<Color> kColorPalette = [
   Color(0xFF2563EB),
   Color(0xFFEF5350),

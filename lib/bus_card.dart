@@ -261,10 +261,10 @@ class BusCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   // 즐겨찾기 버튼
-                  FutureBuilder<bool>(
-                    future: FavoriteService.isFavorite(bus.number),
-                    builder: (context, snapshot) {
-                      final isFav = snapshot.data ?? false;
+                  ValueListenableBuilder<Set<String>>(
+                    valueListenable: FavoriteService.favoritesNotifier,
+                    builder: (context, favorites, _) {
+                      final isFav = favorites.contains(bus.number);
                       return IconButton(
                         icon: Icon(
                           isFav ? Icons.star : Icons.star_border,
@@ -277,7 +277,6 @@ class BusCard extends StatelessWidget {
                           } else {
                             await FavoriteService.add(bus.number);
                           }
-                          // Note: In a stateless widget, the UI updates on the next rebuild.
                         },
                       );
                     },

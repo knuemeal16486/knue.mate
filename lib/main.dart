@@ -15,6 +15,10 @@ import 'firebase_options.dart';
 import 'firebase_sync_service.dart';
 import 'root_screen.dart';
 import 'push_notification_service.dart';
+import 'ad_service.dart';
+import 'premium_service.dart';
+import 'onboarding_screen.dart';
+import 'favorite_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -117,6 +121,9 @@ void main() async {
       await _initializeHomeWidget();
       await NotificationService().init();
       await PushNotificationService.init();
+      await FavoriteService.loadFavorites();
+      await AdService.instance.init();
+      await PremiumService.instance.init();
     } catch (e) {
       debugPrint("Plugin initialization error: $e");
     }
@@ -139,6 +146,22 @@ void main() async {
   } catch (e, stackTrace) {
     debugPrint("Native/Fatal Init Error: $e\n$stackTrace");
     runApp(StartupErrorApp(e, stackTrace));
+  }
+}
+
+class _AppHome extends StatelessWidget {
+  const _AppHome();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: shouldShowOnboarding(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Scaffold(backgroundColor: Colors.white);
+        if (snapshot.data == true) return const OnboardingScreen();
+        return const RootNavigationScreen();
+      },
+    );
   }
 }
 
@@ -348,7 +371,7 @@ class MyApp extends StatelessWidget {
                 ),
               ),
               themeMode: mode,
-              home: const RootNavigationScreen(),
+              home: const _AppHome(),
             );
           },
         );
