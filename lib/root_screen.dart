@@ -65,6 +65,9 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
 
   Widget _getScreenForTab(AppTab tab) {
     switch (tab) {
+      case AppTab.home:
+        // TODO(Task 10): 홈 대시보드로 교체
+        return const SizedBox();
       case AppTab.meal:
         return const MealTabPage();
       case AppTab.bus:
@@ -73,6 +76,9 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
         return const CampusRunScreen();
       case AppTab.map:
         return const CampusMapScreen();
+      case AppTab.more:
+        // TODO(Task 11): 더보기 화면으로 교체
+        return const SizedBox();
       case AppTab.settings:
         return const SettingsPage();
     }

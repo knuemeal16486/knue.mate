@@ -70,10 +70,12 @@ enum MealType {
 enum ServeStatus { open, waiting, closed, notToday }
 
 enum AppTab {
+  home("홈", Icons.home_rounded, Colors.indigo),
   meal("식단", Icons.restaurant_menu_rounded, Colors.orange),
   bus("버스", Icons.directions_bus_rounded, Colors.blue),
   run("런", Icons.directions_run_rounded, Colors.green),
   map("지도", Icons.map_rounded, Colors.deepPurple),
+  more("더보기", Icons.apps_rounded, Colors.blueGrey),
   settings("설정", Icons.settings_rounded, Colors.grey);
 
   final String label;
@@ -507,15 +509,60 @@ class PreferencesService {
   static const String keyWidgetTrans = 'widget_trans';
   static const String keyWidgetTheme = 'widget_theme';
   static const String keyWidgetSource = 'widget_source';
-  static const String keyTabOrder = 'tab_order_v1';
+  static const String keyTabOrder = 'tab_order_v2'; // v1 → v2
+  static const String keyNoticeKeywords = 'notice_keywords';
+  static const String keyFavBoards = 'fav_boards';
+  static const String keyNoticeAlarm = 'notice_alarm_on';
 
   static final ValueNotifier<List<AppTab>> tabOrder = ValueNotifier([
+    AppTab.home,
     AppTab.meal,
     AppTab.bus,
-    AppTab.run,
     AppTab.map,
-    AppTab.settings,
+    AppTab.more,
   ]);
+
+  static final ValueNotifier<List<String>> noticeKeywords =
+      ValueNotifier(['장학', '수강', '졸업']);
+  static final ValueNotifier<List<String>> favoriteBoards =
+      ValueNotifier(['대학소식', '학사공지']);
+  static final ValueNotifier<bool> noticeAlarmOn = ValueNotifier(true);
+
+  /// 하단 탭에 배치 가능한 탭 (run/settings는 더보기 내부로)
+  static const List<AppTab> navigableTabs = [
+    AppTab.home,
+    AppTab.meal,
+    AppTab.bus,
+    AppTab.map,
+    AppTab.more,
+  ];
+
+  /// 저장된 탭 이름 목록 → 새 5탭 구조. 순수 함수(테스트 대상).
+  static List<AppTab> migrateTabOrder(List<String> savedNames) {
+    final mapped = savedNames
+        .map((name) {
+          try {
+            return AppTab.values.firstWhere((t) => t.name == name);
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<AppTab>()
+        .where((t) => navigableTabs.contains(t))
+        .toList();
+    final result = <AppTab>[];
+    for (final t in mapped) {
+      if (!result.contains(t)) result.add(t);
+    }
+    if (!result.contains(AppTab.home)) result.insert(0, AppTab.home);
+    for (final t in navigableTabs) {
+      if (!result.contains(t)) result.add(t);
+    }
+    // more는 항상 마지막
+    result.remove(AppTab.more);
+    result.add(AppTab.more);
+    return result;
+  }
 
   static Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -534,22 +581,44 @@ class PreferencesService {
     final int? wSource = prefs.getInt(keyWidgetSource);
     if (wSource != null) widgetSource.value = MealSource.values[wSource];
 
-    final List<String>? savedOrder = prefs.getStringList(keyTabOrder);
-    if (savedOrder != null) {
-      try {
-        tabOrder.value = savedOrder
-            .map((e) => AppTab.values.firstWhere((t) => t.name == e))
-            .toList();
-      } catch (e) {
-        debugPrint("PreferencesService: 탭 순서 로드 실패 - $e");
-      }
+    final savedV2 = prefs.getStringList(keyTabOrder);
+    final savedV1 = prefs.getStringList('tab_order_v1');
+    if (savedV2 != null) {
+      tabOrder.value = migrateTabOrder(savedV2);
+    } else if (savedV1 != null) {
+      tabOrder.value = migrateTabOrder(savedV1);
+      await prefs.setStringList(
+          keyTabOrder, tabOrder.value.map((t) => t.name).toList());
     }
+    noticeKeywords.value =
+        prefs.getStringList(keyNoticeKeywords) ?? ['장학', '수강', '졸업'];
+    favoriteBoards.value =
+        prefs.getStringList(keyFavBoards) ?? ['대학소식', '학사공지'];
+    noticeAlarmOn.value = prefs.getBool(keyNoticeAlarm) ?? true;
   }
 
   static Future<void> saveTabOrder(List<AppTab> order) async {
     final prefs = await SharedPreferences.getInstance();
     tabOrder.value = order;
     await prefs.setStringList(keyTabOrder, order.map((e) => e.name).toList());
+  }
+
+  static Future<void> saveNoticeKeywords(List<String> keywords) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(keyNoticeKeywords, keywords);
+    noticeKeywords.value = List.from(keywords);
+  }
+
+  static Future<void> saveFavoriteBoards(List<String> boards) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(keyFavBoards, boards);
+    favoriteBoards.value = List.from(boards);
+  }
+
+  static Future<void> saveNoticeAlarm(bool on) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(keyNoticeAlarm, on);
+    noticeAlarmOn.value = on;
   }
 
   static Future<void> saveThemeMode(ThemeMode mode) async {
