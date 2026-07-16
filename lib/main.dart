@@ -15,6 +15,7 @@ import 'firebase_options.dart';
 import 'firebase_sync_service.dart';
 import 'root_screen.dart';
 import 'push_notification_service.dart';
+import 'keyword_alert_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -30,8 +31,12 @@ void callbackDispatcher() {
         options: DefaultFirebaseOptions.currentPlatform,
       );
       await PreferencesService.loadSettings();
-      final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
-      await fetchMealApi(targetDate, defaultSourceNotifier.value);
+      if (task == kNoticeCheckTask) {
+        await KeywordAlertService.checkAndNotify();
+      } else {
+        final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
+        await fetchMealApi(targetDate, defaultSourceNotifier.value);
+      }
     } catch (e) {
       debugPrint("Workmanager error: $e");
     }
@@ -130,6 +135,7 @@ void main() async {
           frequency: const Duration(minutes: 15),
           constraints: Constraints(networkType: NetworkType.connected),
         );
+        await KeywordAlertService.syncRegistration();
       } catch (e) {
         debugPrint("Workmanager setup error: $e");
       }
