@@ -71,8 +71,11 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
       setState(() => _granted = true);
       _loadEvents();
     } else {
-      _leaveHandled = false;
-      _leaveScreen("비밀번호가 일치하지 않습니다");
+      // 재시도 제한 없음: 화면을 벗어나지 않고 입력만 초기화해 다시 시도할
+      // 수 있게 한다. 원격 비밀번호 설정 자체가 없는 경우(_remotePassword
+      // == null)는 _loadAdminPassword()에서 별도로 _leaveScreen 처리한다.
+      _passwordController.clear();
+      showToast(context, "비밀번호가 일치하지 않습니다");
     }
   }
 
@@ -99,6 +102,9 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
     });
     try {
       await ClubEventService.setFeatured(event.id, value);
+      // 낙관적으로 갱신된 _events를 캐시에도 반영해 홈 카드/목록(캐시 우선)이
+      // 백그라운드 폴링을 기다리지 않고 즉시 변경 사항을 반영하도록 한다.
+      await ClubEventCache.save(_events);
     } catch (e) {
       if (!mounted) return;
       setState(() {

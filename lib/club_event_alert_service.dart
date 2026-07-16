@@ -10,6 +10,7 @@ const String kClubEventCheckTask = 'knue_club_event_check_task';
 /// 녹출(featured) 신규 행사 로컬 알림. keyword_alert_service.dart 패턴 이식.
 class ClubEventAlertService {
   static const _notifiedKey = 'club_notified_ids';
+  static const _seededKey = 'club_alert_seeded';
 
   /// 녹출이면서 아직 안 알린 행사 선별. 순수 함수 — 테스트 대상.
   static List<ClubEvent> filterNewFeatured({
@@ -22,12 +23,31 @@ class ClubEventAlertService {
   }
 
   /// 백그라운드 task 본체.
+  ///
+  /// 최초 실행(시딩) 처리: syncRegistration()이 앱 시작 시 항상 등록되므로,
+  /// 이 기능이 배포된 직후 첫 폴링 시점엔 `club_notified_ids`가 비어 있다.
+  /// 시딩 없이 바로 diff를 돌리면 그 시점에 이미 녹출로 등록된 모든 행사가
+  /// "신규"로 오인되어 전 사용자에게 알림 폭탄이 발송된다. 이를 막기 위해
+  /// `club_alert_seeded` 플래그로 최초 1회는 현재 녹출 목록을 조용히
+  /// notifiedIds에 기록만 하고 알림은 보내지 않는다. 이후 폴링부터는 기존
+  /// diff+notify 로직이 정상 동작한다.
   static Future<void> checkAndNotify() async {
     final events = await ClubEventService.fetchAll(forceRefresh: true);
     if (events.isEmpty) return;
 
     final prefs = await SharedPreferences.getInstance();
     final notified = prefs.getStringList(_notifiedKey) ?? [];
+
+    final seeded = prefs.getBool(_seededKey) ?? false;
+    if (!seeded) {
+      final featuredIds = events.where((e) => e.isFeatured).map((e) => e.id);
+      final merged = {...notified, ...featuredIds}.toList();
+      final trimmed =
+          merged.length > 200 ? merged.sublist(merged.length - 200) : merged;
+      await prefs.setStringList(_notifiedKey, trimmed);
+      await prefs.setBool(_seededKey, true);
+      return;
+    }
 
     final newItems = filterNewFeatured(
       events: events,
