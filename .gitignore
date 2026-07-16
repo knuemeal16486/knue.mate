@@ -47,4 +47,4 @@ app.*.map.json
 .env
 
 # Firebase CLI
-firebase.exe
+firebase.exe.superpowers/
