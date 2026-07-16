@@ -9,15 +9,6 @@ import 'keyword_alert_service.dart';
 import 'notice_model.dart';
 import 'notice_service.dart';
 
-/// 게시판 그룹 코드 → 한글 라벨
-const Map<String, String> kBoardGroupLabels = {
-  'MAIN': '대학본부',
-  'ANNEX': '부속기관',
-  'LIFE': '학생생활',
-  'DEPT': '학과',
-  'GRAD': '대학원',
-};
-
 /// 청람공지 화면. KnueScraper로 크롤링한 전체 게시판 공지를 게시판 그룹별로
 /// 모아 보여주고, 즐겨찾기 게시판/키워드 알림을 관리한다.
 class NoticeScreen extends StatefulWidget {
@@ -56,11 +47,17 @@ class _NoticeScreenState extends State<NoticeScreen> {
     }
   }
 
-  /// 모든 게시판 카테고리 이름 집합 (실패 게시판 판정에 사용).
+  /// 실제로 크롤링되는 게시판 카테고리 이름 집합 (실패 게시판 판정에 사용).
+  /// 'LINK:' 접두사가 붙은 게시판(예: 외부 카페 링크)은 의도적으로 크롤링 대상에서
+  /// 제외되어 항상 0건을 반환하므로, 실패 판정 대상에서도 제외한다.
   Set<String> get _allCategories {
     final names = <String>{};
     for (final group in _scraper.boardGroups.values) {
-      names.addAll(group.keys);
+      for (final entry in group.entries) {
+        if (!entry.value.startsWith('LINK:')) {
+          names.add(entry.key);
+        }
+      }
     }
     return names;
   }
@@ -145,7 +142,7 @@ class _NoticeScreenState extends State<NoticeScreen> {
   Widget _buildFailureBanner(bool isDark) {
     return Container(
       width: double.infinity,
-      color: Colors.orange.withOpacity(isDark ? 0.15 : 0.1),
+      color: Colors.orange.withValues(alpha: isDark ? 0.15 : 0.1),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
@@ -229,7 +226,7 @@ class _NoticeScreenState extends State<NoticeScreen> {
             color: selected ? color : Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: selected ? color : Colors.grey.withOpacity(0.4),
+              color: selected ? color : Colors.grey.withValues(alpha: 0.4),
             ),
           ),
           child: Row(
@@ -311,7 +308,7 @@ class _NoticeScreenState extends State<NoticeScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
+                    color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -514,7 +511,7 @@ class _KeywordSheetState extends State<_KeywordSheet> {
                     .map((kw) => Chip(
                           label: Text(kw),
                           onDeleted: () => _removeKeyword(kw),
-                          backgroundColor: widget.color.withOpacity(0.12),
+                          backgroundColor: widget.color.withValues(alpha: 0.12),
                           labelStyle: TextStyle(color: widget.color),
                           deleteIconColor: widget.color,
                         ))
