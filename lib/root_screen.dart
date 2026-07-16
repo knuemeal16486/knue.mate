@@ -118,7 +118,7 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
               backgroundColor: Colors.transparent,
               elevation: 0,
               selectedItemColor: theme.primaryColor,
-              unselectedItemColor: isDark ? Colors.white30 : Colors.black26,
+              unselectedItemColor: isDark ? Colors.white54 : Colors.black45,
               selectedFontSize: 11,
               unselectedFontSize: 11,
               showSelectedLabels: true,

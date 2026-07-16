@@ -47,49 +47,44 @@ class _MealTabPageState extends State<MealTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (idx) => setState(() => _currentIndex = idx),
-        children: _pages,
-      ),
-      // 식단 탭 내부의 보조 내비게이션
-      bottomNavigationBar: Container(
-        height: 60,
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.1))),
-        ),
-        child: Row(
-          children: [
-            _buildSubTab(0, Icons.restaurant, "오늘"),
-            _buildSubTab(1, Icons.calendar_month, "월간"),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSubTab(int index, IconData icon, String label) {
-    final isSel = _currentIndex == index;
     final color = themeColor.value;
-    return Expanded(
-      child: InkWell(
-        onTap: () => _onTabTapped(index),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: isSel ? color : Colors.grey, size: 20),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                color: isSel ? color : Colors.grey,
+    return Scaffold(
+      // [개편] 식단 탭 내부의 보조 내비게이션: 하단 이중 탭바 대신 상단 세그먼트로 전환
+      body: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(
+                    value: 0,
+                    label: Text('오늘'),
+                    icon: Icon(Icons.restaurant, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: 1,
+                    label: Text('월간'),
+                    icon: Icon(Icons.calendar_month, size: 16),
+                  ),
+                ],
+                selected: {_currentIndex},
+                onSelectionChanged: (s) => _onTabTapped(s.first),
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor: color.withValues(alpha: 0.15),
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (idx) => setState(() => _currentIndex = idx),
+              children: _pages,
+            ),
+          ),
+        ],
       ),
     );
   }
