@@ -102,9 +102,6 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
     });
     try {
       await ClubEventService.setFeatured(event.id, value);
-      // 낙관적으로 갱신된 _events를 캐시에도 반영해 홈 카드/목록(캐시 우선)이
-      // 백그라운드 폴링을 기다리지 않고 즉시 변경 사항을 반영하도록 한다.
-      await ClubEventCache.save(_events);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -113,6 +110,15 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
             .toList();
       });
       showToast(context, "변경 실패");
+      return;
+    }
+    // 원격 갱신 성공 후 캐시 반영 — 홈 카드/목록(캐시 우선)이 백그라운드 폴링을
+    // 기다리지 않고 즉시 변경을 반영하도록 한다. 캐시 저장 실패는 원격 변경을
+    // 되돌리지 않는다(다음 갱신 때 자연히 정정됨).
+    try {
+      await ClubEventCache.save(_events);
+    } catch (_) {
+      // 캐시 저장 실패는 무시 — 원격은 이미 성공.
     }
   }
 
