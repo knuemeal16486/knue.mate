@@ -62,9 +62,9 @@ void main() {
     expect(notices, isEmpty);
   });
 
-  test('boardGroups 4개 그룹 유지', () {
+  test('boardGroups 필수 그룹 포함 확인 (MAIN/ANNEX/LIFE/DEPT/GRAD)', () {
     final scraper = KnueScraper();
     expect(scraper.boardGroups.keys,
-        containsAll(['MAIN', 'ANNEX', 'LIFE', 'DEPT']));
+        containsAll(['MAIN', 'ANNEX', 'LIFE', 'DEPT', 'GRAD']));
   });
 }
