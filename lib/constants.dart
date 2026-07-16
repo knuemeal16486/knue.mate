@@ -620,7 +620,7 @@ class NotificationService {
     );
     try {
       await flutterLocalNotificationsPlugin.initialize(
-        const InitializationSettings(android: android, iOS: ios),
+        settings: const InitializationSettings(android: android, iOS: ios),
       );
     } on PlatformException catch (e) {
       debugPrint("Native Notification Platform Error (Likely permission denied): $e");
@@ -689,7 +689,7 @@ class NotificationService {
 
   Future<void> cancelAlarm(int id) async {
     try {
-      await flutterLocalNotificationsPlugin.cancel(id);
+      await flutterLocalNotificationsPlugin.cancel(id: id);
     } catch (e) {
       debugPrint("cancelAlarm error: $e");
     }
@@ -706,11 +706,11 @@ class NotificationService {
     }
     try {
       await flutterLocalNotificationsPlugin.zonedSchedule(
-        id,
-        title,
-        body,
-        tz.TZDateTime.from(scheduledTime, tz.local),
-        const NotificationDetails(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: tz.TZDateTime.from(scheduledTime, tz.local),
+        notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'meal_alarm_channel',
             '식단 알림',
@@ -719,8 +719,6 @@ class NotificationService {
           iOS: DarwinNotificationDetails(),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {
@@ -743,10 +741,10 @@ class NotificationService {
     );
     try {
       await flutterLocalNotificationsPlugin.show(
-        id,
-        title,
-        body,
-        const NotificationDetails(android: android, iOS: ios),
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(android: android, iOS: ios),
       );
     } catch (e) {
       // 알림 권한이 없거나 플랫폼 제약으로 실패한 경우 — 앱 크래시 방지

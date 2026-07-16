@@ -9,7 +9,7 @@ class PushNotificationService {
   static Future<void> init() async {
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const init = InitializationSettings(android: android);
-    await _flutterLocal.initialize(init);
+    await _flutterLocal.initialize(settings: init);
 
     await _messaging.requestPermission();
 
@@ -20,10 +20,10 @@ class PushNotificationService {
       final notif = msg.notification;
       if (notif != null) {
         _flutterLocal.show(
-          notif.hashCode,
-          notif.title,
-          notif.body,
-          NotificationDetails(
+          id: notif.hashCode,
+          title: notif.title,
+          body: notif.body,
+          notificationDetails: NotificationDetails(
             android: AndroidNotificationDetails(
               'bus_channel',
               '버스 알림',
