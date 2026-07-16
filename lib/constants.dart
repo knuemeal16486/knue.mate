@@ -523,6 +523,7 @@ class PreferencesService {
     AppTab.bus,
     AppTab.map,
     AppTab.more,
+    AppTab.settings,
   ]);
 
   static final ValueNotifier<List<String>> noticeKeywords =
@@ -534,13 +535,14 @@ class PreferencesService {
   static final ValueNotifier<List<PersonalEvent>> personalEvents =
       ValueNotifier([]);
 
-  /// 하단 탭에 배치 가능한 탭 (run/settings는 더보기 내부로)
+  /// 하단 탭에 배치 가능한 탭 (run은 더보기 내 캠퍼스런으로만 진입)
   static const List<AppTab> navigableTabs = [
     AppTab.home,
     AppTab.meal,
     AppTab.bus,
     AppTab.map,
     AppTab.more,
+    AppTab.settings,
   ];
 
   /// 저장된 탭 이름 목록 → 새 5탭 구조. 순수 함수(테스트 대상).
@@ -564,9 +566,11 @@ class PreferencesService {
     for (final t in navigableTabs) {
       if (!result.contains(t)) result.add(t);
     }
-    // more는 항상 마지막
+    // 더보기·설정을 항상 마지막 2개로 고정 (설정이 최우측)
     result.remove(AppTab.more);
+    result.remove(AppTab.settings);
     result.add(AppTab.more);
+    result.add(AppTab.settings);
     return result;
   }
 
