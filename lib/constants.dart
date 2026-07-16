@@ -13,6 +13,7 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:home_widget/home_widget.dart';
 import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
+import 'schedule_model.dart';
 
 // [1] 전역 설정
 const String kBaseUrl = "https://knue-meal-api.onrender.com";
@@ -513,6 +514,8 @@ class PreferencesService {
   static const String keyNoticeKeywords = 'notice_keywords';
   static const String keyFavBoards = 'fav_boards';
   static const String keyNoticeAlarm = 'notice_alarm_on';
+  static const String keyDdayItems = 'dday_items';
+  static const String keyPersonalEvents = 'personal_events';
 
   static final ValueNotifier<List<AppTab>> tabOrder = ValueNotifier([
     AppTab.home,
@@ -527,6 +530,9 @@ class PreferencesService {
   static final ValueNotifier<List<String>> favoriteBoards =
       ValueNotifier(['대학소식', '학사공지']);
   static final ValueNotifier<bool> noticeAlarmOn = ValueNotifier(true);
+  static final ValueNotifier<List<DdayItem>> ddayItems = ValueNotifier([]);
+  static final ValueNotifier<List<PersonalEvent>> personalEvents =
+      ValueNotifier([]);
 
   /// 하단 탭에 배치 가능한 탭 (run/settings는 더보기 내부로)
   static const List<AppTab> navigableTabs = [
@@ -595,6 +601,23 @@ class PreferencesService {
     favoriteBoards.value =
         prefs.getStringList(keyFavBoards) ?? ['대학소식', '학사공지'];
     noticeAlarmOn.value = prefs.getBool(keyNoticeAlarm) ?? true;
+
+    try {
+      final ddayRaw = prefs.getString(keyDdayItems);
+      if (ddayRaw != null) {
+        ddayItems.value = (jsonDecode(ddayRaw) as List)
+            .map((e) => DdayItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      final peRaw = prefs.getString(keyPersonalEvents);
+      if (peRaw != null) {
+        personalEvents.value = (jsonDecode(peRaw) as List)
+            .map((e) => PersonalEvent.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('schedule load error: $e');
+    }
   }
 
   static Future<void> saveTabOrder(List<AppTab> order) async {
@@ -619,6 +642,20 @@ class PreferencesService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(keyNoticeAlarm, on);
     noticeAlarmOn.value = on;
+  }
+
+  static Future<void> saveDdayItems(List<DdayItem> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        keyDdayItems, jsonEncode(items.map((e) => e.toJson()).toList()));
+    ddayItems.value = List.from(items);
+  }
+
+  static Future<void> savePersonalEvents(List<PersonalEvent> events) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(keyPersonalEvents,
+        jsonEncode(events.map((e) => e.toJson()).toList()));
+    personalEvents.value = List.from(events);
   }
 
   static Future<void> saveThemeMode(ThemeMode mode) async {
