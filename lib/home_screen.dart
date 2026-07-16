@@ -3,6 +3,9 @@ import 'package:intl/intl.dart';
 
 import 'bus_timetable_data.dart';
 import 'calendar_screen.dart';
+import 'club_event_model.dart';
+import 'club_event_service.dart';
+import 'club_events_screen.dart';
 import 'constants.dart';
 import 'notice_model.dart';
 import 'notice_screen.dart';
@@ -49,6 +52,11 @@ class _HomeScreenState extends State<HomeScreen> {
   List<CalendarEvent> _upcomingAcademic = const [];
   List<DdayItem> _upcomingDdays = const [];
 
+  // 동아리 행사 카드
+  bool _clubLoading = true;
+  bool _clubError = false;
+  List<ClubEvent> _clubEvents = const [];
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadKeywordAlerts();
     _loadNoticePreview();
     _loadUpcoming();
+    _loadClubEvents();
   }
 
   // ---------------------------------------------------------------------
@@ -186,6 +195,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _loadClubEvents() async {
+    if (mounted) setState(() { _clubLoading = true; _clubError = false; });
+    try {
+      final all = await ClubEventService.fetchAll();
+      // 녹출 우선 + 다가오는(시작일 오늘 이후) 순, 상위 3건
+      final now = DateTime.now();
+      final upcoming = all
+          .where((e) => (e.endDate ?? e.startDate).isAfter(now))
+          .toList();
+      upcoming.sort((a, b) {
+        if (a.isFeatured != b.isFeatured) return a.isFeatured ? -1 : 1;
+        return a.startDate.compareTo(b.startDate);
+      });
+      if (!mounted) return;
+      setState(() {
+        _clubEvents = upcoming.take(3).toList();
+        _clubLoading = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() { _clubLoading = false; _clubError = true; });
+    }
+  }
+
   // ---------------------------------------------------------------------
   // Build
   // ---------------------------------------------------------------------
@@ -215,7 +247,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 12),
                 _buildUpcomingCard(color, isDark),
                 const SizedBox(height: 12),
-                // 2단계: 동아리 공연 카드 / 3단계: 자취방 카드 삽입 지점
+                _buildClubEventsCard(color, isDark),
+                const SizedBox(height: 12),
+                // 3단계: 자취방 카드 삽입 지점
               ],
             ),
           ),
@@ -489,6 +523,62 @@ class _HomeScreenState extends State<HomeScreen> {
                             }).toList(),
                           ),
                       ],
+                    )),
+    );
+  }
+
+  // --- 5. 동아리 행사 카드 --------------------------------------------------
+
+  Widget _buildClubEventsCard(Color color, bool isDark) {
+    return _SectionCard(
+      isDark: isDark,
+      title: "동아리 공연·행사",
+      icon: Icons.celebration_outlined,
+      color: color,
+      onSeeAll: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ClubEventsScreen()),
+      ),
+      child: _clubLoading
+          ? const _CardLoading()
+          : _clubError
+              ? _CardFailure(onRetry: _loadClubEvents)
+              : (_clubEvents.isEmpty
+                  ? Text(
+                      "예정된 공연·행사가 없습니다",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white38 : Colors.black38,
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: _clubEvents.map((e) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(
+                          children: [
+                            if (e.isFeatured) ...[
+                              Icon(Icons.star, size: 12, color: color),
+                              const SizedBox(width: 4),
+                            ],
+                            Expanded(
+                              child: Text(
+                                "${e.title} · ${e.clubName}",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            Text(
+                              _formatShortDate(e.startDate),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? Colors.white38 : Colors.black38,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )).toList(),
                     )),
     );
   }

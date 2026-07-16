@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'calendar_screen.dart';
 import 'campus_run_screen.dart';
+import 'club_event_admin_screen.dart';
 import 'constants.dart';
 import 'keyword_alert_service.dart';
 import 'meal_screen.dart' show SettingsPage;
@@ -20,6 +21,18 @@ class MoreScreen extends StatefulWidget {
 
 class _MoreScreenState extends State<MoreScreen> {
   bool _testingAlert = false;
+  int _versionTapCount = 0;
+
+  void _onVersionTap() {
+    _versionTapCount++;
+    if (_versionTapCount >= 7) {
+      _versionTapCount = 0;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ClubEventAdminScreen()),
+      );
+    }
+  }
 
   Future<void> _runKeywordAlertTest() async {
     if (_testingAlert) return;
@@ -129,11 +142,15 @@ class _MoreScreenState extends State<MoreScreen> {
               ),
               const SizedBox(height: 24),
               Center(
-                child: Text(
-                  "버전 5.8.0 (Final)",
-                  style: TextStyle(
-                    color: isDark ? Colors.white38 : Colors.black38,
-                    fontSize: 12,
+                child: GestureDetector(
+                  onTap: _onVersionTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: Text(
+                    "버전 5.8.0 (Final)",
+                    style: TextStyle(
+                      color: isDark ? Colors.white38 : Colors.black38,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ),
