@@ -67,7 +67,7 @@ KNUE_MoA(공지 크롤러 앱)의 핵심 기능을 knue.mate로 통합해, knue.
 5. *(자리 예약)* 동아리 공연 카드, 자취방 카드
 
 ### 공지 화면 (notice_screen.dart, 신설)
-- 게시판 그룹 탭 (MAIN/ANNEX/LIFE/DEPT), 게시판 즐겨찾기, 키워드 관리 진입
+- 게시판 그룹 탭 (MAIN/ANNEX/LIFE/DEPT/GRAD — GRAD는 대학원/교육대학원/교육정책대학원, Task 4 이식 중 발견되어 5번째 그룹으로 추가 확정 2026-07-16), 게시판 즐겨찾기, 키워드 관리 진입
 - MoA home_page.dart의 UI를 knue.mate 디자인 언어(카드, 테마 색)로 재작성
 
 ### 캘린더 화면 (calendar_screen.dart, 신설)
