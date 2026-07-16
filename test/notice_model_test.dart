@@ -21,4 +21,11 @@ void main() {
     expect(restored.isNew, true);
     expect(restored.isRead, false);
   });
+
+  test('CalendarEvent.fromJson은 missing start/end를 throw하지 않음', () {
+    final event = CalendarEvent.fromJson({'title': 'Test Event'});
+    expect(event.title, 'Test Event');
+    expect(event.startDate, isA<DateTime>());
+    expect(event.endDate, isA<DateTime>());
+  });
 }

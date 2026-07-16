@@ -65,9 +65,20 @@ class CalendarEvent {
         'title': title,
       };
 
-  factory CalendarEvent.fromJson(Map<String, dynamic> json) => CalendarEvent(
-        startDate: DateTime.parse(json['start'] as String),
-        endDate: DateTime.parse(json['end'] as String),
-        title: json['title'] as String,
-      );
+  factory CalendarEvent.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(String? dateStr) {
+      if (dateStr == null || dateStr.isEmpty) return DateTime.now();
+      try {
+        return DateTime.parse(dateStr);
+      } catch (e) {
+        return DateTime.now();
+      }
+    }
+
+    return CalendarEvent(
+      startDate: parseDate(json['start'] as String?),
+      endDate: parseDate(json['end'] as String?),
+      title: json['title'] as String? ?? '',
+    );
+  }
 }
