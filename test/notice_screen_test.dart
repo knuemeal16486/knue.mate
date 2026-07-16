@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_application_1/notice_screen.dart';
+import 'package:knue_mate/notice_screen.dart';
 
 void main() {
   testWidgets('NoticeScreen 렌더링 스모크', (tester) async {

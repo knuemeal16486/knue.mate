@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_application_1/notice_model.dart';
+import 'package:knue_mate/notice_model.dart';
 
 void main() {
   test('Notice JSON 왕복 직렬화', () {

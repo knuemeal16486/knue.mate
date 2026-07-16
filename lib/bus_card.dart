@@ -456,27 +456,6 @@ class BusCard extends StatelessWidget {
     );
   }
 
-  String _buildSemanticsLabel(BusArrival? best, String targetStation) {
-    if (best == null) {
-      return "${bus.number}번 버스: 운행 정보 없음";
-    }
-
-    String label = "${bus.number}번 버스: ";
-    label += "현재 위치 ${best.currentStopName}, ";
-
-    if (best.remainStops >= 0) {
-      label += "목적지까지 ${best.remainStops}정거장 남음";
-      if (best.estimatedMinutes > 0) {
-        label += ", 예상 도착 시간 약 ${best.estimatedMinutes.round()}분 후";
-      } else if (best.remainStops == 0) {
-        label += ", 곧 도착";
-      }
-    } else {
-      label += "종점 방면 운행 중";
-    }
-
-    return label;
-  }
 }
 
 class _RouteDetailSheet extends StatefulWidget {

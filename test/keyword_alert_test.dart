@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_application_1/keyword_alert_service.dart';
-import 'package:flutter_application_1/notice_model.dart';
+import 'package:knue_mate/keyword_alert_service.dart';
+import 'package:knue_mate/notice_model.dart';
 
 Notice _n(int id, String category, String title) => Notice(
     id: id, category: category, group: 'MAIN', title: title,

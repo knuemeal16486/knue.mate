@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_application_1/more_screen.dart';
+import 'package:knue_mate/more_screen.dart';
 
 void main() {
   testWidgets('MoreScreen 진입 타일 렌더링', (tester) async {

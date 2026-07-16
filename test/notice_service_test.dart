@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_application_1/notice_service.dart';
+import 'package:knue_mate/notice_service.dart';
 
 void main() {
   test('KNUE 표준 게시판 HTML 파싱', () {

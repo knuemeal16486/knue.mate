@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_application_1/constants.dart';
+import 'package:knue_mate/constants.dart';
 
 void main() {
   test('기존 5탭 저장값 → 새 5탭 구조 마이그레이션', () {

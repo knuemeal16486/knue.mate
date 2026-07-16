@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_application_1/schedule_model.dart';
+import 'package:knue_mate/schedule_model.dart';
 
 void main() {
   test('DdayItem daysLeft 계산', () {
