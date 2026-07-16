@@ -7,7 +7,6 @@ import 'campus_map_screen.dart';
 import 'campus_run_screen.dart';
 import 'home_screen.dart';
 import 'more_screen.dart';
-import 'dart:ui';
 
 class RootNavigationScreen extends StatefulWidget {
   static final GlobalKey<RootNavigationScreenState> navKey = GlobalKey<RootNavigationScreenState>();
@@ -99,45 +98,69 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: theme.scaffoldBackgroundColor.withOpacity(0.8),
-          border: Border(
-            top: BorderSide(
-              color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
-              width: 0.5,
+          color: theme.cardColor,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 20,
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                for (int i = 0; i < tabs.length; i++)
+                  _buildNavItem(tabs[i], i, theme.primaryColor, isDark),
+              ],
             ),
           ),
         ),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-            child: BottomNavigationBar(
-              currentIndex: _currentIndex,
-              onTap: _onTabTapped,
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              selectedItemColor: theme.primaryColor,
-              unselectedItemColor: isDark ? Colors.white54 : Colors.black45,
-              selectedFontSize: 11,
-              unselectedFontSize: 11,
-              showSelectedLabels: true,
-              showUnselectedLabels: true,
-              items: tabs.map((tab) {
-                return BottomNavigationBarItem(
-                  icon: Icon(tab.icon),
-                  activeIcon: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: theme.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(tab.icon),
-                  ),
-                  label: tab.label,
-                );
-              }).toList(),
+      ),
+    );
+  }
+
+  /// 3월 원본 pill 스타일 항목 — 선택 탭은 컬러 알약(아이콘+라벨), 비선택은 아이콘만.
+  Widget _buildNavItem(AppTab tab, int index, Color color, bool isDark) {
+    final isSel = index == _currentIndex;
+    return GestureDetector(
+      onTap: () => _onTabTapped(index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSel ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              tab.icon,
+              size: 22,
+              color: isSel
+                  ? Colors.white
+                  : (isDark ? Colors.white38 : Colors.grey),
             ),
-          ),
+            if (isSel) ...[
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  tab.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
