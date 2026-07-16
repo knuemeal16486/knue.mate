@@ -229,27 +229,28 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, color, child) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
-          appBar: AppBar(
-            title: const Text("홈"),
-            backgroundColor: color,
-            iconTheme: const IconThemeData(color: Colors.white),
-          ),
           body: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+            padding: EdgeInsets.zero,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildTodayBriefingHeader(color, isDark),
-                const SizedBox(height: 12),
-                _buildKeywordAlertsCard(color, isDark),
-                const SizedBox(height: 12),
-                _buildNoticePreviewCard(color, isDark),
-                const SizedBox(height: 12),
-                _buildUpcomingCard(color, isDark),
-                const SizedBox(height: 12),
-                _buildClubEventsCard(color, isDark),
-                const SizedBox(height: 12),
-                // 3단계: 자취방 카드 삽입 지점
+                _buildHeroHeader(color, isDark),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildKeywordAlertsCard(color, isDark),
+                      const SizedBox(height: 12),
+                      _buildNoticePreviewCard(color, isDark),
+                      const SizedBox(height: 12),
+                      _buildUpcomingCard(color, isDark),
+                      const SizedBox(height: 12),
+                      _buildClubEventsCard(color, isDark),
+                      // 3단계: 자취방 카드 삽입 지점
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -258,36 +259,136 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- 1. 오늘 브리핑 헤더 ---------------------------------------------
+  // --- 1. 히어로 헤더 (브랜디드 그라디언트 + 오늘 브리핑) ---------------
 
-  Widget _buildTodayBriefingHeader(Color color, bool isDark) {
+  Widget _buildHeroHeader(Color color, bool isDark) {
     final now = DateTime.now();
     final dateStr = DateFormat('M월 d일 EEEE', 'ko_KR').format(now);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          dateStr,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white54 : Colors.black54,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          _greeting(now),
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _buildMealBriefCard(color, isDark)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildBusBriefCard(color, isDark)),
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        // themeColor 기반 그라디언트 — 설정에서 앱 색 바꾸면 헤더도 함께 변경.
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.lerp(color, Colors.white, 0.12)!,
+            color,
+            Color.lerp(color, Colors.black, 0.22)!,
           ],
         ),
-      ],
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 22),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                dateStr,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _greeting(now),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 15),
+              // 두 타일 높이를 맞추기 위해 IntrinsicHeight로 Row 높이를 한정한다.
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _HeroTile(
+                        icon: Icons.restaurant_menu_rounded,
+                        label: _nextMealType.label,
+                        onTap: () =>
+                            RootNavigationScreen.switchTab(AppTab.meal),
+                        child: _mealHeroChild(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _HeroTile(
+                        icon: Icons.directions_bus_rounded,
+                        label: "다음 버스",
+                        onTap: () =>
+                            RootNavigationScreen.switchTab(AppTab.bus),
+                        child: _busHeroChild(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _heroLoading() => const SizedBox(
+        height: 18,
+        width: 18,
+        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+      );
+
+  Widget _heroRetry(VoidCallback onRetry) => GestureDetector(
+        onTap: onRetry,
+        child: Text(
+          "다시 시도",
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withValues(alpha: 0.9),
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      );
+
+  Widget _mealHeroChild() {
+    if (_mealLoading) return _heroLoading();
+    if (_mealError) return _heroRetry(_loadMeal);
+    if (_nextMealItems.isEmpty) {
+      return Text(
+        "등록된 메뉴가 없습니다",
+        style:
+            TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
+      );
+    }
+    return Text(
+      _nextMealItems.take(3).join('\n'),
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontSize: 12,
+        height: 1.4,
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+
+  Widget _busHeroChild() {
+    if (_busLoading) return _heroLoading();
+    if (_busError) return _heroRetry(_loadBus);
+    return Text(
+      _busLabel,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+      ),
     );
   }
 
@@ -299,53 +400,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return "편안한 저녁 보내세요";
   }
 
-  Widget _buildMealBriefCard(Color color, bool isDark) {
-    return _BriefCard(
-      isDark: isDark,
-      onTap: () => RootNavigationScreen.switchTab(AppTab.meal),
-      icon: Icons.restaurant_menu_rounded,
-      color: color,
-      title: _nextMealType.label,
-      child: _mealLoading
-          ? const _CardLoading()
-          : _mealError
-              ? _CardFailure(onRetry: _loadMeal)
-              : (_nextMealItems.isEmpty
-                  ? Text(
-                      "등록된 메뉴가 없습니다",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white38 : Colors.black38,
-                      ),
-                    )
-                  : Text(
-                      _nextMealItems.take(3).join('\n'),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, height: 1.4),
-                    )),
-    );
-  }
-
-  Widget _buildBusBriefCard(Color color, bool isDark) {
-    return _BriefCard(
-      isDark: isDark,
-      onTap: () => RootNavigationScreen.switchTab(AppTab.bus),
-      icon: Icons.directions_bus_rounded,
-      color: color,
-      title: "다음 버스",
-      child: _busLoading
-          ? const _CardLoading()
-          : _busError
-              ? _CardFailure(onRetry: _loadBus)
-              : Text(
-                  _busLabel,
-                  style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-    );
-  }
-
   // --- 2. 키워드 알림 카드 ------------------------------------------------
 
   Widget _buildKeywordAlertsCard(Color color, bool isDark) {
@@ -354,6 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
       title: "키워드 알림",
       icon: Icons.notifications_active_outlined,
       color: color,
+      accentColor: const Color(0xFFF59E0B),
       child: _keywordLoading
           ? const _CardLoading()
           : _keywordError
@@ -421,6 +476,7 @@ class _HomeScreenState extends State<HomeScreen> {
       title: "즐겨찾는 공지",
       icon: Icons.campaign_outlined,
       color: color,
+      accentColor: const Color(0xFFFB923C),
       onSeeAll: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const NoticeScreen()),
@@ -454,6 +510,7 @@ class _HomeScreenState extends State<HomeScreen> {
       title: "다가오는 일정",
       icon: Icons.event_note_outlined,
       color: color,
+      accentColor: const Color(0xFF8B5CF6),
       onSeeAll: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const CalendarScreen()),
@@ -535,6 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
       title: "동아리 공연·행사",
       icon: Icons.celebration_outlined,
       color: color,
+      accentColor: const Color(0xFFEC4899),
       onSeeAll: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const ClubEventsScreen()),
@@ -596,21 +654,17 @@ class _HomeScreenState extends State<HomeScreen> {
 // 공용 카드 부품
 // ===========================================================================
 
-/// 오늘 브리핑의 가로 2카드(식단/버스) 공통 셸.
-class _BriefCard extends StatelessWidget {
-  final bool isDark;
-  final VoidCallback onTap;
+/// 히어로 헤더 안의 오늘 브리핑 타일(식단/버스) — 컬러 헤더 위 반투명 흰색 카드.
+class _HeroTile extends StatelessWidget {
   final IconData icon;
-  final Color color;
-  final String title;
+  final String label;
+  final VoidCallback onTap;
   final Widget child;
 
-  const _BriefCard({
-    required this.isDark,
-    required this.onTap,
+  const _HeroTile({
     required this.icon,
-    required this.color,
-    required this.title,
+    required this.label,
+    required this.onTap,
     required this.child,
   });
 
@@ -619,32 +673,30 @@ class _BriefCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
-          ),
+          color: Colors.white.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(icon, size: 16, color: color),
-                const SizedBox(width: 6),
+                Icon(icon, size: 15, color: Colors.white),
+                const SizedBox(width: 5),
                 Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 12,
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: color,
+                    color: Colors.white,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 7),
             child,
           ],
         ),
@@ -654,11 +706,14 @@ class _BriefCard extends StatelessWidget {
 }
 
 /// 세로 섹션 카드(키워드/공지/일정) 공통 셸. "전체 보기" 액션은 선택적.
+/// [accentColor]로 카드 왼쪽 컬러 띠 + 같은 색 아이콘 칩을 줘 종류별 위계를 준다.
+/// "전체 보기" 링크 색은 앱 포인트 색([color], themeColor)을 그대로 따라 통일감 유지.
 class _SectionCard extends StatelessWidget {
   final bool isDark;
   final String title;
   final IconData icon;
   final Color color;
+  final Color accentColor;
   final Widget child;
   final VoidCallback? onSeeAll;
 
@@ -667,6 +722,7 @@ class _SectionCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.color,
+    required this.accentColor,
     required this.child,
     this.onSeeAll,
   });
@@ -675,7 +731,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -683,33 +739,56 @@ class _SectionCard extends StatelessWidget {
           color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.bold),
+      // IntrinsicHeight로 Row 높이를 콘텐츠에 맞춰 한정 → 왼쪽 액센트 띠가
+      // 카드 전체 높이로 stretch 되게 한다.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 4, color: accentColor),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Icon(icon, size: 17, color: accentColor),
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        if (onSeeAll != null)
+                          GestureDetector(
+                            onTap: onSeeAll,
+                            child: Text(
+                              "전체 보기",
+                              style: TextStyle(fontSize: 12, color: color),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    child,
+                  ],
                 ),
               ),
-              if (onSeeAll != null)
-                GestureDetector(
-                  onTap: onSeeAll,
-                  child: Text(
-                    "전체 보기",
-                    style: TextStyle(fontSize: 12, color: color),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          child,
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
