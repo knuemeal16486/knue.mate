@@ -16,6 +16,7 @@ import 'firebase_sync_service.dart';
 import 'root_screen.dart';
 import 'push_notification_service.dart';
 import 'keyword_alert_service.dart';
+import 'club_event_alert_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -33,6 +34,8 @@ void callbackDispatcher() {
       await PreferencesService.loadSettings();
       if (task == kNoticeCheckTask) {
         await KeywordAlertService.checkAndNotify();
+      } else if (task == kClubEventCheckTask) {
+        await ClubEventAlertService.checkAndNotify();
       } else {
         final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
         await fetchMealApi(targetDate, defaultSourceNotifier.value);
@@ -136,6 +139,7 @@ void main() async {
           constraints: Constraints(networkType: NetworkType.connected),
         );
         await KeywordAlertService.syncRegistration();
+        await ClubEventAlertService.syncRegistration();
       } catch (e) {
         debugPrint("Workmanager setup error: $e");
       }
