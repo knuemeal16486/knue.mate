@@ -5,6 +5,8 @@ import 'meal_screen.dart';
 import 'bus_screen.dart';
 import 'campus_map_screen.dart';
 import 'campus_run_screen.dart';
+import 'home_screen.dart';
+import 'more_screen.dart';
 import 'dart:ui';
 
 class RootNavigationScreen extends StatefulWidget {
@@ -66,8 +68,7 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
   Widget _getScreenForTab(AppTab tab) {
     switch (tab) {
       case AppTab.home:
-        // TODO(Task 10): 홈 대시보드로 교체
-        return const SizedBox();
+        return const HomeScreen();
       case AppTab.meal:
         return const MealTabPage();
       case AppTab.bus:
@@ -77,8 +78,7 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
       case AppTab.map:
         return const CampusMapScreen();
       case AppTab.more:
-        // TODO(Task 11): 더보기 화면으로 교체
-        return const SizedBox();
+        return const MoreScreen();
       case AppTab.settings:
         return const SettingsPage();
     }
