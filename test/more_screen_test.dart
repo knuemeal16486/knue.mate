@@ -8,6 +8,7 @@ void main() {
     await tester.pump();
     expect(find.text('캠퍼스런'), findsOneWidget);
     expect(find.text('교직원 연락처'), findsOneWidget);
-    expect(find.text('설정'), findsOneWidget);
+    // 설정은 하단 탭으로 이동되어 더보기 목록에서 제외됨
+    expect(find.text('설정'), findsNothing);
   });
 }

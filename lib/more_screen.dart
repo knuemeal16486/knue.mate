@@ -6,7 +6,6 @@ import 'campus_run_screen.dart';
 import 'club_event_admin_screen.dart';
 import 'constants.dart';
 import 'keyword_alert_service.dart';
-import 'meal_screen.dart' show SettingsPage;
 import 'notice_screen.dart';
 import 'staff_contacts_screen.dart';
 
@@ -107,23 +106,15 @@ class _MoreScreenState extends State<MoreScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              _SectionHeader(title: "앱", isDark: isDark),
-              const SizedBox(height: 8),
-              _MoreTileGroup(
-                isDark: isDark,
-                children: [
-                  _MoreTile(
-                    icon: Icons.settings_rounded,
-                    iconColor: Colors.grey,
-                    title: "설정",
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SettingsPage()),
-                    ),
-                    showDivider: kDebugMode,
-                  ),
-                  if (kDebugMode)
+              // 설정은 하단 탭으로 이동됨. "앱" 섹션은 디버그 전용 타일만 남아
+              // 릴리스에서는 표시하지 않는다.
+              if (kDebugMode) ...[
+                const SizedBox(height: 24),
+                _SectionHeader(title: "앱", isDark: isDark),
+                const SizedBox(height: 8),
+                _MoreTileGroup(
+                  isDark: isDark,
+                  children: [
                     _MoreTile(
                       icon: Icons.bug_report_outlined,
                       iconColor: Colors.redAccent,
@@ -138,8 +129,9 @@ class _MoreScreenState extends State<MoreScreen> {
                       onTap: _runKeywordAlertTest,
                       showDivider: false,
                     ),
-                ],
-              ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 24),
               Center(
                 child: GestureDetector(
