@@ -354,7 +354,7 @@ class MyApp extends StatelessWidget {
                 ),
               ),
               themeMode: mode,
-              home: const RootNavigationScreen(),
+              home: RootNavigationScreen(key: RootNavigationScreen.navKey),
             );
           },
         );

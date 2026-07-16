@@ -91,7 +91,6 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      key: RootNavigationScreen.navKey,
       body: PageView(
         controller: _pageController,
         onPageChanged: (index) => setState(() => _currentIndex = index),
