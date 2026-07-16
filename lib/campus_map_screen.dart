@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -773,7 +774,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   }
 
   Future<void> _startLocationTracking() async {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) return;
     try {
       var status = await Geolocator.checkPermission();
       if (status == LocationPermission.denied) {
@@ -1302,7 +1303,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   // ─── 지도 탭 ───
 
   Widget _buildMapTab(Color primary, bool isDark) {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       return _buildDesktopFallback(primary, isDark);
     }
     final orderedFacilities = _facilityOrder

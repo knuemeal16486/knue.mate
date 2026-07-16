@@ -239,7 +239,7 @@ class _TodayMealPageState extends State<TodayMealPage>
   }
 
   Future<void> _handleAlarmToggle() async {
-    if (!Platform.isAndroid && !Platform.isIOS) {
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
       showToast(context, "모바일에서만 가능합니다.");
       return;
     }
@@ -926,12 +926,12 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
     return Scaffold(
       appBar: AppBar(
         backgroundColor: primaryColor,
-        centerTitle: Platform.isIOS ? false : null,
+        centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
           "월간 식단",
           style: TextStyle(
-            fontWeight: Platform.isIOS ? FontWeight.w800 : FontWeight.bold,
+            fontWeight: (!kIsWeb && Platform.isIOS) ? FontWeight.w800 : FontWeight.bold,
             fontSize: 20,
             color: Colors.white,
           ),
@@ -1315,12 +1315,12 @@ class _SettingsPageState extends State<SettingsPage> {
             expandedHeight: 80,
             pinned: true,
             backgroundColor: currentColor,
-            centerTitle: Platform.isIOS ? false : null,
+            centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
                 "설정",
                 style: TextStyle(
-                  fontWeight: Platform.isIOS
+                  fontWeight: (!kIsWeb && Platform.isIOS)
                       ? FontWeight.w800
                       : FontWeight.bold,
                   color: Colors.white,
@@ -2031,11 +2031,11 @@ class DeveloperInfoPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: primary,
-        centerTitle: Platform.isIOS ? false : null,
+        centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
         title: Text(
           "개발자 정보",
           style: TextStyle(
-            fontWeight: Platform.isIOS ? FontWeight.w800 : FontWeight.bold,
+            fontWeight: (!kIsWeb && Platform.isIOS) ? FontWeight.w800 : FontWeight.bold,
             color: Colors.white,
           ),
         ),

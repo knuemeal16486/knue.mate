@@ -579,7 +579,7 @@ class _BusAppScreenState extends State<BusAppScreen>
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
           appBar: AppBar(
-            centerTitle: Platform.isIOS ? false : null,
+            centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
             title: const Text("청람버스"),
             backgroundColor: color,
             iconTheme: const IconThemeData(color: Colors.white),
