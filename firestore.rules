@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// KNUE Mate Firestore 보안 규칙
+//
+// ⚠️ 중요: 이 앱은 현재 Firebase Auth를 사용하지 않는다. 식단/평점/버스/건물/
+// 실시간/공지/동아리 행사 모두 "로그인하지 않은 클라이언트"가 직접 읽고 쓴다.
+// 따라서 규칙만으로는 무단 쓰기를 막을 수 없다(막으면 앱 기능이 깨진다).
+//
+// 이 규칙의 목표는 (1) 앱 동작 유지, (2) 만료되는 test-mode 규칙 제거(영구),
+// (3) 관리자 비밀번호 문서는 콘솔에서만 쓰도록 잠금, (4) 정의되지 않은 경로는
+// 기본 거부(default-deny) 다. 진짜 보안(무단 쓰기 차단)은 Firebase Auth 도입
+// (Phase 3) 후 관리자 식별로 강화한다.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── 관리자 설정 ─────────────────────────────────────────────
+    // 앱이 클라이언트에서 비밀번호를 읽어 비교하므로 read 허용이 불가피하다.
+    // ⚠️ 비밀번호가 클라이언트에 노출되므로 중요한 비밀번호를 재사용하지 말 것.
+    // 쓰기는 콘솔(관리 권한, 규칙 우회)에서만 → 클라이언트 변조 방지.
+    match /app_config/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ── 동아리 공연/행사 ────────────────────────────────────────
+    // 학생 열람(read). 등록/수정은 앱 관리자 화면(무인증 클라이언트)에서 write.
+    // ⚠️ 무인증 write — 클라이언트 비번 게이트는 UX일 뿐. Phase 3에서 Auth로 강화.
+    match /club_events/{doc} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // ── 기존 앱 데이터 (동작 유지) ──────────────────────────────
+    // 모두 무인증 클라이언트가 읽고 쓴다. 하위 문서까지 포함(=**).
+    match /daily_meals/{doc=**}    { allow read, write: if true; }
+    match /meal_ratings/{doc=**}   { allow read, write: if true; }
+    match /bus_timetables/{doc=**} { allow read, write: if true; }
+    match /bus_stops/{doc=**}      { allow read, write: if true; }
+    match /realtime/{doc=**}       { allow read, write: if true; }
+    match /knue_buildings/{doc=**} { allow read, write: if true; }
+    match /notices/{doc=**}        { allow read, write: if true; }
+
+    // 그 외 경로는 명시하지 않아 기본 거부(default-deny).
+  }
+}
