@@ -135,6 +135,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
     );
     final title = controller.text.trim();
+    controller.dispose();
     if (result == true && title.isNotEmpty) {
       final event = PersonalEvent(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -207,6 +208,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       },
     );
     final title = controller.text.trim();
+    controller.dispose();
     if (result == true && title.isNotEmpty) {
       final item = DdayItem(
         id: DateTime.now().millisecondsSinceEpoch.toString(),

@@ -9,6 +9,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'tab_edit_screen.dart';
 import 'root_screen.dart';
+import 'ui_utils.dart';
+import 'club_event_admin_screen.dart';
 
 // [개편] 식단 탭 전용 페이지 (기존 MealMainScreen)
 // [복원] 식단 탭 전용 페이지 (기존 스타일 복구)
@@ -113,7 +115,6 @@ class _TodayMealPageState extends State<TodayMealPage>
     "dinner": [],
   };
   int _reqId = 0;
-  late final ScrollController _scrollController;
 
   @override
   bool get wantKeepAlive => true;
@@ -121,16 +122,9 @@ class _TodayMealPageState extends State<TodayMealPage>
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
     _updateSelectionByTime();
     _loadAlarmState();
     fetchMeals();
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadAlarmState() async {
@@ -463,7 +457,7 @@ class _TodayMealPageState extends State<TodayMealPage>
                   duration: const Duration(milliseconds: 200),
                   child: _MealDetailCard(
                     key: ValueKey("$_date-$_selected-$_source"),
-                    status: statusFor(_selected, DateTime.now(), _date),
+                    status: statusFor(_selected, DateTime.now(), _date, source: _source),
                     type: _selected,
                     source: _source,
                     items: _meals[_selected.stdKey] ?? [],
@@ -780,9 +774,12 @@ class _DateSwitcher extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            onPressed: onPrev,
-            icon: const Icon(Icons.chevron_left, color: Colors.white),
+          AnimatedScaleButton(
+            onTap: onPrev ?? () {},
+            child: const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.chevron_left, color: Colors.white, size: 28),
+            ),
           ),
           Column(
             children: [
@@ -824,9 +821,12 @@ class _DateSwitcher extends StatelessWidget {
               ),
             ],
           ),
-          IconButton(
-            onPressed: onNext,
-            icon: const Icon(Icons.chevron_right, color: Colors.white),
+          AnimatedScaleButton(
+            onTap: onNext ?? () {},
+            child: const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.chevron_right, color: Colors.white, size: 28),
+            ),
           ),
         ],
       ),
@@ -1132,7 +1132,12 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
               _ErrorCard(message: _error!)
             else
               _MealDetailCard(
-                status: statusFor(_selectedType, DateTime.now(), _selectedDate),
+                status: statusFor(
+                  _selectedType,
+                  DateTime.now(),
+                  _selectedDate,
+                  source: _source,
+                ),
                 type: _selectedType,
                 source: _source,
                 items: _meals[_selectedType.stdKey] ?? [],
@@ -1192,11 +1197,24 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   double _localTransparency = 0.0;
+  int _versionTapCount = 0;
 
   @override
   void initState() {
     super.initState();
     _localTransparency = widgetTransparency.value;
+  }
+
+  // 더보기 화면이 없어지면서 옮겨온 숨김 진입로 — 버전 텍스트 7번 탭하면 동아리 행사 관리 화면.
+  void _onVersionTap() {
+    _versionTapCount++;
+    if (_versionTapCount >= 7) {
+      _versionTapCount = 0;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ClubEventAdminScreen()),
+      );
+    }
   }
 
   Future<void> _forceUpdateWidget(BuildContext context) async {
@@ -1781,11 +1799,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
                     const SizedBox(height: 10),
                     Center(
-                      child: Text(
-                        "버전 5.8.0 (Final)",
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 12,
+                      child: GestureDetector(
+                        onTap: _onVersionTap,
+                        behavior: HitTestBehavior.opaque,
+                        child: Text(
+                          "버전 5.8.0 (Final)",
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ),
@@ -2422,8 +2444,9 @@ class _MealTabs extends StatelessWidget {
               .map((t) {
                 final isSel = t == selected;
                 return Expanded(
-                  child: GestureDetector(
+                  child: AnimatedScaleButton(
                     onTap: () => onSelect(t),
+                    scaleFactor: 0.95,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -2609,20 +2632,20 @@ class _MealDetailCardState extends State<_MealDetailCard> {
       return;
     }
 
+    // 체크와 플래그 설정 사이에 await가 없어야 동시 탭에도 한 번만 진행된다.
     if (_isRatingSubmitting) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final path = _getRatingPath();
-    final localKey = "rated_$path";
-
-    if (prefs.getBool(localKey) ?? false) {
-      if (mounted) showToast(context, "이미 이 식단에 별점을 남기셨어요! ✨");
-      return;
-    }
-
     setState(() => _isRatingSubmitting = true);
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final path = _getRatingPath();
+      final localKey = "rated_$path";
+
+      if (prefs.getBool(localKey) ?? false) {
+        if (mounted) showToast(context, "이미 이 식단에 별점을 남기셨어요! ✨");
+        return;
+      }
+
       String? fingerPrint = prefs.getString('user_fingerprint');
       if (fingerPrint == null) {
         fingerPrint = DateTime.now().millisecondsSinceEpoch.toString();
@@ -2643,7 +2666,6 @@ class _MealDetailCardState extends State<_MealDetailCard> {
       if (existing.docs.isNotEmpty) {
         if (mounted) showToast(context, "이미 참여하셨습니다. (중복 방지 정책)");
         await prefs.setBool(localKey, true);
-        setState(() => _isRatingSubmitting = false);
         return;
       }
 
@@ -2944,9 +2966,14 @@ class _MealDetailCardState extends State<_MealDetailCard> {
           BoxShadow(
             color: widget.isToday
                 ? primary.withOpacity(isDark ? 0.1 : 0.05)
-                : Colors.black.withOpacity(isDark ? 0.15 : 0.015),
+                : Colors.black.withOpacity(isDark ? 0.05 : 0.015),
             blurRadius: widget.isToday ? 32 : 12,
             offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.1 : 0.01),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
         ],
       ),

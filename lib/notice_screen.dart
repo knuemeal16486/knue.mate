@@ -21,16 +21,43 @@ class _NoticeScreenState extends State<NoticeScreen> {
   final _scraper = KnueScraper();
   List<Notice> _notices = [];
   bool _loading = true;
+  bool _loadInFlight = false; // 중복 새로고침(연타)이 서로 다른 결과로 캐시를 덮어쓰지 않도록
   String? _selectedCategory; // null = 전체
   DateTime? _lastUpdated;
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+    // fetchAllNotices()는 캐시를 먼저 반환하고 백그라운드로 갱신한다(await 없이).
+    // 그 갱신이 끝났을 때 화면이 최신 데이터를 반영하도록 구독.
+    NoticeCache.revision.addListener(_onCacheUpdated);
+  }
+
+  @override
+  void dispose() {
+    NoticeCache.revision.removeListener(_onCacheUpdated);
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onCacheUpdated() async {
+    if (_loadInFlight) return; // 직접 요청한 갱신 결과는 _load()가 이미 반영함
+    final list = await NoticeCache.load();
+    final ts = await NoticeCache.lastUpdated();
+    if (mounted && list != null) {
+      setState(() {
+        _notices = list;
+        _lastUpdated = ts;
+      });
+    }
   }
 
   Future<void> _load({bool force = false}) async {
+    if (_loadInFlight) return;
+    _loadInFlight = true;
     setState(() => _loading = true);
     try {
       final list = await _scraper.fetchAllNotices(forceRefresh: force);
@@ -44,6 +71,8 @@ class _NoticeScreenState extends State<NoticeScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _loading = false);
+    } finally {
+      _loadInFlight = false;
     }
   }
 
@@ -62,10 +91,15 @@ class _NoticeScreenState extends State<NoticeScreen> {
     return names;
   }
 
-  /// 선택된 카테고리(또는 전체)의 공지 목록.
+  /// 선택된 카테고리(또는 전체) + 검색어로 걸러낸 공지 목록.
+  /// 검색은 선택된 게시판 범위 안에서만 적용된다(MoA의 검색 범위 동작과 동일).
   List<Notice> get _filteredNotices {
-    if (_selectedCategory == null) return _notices;
-    return _notices.where((n) => n.category == _selectedCategory).toList();
+    var list = _selectedCategory == null
+        ? _notices
+        : _notices.where((n) => n.category == _selectedCategory).toList();
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return list;
+    return list.where((n) => n.title.toLowerCase().contains(q)).toList();
   }
 
   /// 선택 게시판이 크롤링 결과 0건인지(=크롤링 실패 가능성) 판정.
@@ -128,6 +162,7 @@ class _NoticeScreenState extends State<NoticeScreen> {
           ),
           body: Column(
             children: [
+              _buildSearchField(color, isDark),
               _buildBoardChips(color),
               if (_hasFailedBoard) _buildFailureBanner(isDark),
               Expanded(child: _buildNoticeList(color, isDark)),
@@ -155,6 +190,60 @@ class _NoticeScreenState extends State<NoticeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 제목 검색창. 선택된 게시판 범위 안에서만 걸러내며, 이미 받아온 목록을
+  /// 로컬에서 필터링하므로 재크롤링 없이 즉시 반영된다.
+  Widget _buildSearchField(Color color, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: (v) => setState(() => _searchQuery = v),
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          hintText: _selectedCategory == null
+              ? "전체 공지에서 제목 검색"
+              : "$_selectedCategory에서 제목 검색",
+          hintStyle: TextStyle(
+            fontSize: 13,
+            color: isDark ? Colors.white38 : Colors.black38,
+          ),
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: _searchQuery.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  tooltip: "검색어 지우기",
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                ),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          filled: true,
+          fillColor: Theme.of(context).cardColor,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: color),
+          ),
+        ),
       ),
     );
   }
@@ -265,12 +354,17 @@ class _NoticeScreenState extends State<NoticeScreen> {
     }
     final list = _filteredNotices;
     if (list.isEmpty) {
+      final searching = _searchQuery.trim().isNotEmpty;
       return RefreshIndicator(
         onRefresh: () => _load(force: true),
         child: ListView(
-          children: const [
-            SizedBox(height: 120),
-            Center(child: Text("표시할 공지가 없습니다")),
+          children: [
+            const SizedBox(height: 120),
+            Center(
+              child: Text(
+                searching ? "검색 결과가 없습니다" : "표시할 공지가 없습니다",
+              ),
+            ),
           ],
         ),
       );

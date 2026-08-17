@@ -1,6 +1,24 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+/// 실시간 차량 혼잡도(1~4)를 [BusSummary.congestion]/[CongestionIndicator]가 쓰는
+/// 문자열 등급으로 변환한다. 값이 없으면(API 미제공) null을 반환해 호출부가
+/// 시간대 추정치로 폴백할 수 있게 한다.
+String? congestionLevelLabel(int? level) {
+  switch (level) {
+    case 1:
+      return 'empty';
+    case 2:
+      return 'normal';
+    case 3:
+      return 'crowded';
+    case 4:
+      return 'full';
+    default:
+      return null;
+  }
+}
+
 class BusRouteConfig {
   final int routeNumber;
   final String routeId;

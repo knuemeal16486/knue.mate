@@ -7,6 +7,7 @@ import 'bus_service.dart';
 import 'bus_route_data.dart';
 import 'favorite_service.dart';
 import 'congestion_indicator.dart';
+import 'ui_utils.dart';
 
 class BusCard extends StatelessWidget {
   final BusSummary bus;
@@ -183,8 +184,9 @@ class BusCard extends StatelessWidget {
 
     return Semantics(
       label: "버스 ${bus.number}, $directionSubText, $remainText, $etaText",
-      child: GestureDetector(
+      child: AnimatedScaleButton(
         onTap: () => _showRouteDetail(context),
+        scaleFactor: 0.96,
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.all(20),
@@ -260,28 +262,7 @@ class BusCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // 즐겨찾기 버튼
-                  FutureBuilder<bool>(
-                    future: FavoriteService.isFavorite(bus.number),
-                    builder: (context, snapshot) {
-                      final isFav = snapshot.data ?? false;
-                      return IconButton(
-                        icon: Icon(
-                          isFav ? Icons.star : Icons.star_border,
-                          color: isFav ? Colors.amber : Colors.grey,
-                          size: 20,
-                        ),
-                        onPressed: () async {
-                          if (isFav) {
-                            await FavoriteService.remove(bus.number);
-                          } else {
-                            await FavoriteService.add(bus.number);
-                          }
-                          // Note: In a stateless widget, the UI updates on the next rebuild.
-                        },
-                      );
-                    },
-                  ),
+                  _FavoriteButton(busNumber: bus.number),
                   if (hasInfo && etaText.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -458,6 +439,54 @@ class BusCard extends StatelessWidget {
 
 }
 
+/// 즐겨찾기 별 버튼. 탭 즉시 로컬 상태를 갱신해 다음 데이터 새로고침을 기다리지 않고 반영한다.
+class _FavoriteButton extends StatefulWidget {
+  final String busNumber;
+
+  const _FavoriteButton({required this.busNumber});
+
+  @override
+  State<_FavoriteButton> createState() => _FavoriteButtonState();
+}
+
+class _FavoriteButtonState extends State<_FavoriteButton> {
+  bool? _isFav;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFavorite();
+  }
+
+  Future<void> _loadFavorite() async {
+    final isFav = await FavoriteService.isFavorite(widget.busNumber);
+    if (mounted) setState(() => _isFav = isFav);
+  }
+
+  Future<void> _toggle() async {
+    final next = !(_isFav ?? false);
+    setState(() => _isFav = next);
+    if (next) {
+      await FavoriteService.add(widget.busNumber);
+    } else {
+      await FavoriteService.remove(widget.busNumber);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isFav = _isFav ?? false;
+    return IconButton(
+      icon: Icon(
+        isFav ? Icons.star : Icons.star_border,
+        color: isFav ? Colors.amber : Colors.grey,
+        size: 20,
+      ),
+      onPressed: _toggle,
+    );
+  }
+}
+
 class _RouteDetailSheet extends StatefulWidget {
   final BusSummary bus;
 
@@ -489,7 +518,8 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     _loadApiStops();
     _loadFavStops();
     _trafficCondition = BusService.estimateTrafficCondition(DateTime.now());
-    _congestion = BusService.estimateCongestion(DateTime.now(), widget.bus.id);
+    // 카드 배지와 같은 값을 쓴다 — 실시간 혼잡도가 있으면 그것, 없으면 시간대 추정치.
+    _congestion = widget.bus.congestion;
   }
 
   Future<void> _loadFavStops() async {

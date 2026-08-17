@@ -264,9 +264,8 @@ class KnueScraper {
         final list = decoded['data']['list'] as List;
         for (var item in list) {
           String title = item['title'] ?? '제목없음';
-          String date = (item['dateCreated'] ?? '')
-              .split(' ')[0]
-              .replaceAll('-', '.');
+          String date =
+              _normalizeDate((item['dateCreated'] ?? '').split(' ')[0]) ?? '';
           String author = item['writer'] ?? '학교';
           // 공지사항 1번, 학술 2번
 
@@ -275,9 +274,7 @@ class KnueScraper {
 
           // Stable ID generation using title and link
           int id = (title + fullLink).hashCode;
-          bool isNew = date.contains(
-            DateFormat('yyyy.MM.dd').format(DateTime.now()),
-          );
+          bool isNew = date == DateFormat('yyyy-MM-dd').format(DateTime.now());
 
           notices.add(
             Notice(
@@ -338,34 +335,32 @@ class KnueScraper {
         String fullLink = _resolveLinkStatic(url, relativeLink);
 
         var tds = row.querySelectorAll('td');
-        String date = '';
+        String? date;
         String author = '학교';
 
-        final dateRegex = RegExp(r'\d{2,4}[-.]\d{2}[-.]\d{2}');
         for (var td in tds) {
-          final match = dateRegex.firstMatch(td.text.trim());
-          if (match != null) {
-            date = match.group(0)!.replaceAll('-', '.');
-            break;
-          }
+          date = _normalizeDate(td.text.trim());
+          if (date != null) break;
         }
 
-        if (date.isEmpty && tds.length > 2) {
-          date = tds.length > 4 ? tds[4].text.trim() : tds[2].text.trim();
-          date = date.replaceAll('-', '.');
+        // 정규식으로 못 찾았을 때만 컬럼 위치로 추정 — 이 추정치도 실제 날짜
+        // 형태일 때만 채택한다(조회수/작성자 등 엉뚱한 값이 날짜로 둔갑하는 것 방지).
+        if (date == null && tds.length > 2) {
+          date = tds.length > 4
+              ? _normalizeDate(tds[4].text.trim())
+              : _normalizeDate(tds[2].text.trim());
         }
+        final dateStr = date ?? '';
 
         if (tds.length > 2) {
           String tempAuthor = tds[2].text.trim();
-          if (tempAuthor != date && !RegExp(r'\d{4}').hasMatch(tempAuthor)) {
+          if (tempAuthor != dateStr && !RegExp(r'\d{4}').hasMatch(tempAuthor)) {
             author = tempAuthor;
           }
         }
 
         int id = Object.hash(group, category, title, fullLink);
-        bool isNew = date.contains(
-          DateFormat('yyyy.MM.dd').format(DateTime.now()),
-        );
+        bool isNew = dateStr == DateFormat('yyyy-MM-dd').format(DateTime.now());
 
         notices.add(
           Notice(
@@ -373,7 +368,7 @@ class KnueScraper {
             category: category,
             group: group,
             title: title,
-            date: date,
+            date: dateStr,
             author: author,
             link: fullLink,
             isNew: isNew,
@@ -384,6 +379,19 @@ class KnueScraper {
       }
     }
     return notices;
+  }
+
+  /// 게시판마다 다른 날짜 표기(2/4자리 연도, '-'/'.' 구분자)를 "yyyy-MM-dd"로
+  /// 정규화한다. 정규화해야 게시판이 달라도 문자열 비교로 안전하게 정렬·비교할 수 있다.
+  /// 날짜로 보이지 않으면 null — 조회수/작성자 같은 값을 날짜로 오인하지 않기 위함.
+  static String? _normalizeDate(String raw) {
+    final match = RegExp(r'(\d{2,4})[-.](\d{1,2})[-.](\d{1,2})').firstMatch(raw);
+    if (match == null) return null;
+    int year = int.parse(match.group(1)!);
+    if (year < 100) year += 2000;
+    final month = match.group(2)!.padLeft(2, '0');
+    final day = match.group(3)!.padLeft(2, '0');
+    return '$year-$month-$day';
   }
 
   static String _resolveLinkStatic(String baseUrl, String relative) {
@@ -471,12 +479,18 @@ class NoticeCache {
   static const _key = 'noticeCache';
   static const _maxItems = 500;
 
+  /// save()될 때마다 값이 바뀐다. fetchAllNotices()는 캐시를 먼저 반환하고
+  /// 백그라운드로 갱신하는데(await 없이), 이 리스너가 있어야 화면이 갱신 완료를
+  /// 알아채고 최신 데이터로 다시 그릴 수 있다.
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
   static Future<void> save(List<Notice> notices) async {
     final prefs = await SharedPreferences.getInstance();
     final trimmed = notices.take(_maxItems).toList();
     await prefs.setString(
         _key, jsonEncode(trimmed.map((e) => e.toJson()).toList()));
     await prefs.setInt('${_key}_ts', DateTime.now().millisecondsSinceEpoch);
+    revision.value++;
   }
 
   static Future<List<Notice>?> load() async {

@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart';
+
+const String _kFavoriteClassroomsKey = 'campus_run_favorite_names';
 
 class Classroom {
   final String name;
@@ -19,40 +22,40 @@ class CampusRunScreen extends StatefulWidget {
 class _CampusRunScreenState extends State<CampusRunScreen>
     with SingleTickerProviderStateMixin {
   final List<Classroom> _allClassrooms = [
-    Classroom("다정관", 36.613286, 127.359914),
-    Classroom("다감관", 36.614016, 127.359718),
+    Classroom("다정관", 36.613407, 127.359612),
+    Classroom("다감관", 36.614059, 127.360068),
     Classroom("기숙사 식당", 36.612763, 127.360502),
-    Classroom("종합교육관", 36.610537, 127.361035),
-    Classroom("인문과학관", 36.610517, 127.360008),
-    Classroom("호연관", 36.609509, 127.358781),
-    Classroom("미래도서관", 36.609283, 127.359147),
-    Classroom("자연과학관", 36.608424, 127.361631),
-    Classroom("융합과학관", 36.609173, 127.361614),
-    Classroom("응용과학관", 36.607976, 127.362114),
+    Classroom("종합교육관", 36.6107112, 127.3609668),
+    Classroom("인문과학관", 36.6105993, 127.3598135),
+    Classroom("호연관", 36.609594, 127.358824),
+    Classroom("미래도서관", 36.6090868, 127.3585314),
+    Classroom("자연과학관", 36.6086658, 127.3616172),
+    Classroom("융합과학관", 36.609389, 127.361463),
+    Classroom("응용과학관", 36.6082061, 127.3621926),
     Classroom("학생회관", 36.608378, 127.359853),
-    Classroom("미술관", 36.607686, 127.360534),
-    Classroom("음악관", 36.607311, 127.361410),
-    Classroom("교원문화관", 36.607609, 127.358611),
-    Classroom("교육박물관", 36.607130, 127.357262),
-    Classroom("대학본부", 36.608583, 127.357278),
+    Classroom("미술관", 36.6079338, 127.3604786),
+    Classroom("음악관", 36.6075107, 127.3614496),
+    Classroom("교원문화관", 36.6078498, 127.3586534),
+    Classroom("교육박물관", 36.6073352, 127.3572828),
+    Classroom("대학본부", 36.608845, 127.357247),
     Classroom("버스정류장", 36.608214, 127.358542),
-    Classroom("대학원", 36.6095, 127.3475),
-    Classroom("교육연구관", 36.609765, 127.357924),
+    Classroom("대학원", 36.6100459, 127.3578957),
+    Classroom("교육연구관", 36.610903, 127.357467),
     Classroom("한국교원대 정문", 36.606836, 127.354341),
     Classroom("한국교원대 후문", 36.615347, 127.356506),
     Classroom("한국교원대 쪽문", 36.614480, 127.360430),
     Classroom("제2 체육관", 36.609988, 127.362383),
     Classroom("제1 체육관", 36.610104, 127.362667),
-    Classroom("복지관", 36.612863, 127.359115),
-    Classroom("학군단", 36.605897, 127.360595),
-    Classroom("교수아파트", 36.611975, 127.352617),
-    Classroom("국제연수관", 36.613622, 127.357594),
-    Classroom("함덕당", 36.611697, 127.357418),
-    Classroom("교원연수관", 36.612346, 127.357202),
-    Classroom("교양학관", 36.609372, 127.360774),
+    Classroom("복지관", 36.613194, 127.35902),
+    Classroom("학군단", 36.606149, 127.360594),
+    Classroom("교수아파트", 36.612203, 127.352673),
+    Classroom("국제연수관", 36.613791, 127.356961),
+    Classroom("함덕당", 36.611962, 127.357349),
+    Classroom("교원연수관", 36.612614, 127.357145),
+    Classroom("교양학관", 36.6095798, 127.3607777),
   ];
 
-  final Set<String> _favoriteNames = {"한국교원대 정문", "버스정류장"};
+  Set<String> _favoriteNames = {"한국교원대 정문", "버스정류장"};
   Classroom? _targetClassroom;
   StreamSubscription<Position>? _positionStream;
   Timer? _timer;
@@ -88,6 +91,8 @@ class _CampusRunScreenState extends State<CampusRunScreen>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
 
+    _loadFavorites();
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -107,6 +112,19 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     _timer?.cancel();
     _animationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_kFavoriteClassroomsKey);
+    if (saved != null && mounted) {
+      setState(() => _favoriteNames = saved.toSet());
+    }
+  }
+
+  Future<void> _saveFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_kFavoriteClassroomsKey, _favoriteNames.toList());
   }
 
   Color _getNeonVariant(Color baseColor) {
@@ -170,6 +188,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                         _favoriteNames.add(name);
                       }
                     });
+                    _saveFavorites();
                   },
                 ),
               ),
@@ -274,6 +293,12 @@ class _CampusRunScreenState extends State<CampusRunScreen>
           showToast(context, "위치 권한이 필요합니다.");
           return;
         }
+      }
+      if (permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        showToast(context, "위치 권한이 거부되어 있습니다. 설정에서 허용해주세요.");
+        await Geolocator.openAppSettings();
+        return;
       }
 
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();

@@ -32,9 +32,8 @@ class _TabEditScreenState extends State<TabEditScreen> {
 
   Future<void> _saveAndExit() async {
     // 드래그 중에는 임의 순서를 허용하지만, 저장 시점에는 항상 migrateTabOrder를
-    // 거쳐 정규화한다: more는 사용자가 어디로 옮겼든 무조건 맨 뒤로 강제되고,
-    // home은 (드래그로는 제거될 수 없지만) 목록에서 사라진 경우 맨 앞에 재삽입되어
-    // 항상 존재가 보장된다. 첫 번째 탭(=시작 화면)은 사용자가 자유롭게 고를 수 있다.
+    // 거쳐 정규화한다: home은 (드래그로는 제거될 수 없지만) 목록에서 사라진 경우
+    // 맨 앞에 재삽입되어 항상 존재가 보장된다. 그 외 탭 순서는 전부 자유.
     final normalized = PreferencesService.migrateTabOrder(
       _tempOrder.map((t) => t.name).toList(),
     );

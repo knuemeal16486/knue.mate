@@ -21,15 +21,39 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
   List<ClubEvent> _events = [];
   bool _loading = true;
   bool _error = false;
+  bool _loadInFlight = false; // 중복 새로고침(연타)이 서로 다른 결과로 캐시를 덮어쓰지 않도록
   DateTime? _lastUpdated;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // fetchAll()은 캐시를 먼저 반환하고 백그라운드로 갱신한다(await 없이).
+    // 그 갱신이 끝났을 때 화면이 최신 데이터를 반영하도록 구독.
+    ClubEventCache.revision.addListener(_onCacheUpdated);
+  }
+
+  @override
+  void dispose() {
+    ClubEventCache.revision.removeListener(_onCacheUpdated);
+    super.dispose();
+  }
+
+  Future<void> _onCacheUpdated() async {
+    if (_loadInFlight) return; // 직접 요청한 갱신 결과는 _load()가 이미 반영함
+    final list = await ClubEventCache.load();
+    final ts = await ClubEventCache.lastUpdated();
+    if (mounted && list != null) {
+      setState(() {
+        _events = list;
+        _lastUpdated = ts;
+      });
+    }
   }
 
   Future<void> _load({bool force = false}) async {
+    if (_loadInFlight) return;
+    _loadInFlight = true;
     if (mounted) {
       setState(() {
         _loading = true;
@@ -52,6 +76,8 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
           _error = true;
         });
       }
+    } finally {
+      _loadInFlight = false;
     }
   }
 

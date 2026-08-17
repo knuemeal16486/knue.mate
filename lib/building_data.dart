@@ -259,6 +259,10 @@ const Map<String, _BuildingMeta> _kBuildingMetadata = {
 
 List<BuildingData> kBuildings = [];
 
+/// kBuildings가 재할당될 때마다 값이 바뀐다. 이미 열려 있는 화면(CampusMapScreen)이
+/// 여기에 리스너를 달아, 백그라운드 Firebase 동기화가 끝나도 재진입 없이 갱신되게 한다.
+final ValueNotifier<int> kBuildingsRevision = ValueNotifier<int>(0);
+
 Future<void> loadBuildingData() async {
   // 1. 모든 메타데이터를 기반으로 기본 건물 리스트 생성
   final List<BuildingData> allBuildings = [];
@@ -312,10 +316,12 @@ Future<void> loadBuildingData() async {
       );
     }
     kBuildings = allBuildings;
+    kBuildingsRevision.value++;
     debugPrint('Successfully loaded ${kBuildings.length} buildings (Local JSON - Initial)');
   } catch (e) {
     debugPrint('Error loading local building data: $e');
     kBuildings = allBuildings;
+    kBuildingsRevision.value++;
   }
 
   // 3. 백그라운드에서 Firebase 동기화 시도 (UI를 블로킹하지 않음)
@@ -345,6 +351,7 @@ Future<void> _syncWithFirebase(List<BuildingData> currentBuildings) async {
         }
       }
       kBuildings = List.from(currentBuildings);
+      kBuildingsRevision.value++;
       debugPrint('Successfully synced buildings with Firebase in background');
     }
   } catch (e) {

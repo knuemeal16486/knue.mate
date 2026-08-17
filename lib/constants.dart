@@ -76,7 +76,6 @@ enum AppTab {
   bus("버스", Icons.directions_bus_rounded, Colors.blue),
   run("런", Icons.directions_run_rounded, Colors.green),
   map("지도", Icons.map_rounded, Colors.deepPurple),
-  more("더보기", Icons.apps_rounded, Colors.blueGrey),
   settings("설정", Icons.settings_rounded, Colors.grey);
 
   final String label;
@@ -94,9 +93,31 @@ List<String> asStringList(dynamic data) {
   return [];
 }
 
-ServeStatus statusFor(MealType type, DateTime now, DateTime targetDate) {
+/// 식당(source)별 실제 운영 시간. 기숙사 식당(a)은 [MealType.timeRange]와 같지만,
+/// 학생회관(b)은 시간이 다르고 조식을 운영하지 않는다 — _isRatingAllowed/_getTimeRangeText
+/// (meal_screen.dart)와 같은 값으로 맞춰뒀다.
+String? mealTimeRangeFor(MealType type, MealSource source) {
+  if (source == MealSource.a) return type.timeRange;
+  switch (type) {
+    case MealType.breakfast:
+      return null; // 학생회관 조식 미운영
+    case MealType.lunch:
+      return "11:00 ~ 14:00";
+    case MealType.dinner:
+      return "17:00 ~ 18:30";
+  }
+}
+
+ServeStatus statusFor(
+  MealType type,
+  DateTime now,
+  DateTime targetDate, {
+  MealSource source = MealSource.a,
+}) {
   if (!isSameDate(now, targetDate)) return ServeStatus.notToday;
-  final times = type.timeRange.split("~");
+  final range = mealTimeRangeFor(type, source);
+  if (range == null) return ServeStatus.closed;
+  final times = range.split("~");
   final startStr = times[0].trim().split(":");
   final endStr = times[1].trim().split(":");
   final start = DateTime(
@@ -522,7 +543,6 @@ class PreferencesService {
     AppTab.meal,
     AppTab.bus,
     AppTab.map,
-    AppTab.more,
     AppTab.settings,
   ]);
 
@@ -535,17 +555,18 @@ class PreferencesService {
   static final ValueNotifier<List<PersonalEvent>> personalEvents =
       ValueNotifier([]);
 
-  /// 하단 탭에 배치 가능한 탭 (run은 더보기 내 캠퍼스런으로만 진입)
+  /// 하단 탭에 배치 가능한 탭 (run은 캠퍼스런 화면으로만 진입, 하단 탭엔 없음)
   static const List<AppTab> navigableTabs = [
     AppTab.home,
     AppTab.meal,
     AppTab.bus,
     AppTab.map,
-    AppTab.more,
     AppTab.settings,
   ];
 
-  /// 저장된 탭 이름 목록 → 새 5탭 구조. 순수 함수(테스트 대상).
+  /// 저장된 탭 이름 목록 → 5탭 구조로 정규화. 순수 함수(테스트 대상).
+  /// home은 완전히 사라진 경우에만 맨 앞에 재삽입되고, 나머지 탭 순서(설정 포함)는
+  /// 사용자가 자유롭게 정할 수 있다 — 강제로 고정되는 위치는 없다.
   static List<AppTab> migrateTabOrder(List<String> savedNames) {
     final mapped = savedNames
         .map((name) {
@@ -566,11 +587,6 @@ class PreferencesService {
     for (final t in navigableTabs) {
       if (!result.contains(t)) result.add(t);
     }
-    // 더보기·설정을 항상 마지막 2개로 고정 (설정이 최우측)
-    result.remove(AppTab.more);
-    result.remove(AppTab.settings);
-    result.add(AppTab.more);
-    result.add(AppTab.settings);
     return result;
   }
 
@@ -606,6 +622,7 @@ class PreferencesService {
         prefs.getStringList(keyFavBoards) ?? ['대학소식', '학사공지'];
     noticeAlarmOn.value = prefs.getBool(keyNoticeAlarm) ?? true;
 
+    // 별도 try/catch — 한쪽 JSON이 손상되어도 다른 쪽까지 조용히 날아가지 않도록.
     try {
       final ddayRaw = prefs.getString(keyDdayItems);
       if (ddayRaw != null) {
@@ -613,6 +630,10 @@ class PreferencesService {
             .map((e) => DdayItem.fromJson(e as Map<String, dynamic>))
             .toList();
       }
+    } catch (e) {
+      debugPrint('dday load error: $e');
+    }
+    try {
       final peRaw = prefs.getString(keyPersonalEvents);
       if (peRaw != null) {
         personalEvents.value = (jsonDecode(peRaw) as List)
@@ -620,7 +641,7 @@ class PreferencesService {
             .toList();
       }
     } catch (e) {
-      debugPrint('schedule load error: $e');
+      debugPrint('personal event load error: $e');
     }
   }
 
@@ -675,6 +696,8 @@ class PreferencesService {
   static Future<void> saveMealSource(MealSource source) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(keyMealSource, source.index);
+    // 홈/월간 탭 등 defaultSourceNotifier를 구독하는 화면이 재시작 없이 바로 반영되게.
+    defaultSourceNotifier.value = source;
   }
 
   static Future<void> saveWidgetSettings(
@@ -699,6 +722,21 @@ class PreferencesService {
     widgetTransparency.value = 0.0;
     widgetTheme.value = ThemeMode.system;
     widgetSource.value = MealSource.a;
+    // prefs.clear()는 저장소만 지운다 — 이미 화면들이 구독 중인 나머지 알림자들도
+    // 기본값으로 되돌려야 재시작 없이도 화면이 초기화 상태를 반영한다.
+    defaultSourceNotifier.value = MealSource.a;
+    tabOrder.value = [
+      AppTab.home,
+      AppTab.meal,
+      AppTab.bus,
+      AppTab.map,
+      AppTab.settings,
+    ];
+    noticeKeywords.value = ['장학', '수강', '졸업'];
+    favoriteBoards.value = ['대학소식', '학사공지'];
+    noticeAlarmOn.value = true;
+    ddayItems.value = [];
+    personalEvents.value = [];
   }
 }
 

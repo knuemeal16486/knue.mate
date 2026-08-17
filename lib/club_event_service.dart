@@ -87,11 +87,16 @@ class ClubEventService {
 class ClubEventCache {
   static const _key = 'clubEventCache';
 
+  /// save()될 때마다 값이 바뀐다. fetchAll()은 캐시를 먼저 반환하고 백그라운드로
+  /// 갱신하는데(await 없이), 이 리스너가 있어야 화면이 갱신 완료를 알아채고 다시 그린다.
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
   static Future<void> save(List<ClubEvent> events) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
         _key, jsonEncode(events.map((e) => e.toJson()).toList()));
     await prefs.setInt('${_key}_ts', DateTime.now().millisecondsSinceEpoch);
+    revision.value++;
   }
 
   static Future<List<ClubEvent>?> load() async {

@@ -6,7 +6,6 @@ import 'bus_screen.dart';
 import 'campus_map_screen.dart';
 import 'campus_run_screen.dart';
 import 'home_screen.dart';
-import 'more_screen.dart';
 
 class RootNavigationScreen extends StatefulWidget {
   static final GlobalKey<RootNavigationScreenState> navKey = GlobalKey<RootNavigationScreenState>();
@@ -76,8 +75,6 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
         return const CampusRunScreen();
       case AppTab.map:
         return const CampusMapScreen();
-      case AppTab.more:
-        return const MoreScreen();
       case AppTab.settings:
         return const SettingsPage();
     }
@@ -101,8 +98,14 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
           color: theme.cardColor,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 20,
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 30,
+              offset: const Offset(0, -10),
             ),
           ],
         ),

@@ -14,7 +14,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'firebase_sync_service.dart';
 import 'root_screen.dart';
-import 'push_notification_service.dart';
 import 'keyword_alert_service.dart';
 import 'club_event_alert_service.dart';
 
@@ -124,7 +123,6 @@ void main() async {
       _initializeBackgroundTasks();
       await _initializeHomeWidget();
       await NotificationService().init();
-      await PushNotificationService.init();
     } catch (e) {
       debugPrint("Plugin initialization error: $e");
     }
@@ -284,7 +282,7 @@ class MyApp extends StatelessWidget {
                 ),
                 textTheme: GoogleFonts.notoSansKrTextTheme(
                   ThemeData(brightness: Brightness.light).textTheme,
-                ),
+                ).apply(letterSpacingDelta: -0.4),
                 scaffoldBackgroundColor: const Color(0xFFF8F9FE),
                 cardColor: Colors.white,
                 cardTheme: CardThemeData(
@@ -327,7 +325,7 @@ class MyApp extends StatelessWidget {
                 ),
                 textTheme: GoogleFonts.notoSansKrTextTheme(
                   ThemeData(brightness: Brightness.dark).textTheme,
-                ),
+                ).apply(letterSpacingDelta: -0.4),
                 scaffoldBackgroundColor: const Color(0xFF0D0D0F),
                 cardColor: const Color(0xFF1E1E22),
                 cardTheme: CardThemeData(

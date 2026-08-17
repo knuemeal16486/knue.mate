@@ -24,7 +24,8 @@ void main() {
     expect(notices.first.title, contains('장학금'));
     expect(notices.first.category, '학사공지');
     expect(notices.first.group, 'MAIN');
-    expect(notices.first.date, '2026.07.15');
+    // 날짜는 게시판마다 다른 원본 표기와 무관하게 "yyyy-MM-dd"로 정규화된다.
+    expect(notices.first.date, '2026-07-15');
     expect(notices.first.author, '교무처');
     expect(
       notices.first.link,

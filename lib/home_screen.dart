@@ -3,15 +3,19 @@ import 'package:intl/intl.dart';
 
 import 'bus_timetable_data.dart';
 import 'calendar_screen.dart';
+import 'campus_run_screen.dart';
 import 'club_event_model.dart';
 import 'club_event_service.dart';
 import 'club_events_screen.dart';
 import 'constants.dart';
+import 'housing_screen.dart';
 import 'notice_model.dart';
 import 'notice_screen.dart';
 import 'notice_service.dart';
 import 'root_screen.dart';
 import 'schedule_model.dart';
+import 'staff_contacts_screen.dart';
+import 'ui_utils.dart';
 
 /// 홈 대시보드. 식단/버스/공지/일정 서브시스템을 한 화면에 모아 보여준다.
 /// 세로 스크롤, 섹션별 독립 위젯 — 2·3단계 카드 추가 시 구조 변경 없이 삽입 가능.
@@ -66,6 +70,21 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadNoticePreview();
     _loadUpcoming();
     _loadClubEvents();
+    // 식단 탭에서 식당(source)을 바꾸면 홈 카드도 재시작 없이 갱신되도록.
+    defaultSourceNotifier.addListener(_loadMeal);
+    // 공지/동아리 화면의 백그라운드 캐시 갱신이 끝나도 홈 카드가 반영되도록.
+    NoticeCache.revision.addListener(_loadKeywordAlerts);
+    NoticeCache.revision.addListener(_loadNoticePreview);
+    ClubEventCache.revision.addListener(_loadClubEvents);
+  }
+
+  @override
+  void dispose() {
+    defaultSourceNotifier.removeListener(_loadMeal);
+    NoticeCache.revision.removeListener(_loadKeywordAlerts);
+    NoticeCache.revision.removeListener(_loadNoticePreview);
+    ClubEventCache.revision.removeListener(_loadClubEvents);
+    super.dispose();
   }
 
   // ---------------------------------------------------------------------
@@ -75,13 +94,17 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 현재 시각 기준 다음 끼니 판정. statusFor로 아직 끝나지 않은(대기중 또는
   /// 제공중) 첫 끼니를 찾고, 저녁까지 모두 지났으면 내일 아침으로 넘어간다.
   ({MealType type, DateTime date}) _resolveNextMeal(DateTime now) {
+    final source = defaultSourceNotifier.value;
     for (final type in [MealType.breakfast, MealType.lunch, MealType.dinner]) {
-      final status = statusFor(type, now, now);
+      final status = statusFor(type, now, now, source: source);
       if (status == ServeStatus.waiting || status == ServeStatus.open) {
         return (type: type, date: now);
       }
     }
-    return (type: MealType.breakfast, date: now.add(const Duration(days: 1)));
+    // 학생회관은 조식을 운영하지 않으므로 내일 첫 끼니는 점심부터.
+    final tomorrowFirstMeal =
+        source == MealSource.b ? MealType.lunch : MealType.breakfast;
+    return (type: tomorrowFirstMeal, date: now.add(const Duration(days: 1)));
   }
 
   Future<void> _loadMeal() async {
@@ -134,9 +157,13 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final cached = await NoticeCache.load() ?? [];
       final keywords = PreferencesService.noticeKeywords.value;
+      final favBoards = PreferencesService.favoriteBoards.value;
+      // 실제 푸시 알림(KeywordAlertService.filterNewMatches)과 같은 기준(관심 게시판
+      // 제한)을 적용 — 그래야 이 카드에 보이는 매치가 실제로 알림도 오는 매치와 일치한다.
       final matches = keywords.isEmpty
           ? <Notice>[]
           : cached
+              .where((n) => favBoards.isEmpty || favBoards.contains(n.category))
               .where((n) => keywords.any(
                   (kw) => n.title.toLowerCase().contains(kw.toLowerCase())))
               .take(3)
@@ -155,10 +182,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() { _noticeLoading = true; _noticeError = false; });
     try {
       final favBoards = PreferencesService.favoriteBoards.value.toSet();
-      final all = await _scraper.fetchAllNotices(onlyCategories: favBoards);
+      // 즐겨찾는 게시판이 없으면 결과는 항상 빈 목록이니 크롤링 자체를 건너뛴다.
+      // (빈 Set을 onlyCategories로 넘기면 모든 게시판이 필터링돼 매번 헛수고만 함)
       final filtered = favBoards.isEmpty
           ? <Notice>[]
-          : all.where((n) => favBoards.contains(n.category)).take(5).toList();
+          : (await _scraper.fetchAllNotices(onlyCategories: favBoards))
+              .where((n) => favBoards.contains(n.category))
+              .take(5)
+              .toList();
       if (!mounted) return;
       setState(() {
         _favNotices = filtered;
@@ -236,18 +267,22 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildHeroHeader(color, isDark),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 24),
+                  // 좌우 16 — 버스/식단 탭 카드 여백과 정렬을 맞춘다.
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildKeywordAlertsCard(color, isDark),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       _buildNoticePreviewCard(color, isDark),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       _buildUpcomingCard(color, isDark),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       _buildClubEventsCard(color, isDark),
-                      // 3단계: 자취방 카드 삽입 지점
+                      const SizedBox(height: 14),
+                      _buildHousingCard(color, isDark),
+                      const SizedBox(height: 14),
+                      _buildMinorShortcutsRow(color, isDark),
                     ],
                   ),
                 ),
@@ -272,9 +307,9 @@ class _HomeScreenState extends State<HomeScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color.lerp(color, Colors.white, 0.12)!,
+            Color.lerp(color, Colors.white, 0.15)!,
             color,
-            Color.lerp(color, Colors.black, 0.22)!,
+            Color.lerp(color, Colors.black, 0.15)!,
           ],
         ),
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
@@ -648,6 +683,125 @@ class _HomeScreenState extends State<HomeScreen> {
     if (daysLeft == 0) return "D-DAY";
     return daysLeft > 0 ? "D-$daysLeft" : "D+${-daysLeft}";
   }
+
+  // --- 6. 자취방 구하기 (셸 — 실 데이터 연결 전) -----------------------
+
+  Widget _buildHousingCard(Color color, bool isDark) {
+    return _SectionCard(
+      isDark: isDark,
+      title: "자취방 구하기",
+      icon: Icons.apartment_outlined,
+      color: color,
+      accentColor: const Color(0xFF14B8A6),
+      onSeeAll: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const HousingScreen()),
+      ),
+      child: Text(
+        "학교 주변 자취방 지도·월세·집주인 연락처, 곧 추가돼요",
+        style: TextStyle(
+          fontSize: 12,
+          color: isDark ? Colors.white38 : Colors.black38,
+        ),
+      ),
+    );
+  }
+
+  // --- 7. 기타 기능 (더보기 화면을 대체하는 최소한의 진입로) ---------------
+
+  /// 더보기 화면이 없어지면서 갈 곳을 잃은 캠퍼스런/교직원 연락처의 임시 진입로.
+  /// 카드로 만들면 무게감이 커져서, 얇은 한 줄 버튼 2개로 최대한 가볍게 둔다.
+  Widget _buildMinorShortcutsRow(Color color, bool isDark) {
+    final borderColor = isDark ? Colors.white12 : const Color(0xFFE5E7EB);
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              child: _MinorShortcutButton(
+                icon: Icons.directions_run_rounded,
+                label: "캠퍼스런",
+                color: color,
+                isDark: isDark,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CampusRunScreen()),
+                ),
+              ),
+            ),
+            Container(width: 1, color: borderColor),
+            Expanded(
+              child: _MinorShortcutButton(
+                icon: Icons.contact_phone_outlined,
+                label: "교직원 연락처",
+                color: color,
+                isDark: isDark,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const StaffContactsScreen()),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// [_buildMinorShortcutsRow] 안의 탭 가능한 버튼 절반.
+class _MinorShortcutButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _MinorShortcutButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScaleButton(
+      onTap: onTap,
+      scaleFactor: 0.97,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ===========================================================================
@@ -670,15 +824,15 @@ class _HeroTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return AnimatedScaleButton(
       onTap: onTap,
-      child: Container(
+      scaleFactor: 0.96,
+      child: GlassContainer(
+        opacity: 0.12,
+        blur: 12.0,
+        borderRadius: BorderRadius.circular(16),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -729,12 +883,20 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       width: double.infinity,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
+        // 버스/식단 탭 카드와 동일한 그림자 값 — 탭 간 재질감을 통일한다.
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
         border: Border.all(
           color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
         ),
@@ -771,14 +933,14 @@ class _SectionCard extends StatelessWidget {
                                 fontSize: 14, fontWeight: FontWeight.bold),
                           ),
                         ),
-                        if (onSeeAll != null)
-                          GestureDetector(
-                            onTap: onSeeAll,
-                            child: Text(
-                              "전체 보기",
-                              style: TextStyle(fontSize: 12, color: color),
-                            ),
+                        // 카드 전체가 눌리므로 여기서는 갈 수 있다는 표시만 한다.
+                        if (onSeeAll != null) ...[
+                          Text(
+                            "전체 보기",
+                            style: TextStyle(fontSize: 12, color: color),
                           ),
+                          Icon(Icons.chevron_right, size: 16, color: color),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -790,6 +952,15 @@ class _SectionCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+
+    // "전체 보기"가 있는 카드는 카드 전체가 그 목적지로 가는 버튼이 된다.
+    // 버스 카드와 같은 scaleFactor로 눌리는 느낌까지 통일.
+    if (onSeeAll == null) return card;
+    return AnimatedScaleButton(
+      onTap: onSeeAll!,
+      scaleFactor: 0.98,
+      child: card,
     );
   }
 }
