@@ -1,5 +1,6 @@
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class GeminiService {
   // .env에서 키를 안전하게 가져오기
@@ -25,15 +26,27 @@ class GeminiService {
     ],
   );
 
-  // 캐시를 위한 메모리 저장소
+  static FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+
+  // 인메모리 캐시 (앱 세션 내 중복 Firestore 조회 방지)
   static final Map<String, String> _cache = {};
-  static final Map<String, DateTime> _cacheTimestamps = {};
+
+  // Firestore 문서 ID용 키 생성 (슬래시 등 금지 문자 제거, 최대 500자)
+  static String _docKey(String cacheKey) {
+    return cacheKey
+        .replaceAll('/', '_')
+        .replaceAll('.', '_')
+        .replaceAll('[', '_')
+        .replaceAll(']', '_')
+        .replaceAll('*', '_')
+        .replaceAll('`', '_')
+        .substring(0, cacheKey.length.clamp(0, 500));
+  }
 
   // 메뉴 리스트로 칼로리 예상하기
   static Future<String> estimateCalories(List<String> menuItems) async {
     if (menuItems.isEmpty) return "";
 
-    // "없음"이나 빈 항목 제거
     final validItems = menuItems.where((item) {
       final trimmed = item.trim();
       return trimmed.isNotEmpty &&
@@ -44,21 +57,29 @@ class GeminiService {
 
     if (validItems.isEmpty) return "";
 
-    // 캐시 키 생성
     final cacheKey = validItems.join('|');
 
-    // 캐시 확인 (6시간 유효로 연장)
-    if (_cache.containsKey(cacheKey)) {
-      final timestamp = _cacheTimestamps[cacheKey];
-      if (timestamp != null &&
-          DateTime.now().difference(timestamp).inHours < 6) {
-        return _cache[cacheKey]!;
+    // 1. 인메모리 캐시 확인
+    if (_cache.containsKey(cacheKey)) return _cache[cacheKey]!;
+
+    // 2. Firestore 캐시 확인 (모든 사용자 공유)
+    try {
+      final doc = await _firestore
+          .collection('calorie_cache')
+          .doc(_docKey(cacheKey))
+          .get()
+          .timeout(const Duration(seconds: 3));
+      if (doc.exists) {
+        final calories = doc.data()?['calories'] as String?;
+        if (calories != null && calories.isNotEmpty) {
+          _cache[cacheKey] = calories;
+          return calories;
+        }
       }
-    }
+    } catch (_) {}
 
+    // 3. Gemini API 호출 (첫 번째 사용자만)
     final prompt = _buildPrompt(validItems);
-
-    // [개선] 일시적 오류 발생 시 1회 재시도
     int retryCount = 0;
     while (retryCount < 2) {
       try {
@@ -66,17 +87,18 @@ class GeminiService {
         final response = await _model.generateContent(content);
         final rawText = response.text?.trim() ?? "";
 
-        if (rawText.isEmpty) {
-          retryCount++;
-          continue;
-        }
+        if (rawText.isEmpty) { retryCount++; continue; }
 
         final result = _normalizeCalorieResponse(rawText, validItems);
 
-        // 캐시에 저장 (무조건 값이 있음)
-        _cache[cacheKey] = result;
-        _cacheTimestamps[cacheKey] = DateTime.now();
+        // 4. Firestore에 저장 (이후 사용자들은 여기서 읽음)
+        _firestore.collection('calorie_cache').doc(_docKey(cacheKey)).set({
+          'calories': result,
+          'menu': cacheKey,
+          'createdAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
 
+        _cache[cacheKey] = result;
         return result;
       } catch (e) {
         retryCount++;
@@ -86,10 +108,9 @@ class GeminiService {
       }
     }
 
-    // 완전히 실패한 경우 자체 계산식 사용 (때려맞추기)
+    // 완전히 실패 시 자체 계산
     final fallback = _generateFallbackCalories(validItems);
     _cache[cacheKey] = fallback;
-    _cacheTimestamps[cacheKey] = DateTime.now();
     return fallback;
   }
 
@@ -184,9 +205,5 @@ class GeminiService {
     return "${startRange}~${startRange + 100}kcal";
   }
 
-  // 캐시 초기화 (선택적)
-  static void clearCache() {
-    _cache.clear();
-    _cacheTimestamps.clear();
-  }
+  static void clearCache() => _cache.clear();
 }
