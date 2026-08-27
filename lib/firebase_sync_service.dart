@@ -120,7 +120,30 @@ class FirebaseSyncService {
 
       final doc = await _firestore.collection('daily_meals').doc(docId).get();
       if (doc.exists) {
-        return doc.data();
+        final data = doc.data()!;
+
+        // MealSource.b (학생회관): pot.knue.ac.kr 는 주 단위 업데이트
+        // 이번 주 월요일 00:00 이전에 저장된 캐시는 만료 처리 → 재스크래핑
+        if (source == MealSource.b) {
+          final lastUpdated = (data['lastUpdated'] as Timestamp?)?.toDate();
+          if (lastUpdated != null) {
+            final now = DateTime.now();
+            final thisMonday = now.subtract(Duration(days: now.weekday - 1));
+            final mondayStart = DateTime(
+              thisMonday.year,
+              thisMonday.month,
+              thisMonday.day,
+            );
+            if (lastUpdated.isBefore(mondayStart)) {
+              print(
+                'FirebaseSyncService: 학생회관 캐시 만료 (저장=$lastUpdated, 기준=$mondayStart) → 재스크래핑',
+              );
+              return null;
+            }
+          }
+        }
+
+        return data;
       }
     } catch (e) {
       print('FirebaseSyncService: 식단 가져오기 실패: $e');
