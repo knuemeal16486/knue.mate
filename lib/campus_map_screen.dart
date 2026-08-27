@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -369,7 +370,6 @@ const List<DeptOffice> kDeptOffices = [
   ),
 ];
 
-const List<DeptOffice> kAdminOffices = [];
 // 행정직원 데이터는 admin_staff_data.dart에서 불러온 kAdminStaff 리스트를 사용합니다.
 
 // Building data is now loaded dynamically from assets.
@@ -684,6 +684,12 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     _loadFavoritesAndCategories();
     _startLocationTracking();
     _fetchWeather();
+    // 백그라운드 Firebase 건물 동기화가 화면이 열려있는 동안 끝나도 반영되도록 구독.
+    kBuildingsRevision.addListener(_onBuildingsUpdated);
+  }
+
+  void _onBuildingsUpdated() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadFavoritesAndCategories() async {
@@ -772,15 +778,23 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     return '🌡️';
   }
 
-  Future<void> _startLocationTracking() async {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
+  /// 위치 추적을 시작한다. 권한이 거부되어 시작하지 못하면 false를 반환해
+  /// 호출부(현재 위치 버튼)가 사용자에게 안내를 보여줄 수 있게 한다.
+  Future<bool> _startLocationTracking() async {
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      return false;
+    }
     try {
       var status = await Geolocator.checkPermission();
       if (status == LocationPermission.denied) {
         status = await Geolocator.requestPermission();
       }
-      if (status == LocationPermission.deniedForever) return;
-      if (!mounted) return;
+      if (status == LocationPermission.denied ||
+          status == LocationPermission.deniedForever) {
+        if (mounted) setState(() => _locationPermGranted = false);
+        return false;
+      }
+      if (!mounted) return false;
       setState(() => _locationPermGranted = true);
       _locSub =
           Geolocator.getPositionStream(
@@ -791,11 +805,15 @@ class _CampusMapScreenState extends State<CampusMapScreen>
           ).listen((pos) {
             if (mounted) setState(() => _userPosition = pos);
           });
-    } catch (_) {}
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
   void dispose() {
+    kBuildingsRevision.removeListener(_onBuildingsUpdated);
     _locSub?.cancel();
     _zoomAnim?.dispose();
     _mapController.dispose();
@@ -1302,7 +1320,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   // ─── 지도 탭 ───
 
   Widget _buildMapTab(Color primary, bool isDark) {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       return _buildDesktopFallback(primary, isDark);
     }
     final orderedFacilities = _facilityOrder
@@ -1736,16 +1754,22 @@ class _CampusMapScreenState extends State<CampusMapScreen>
               _PillZoomBtn(
                 icon: Icons.my_location_rounded,
                 color: _userPosition != null ? Colors.blue : null,
-                onTap: () {
+                onTap: () async {
                   if (_userPosition != null) {
                     _animatedMove(
                       LatLng(_userPosition!.latitude, _userPosition!.longitude),
                       17.5,
                     );
-                  } else {
-                    _startLocationTracking();
-                    _animatedMove(_knueCenter, 16.5);
+                    return;
                   }
+                  final granted = await _startLocationTracking();
+                  if (!granted) {
+                    if (!mounted) return;
+                    showToast(context, "위치 권한이 필요합니다. 설정에서 허용해주세요.");
+                    await Geolocator.openAppSettings();
+                    return;
+                  }
+                  _animatedMove(_knueCenter, 16.5);
                 },
                 isDark: isDark,
               ),
@@ -6007,6 +6031,13 @@ class _ScreenshotShareDialogState extends State<_ScreenshotShareDialog> {
                     if (image != null) {
                       await SharePlus.instance.share(
                         ShareParams(
+                          files: [
+                            XFile.fromData(
+                              image,
+                              mimeType: 'image/png',
+                              name: '${widget.name}_trail.png',
+                            ),
+                          ],
                           text:
                               '📍 산책로: ${widget.name}\n경유지 ${widget.trail.length}개\n── 한국교원대학교 캠퍼스맵 앱에서 공유 ──',
                         ),

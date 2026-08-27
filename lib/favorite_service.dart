@@ -4,8 +4,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 class FavoriteService {
   static const _key = 'favoriteBuses';
 
-  /// 즐겨찾기 상태를 실시간으로 구독할 수 있는 노티파이어
   static final ValueNotifier<Set<String>> favoritesNotifier = ValueNotifier({});
+
+  // 읽기→수정→쓰기가 겹치지 않도록 직렬화
+  static Future<void> _mutex = Future.value();
+  static Future<T> _synchronized<T>(Future<T> Function() action) {
+    final result = _mutex.then((_) => action());
+    _mutex = result.then((_) {}, onError: (_) {});
+    return result;
+  }
 
   static Future<void> loadFavorites() async {
     final prefs = await SharedPreferences.getInstance();
@@ -17,20 +24,24 @@ class FavoriteService {
     return (prefs.getStringList(_key) ?? []).toSet();
   }
 
-  static Future<void> add(String busNumber) async {
-    final set = await _load();
-    set.add(busNumber);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_key, set.toList());
-    favoritesNotifier.value = Set.from(set);
+  static Future<void> add(String busNumber) {
+    return _synchronized(() async {
+      final set = await _load();
+      set.add(busNumber);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_key, set.toList());
+      favoritesNotifier.value = Set.from(set);
+    });
   }
 
-  static Future<void> remove(String busNumber) async {
-    final set = await _load();
-    set.remove(busNumber);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_key, set.toList());
-    favoritesNotifier.value = Set.from(set);
+  static Future<void> remove(String busNumber) {
+    return _synchronized(() async {
+      final set = await _load();
+      set.remove(busNumber);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_key, set.toList());
+      favoritesNotifier.value = Set.from(set);
+    });
   }
 
   static bool isFavoriteSync(String busNumber) {

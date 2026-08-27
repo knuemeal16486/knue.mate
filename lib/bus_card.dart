@@ -7,6 +7,7 @@ import 'bus_service.dart';
 import 'bus_route_data.dart';
 import 'favorite_service.dart';
 import 'congestion_indicator.dart';
+import 'ui_utils.dart';
 
 class BusCard extends StatelessWidget {
   final BusSummary bus;
@@ -183,8 +184,9 @@ class BusCard extends StatelessWidget {
 
     return Semantics(
       label: "버스 ${bus.number}, $directionSubText, $remainText, $etaText",
-      child: GestureDetector(
+      child: AnimatedScaleButton(
         onTap: () => _showRouteDetail(context),
+        scaleFactor: 0.96,
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.all(20),
@@ -260,7 +262,6 @@ class BusCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // 즐겨찾기 버튼
                   ValueListenableBuilder<Set<String>>(
                     valueListenable: FavoriteService.favoritesNotifier,
                     builder: (context, favorites, _) {
@@ -455,27 +456,6 @@ class BusCard extends StatelessWidget {
     );
   }
 
-  String _buildSemanticsLabel(BusArrival? best, String targetStation) {
-    if (best == null) {
-      return "${bus.number}번 버스: 운행 정보 없음";
-    }
-
-    String label = "${bus.number}번 버스: ";
-    label += "현재 위치 ${best.currentStopName}, ";
-
-    if (best.remainStops >= 0) {
-      label += "목적지까지 ${best.remainStops}정거장 남음";
-      if (best.estimatedMinutes > 0) {
-        label += ", 예상 도착 시간 약 ${best.estimatedMinutes.round()}분 후";
-      } else if (best.remainStops == 0) {
-        label += ", 곧 도착";
-      }
-    } else {
-      label += "종점 방면 운행 중";
-    }
-
-    return label;
-  }
 }
 
 class _RouteDetailSheet extends StatefulWidget {
@@ -509,7 +489,8 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     _loadApiStops();
     _loadFavStops();
     _trafficCondition = BusService.estimateTrafficCondition(DateTime.now());
-    _congestion = BusService.estimateCongestion(DateTime.now(), widget.bus.id);
+    // 카드 배지와 같은 값을 쓴다 — 실시간 혼잡도가 있으면 그것, 없으면 시간대 추정치.
+    _congestion = widget.bus.congestion;
   }
 
   Future<void> _loadFavStops() async {

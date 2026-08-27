@@ -34,9 +34,9 @@ class FirebaseSyncService {
       }
 
       await batch.commit();
-      print('FirebaseSyncService: 건물 정보 ${buildingsJson.length}개 Batch 업로드 완료');
+      debugPrint('FirebaseSyncService: 건물 정보 ${buildingsJson.length}개 Batch 업로드 완료');
     } catch (e) {
-      print('FirebaseSyncService: 건물 정보 업로드 실패: $e');
+      debugPrint('FirebaseSyncService: 건물 정보 업로드 실패: $e');
     }
   }
 
@@ -81,7 +81,7 @@ class FirebaseSyncService {
       }
       return firestoreBuildings;
     } catch (e) {
-      print('FirebaseSyncService: 건물 정보 가져오기 실패: $e');
+      debugPrint('FirebaseSyncService: 건물 정보 가져오기 실패: $e');
       return null;
     }
   }
@@ -105,7 +105,7 @@ class FirebaseSyncService {
         'cacheVersion': 2,
       });
     } catch (e) {
-      print('FirebaseSyncService: 식단 저장 실패: $e');
+      debugPrint('FirebaseSyncService: 식단 저장 실패: $e');
     }
   }
 
@@ -145,7 +145,7 @@ class FirebaseSyncService {
         return data;
       }
     } catch (e) {
-      print('FirebaseSyncService: 식단 가져오기 실패: $e');
+      debugPrint('FirebaseSyncService: 식단 가져오기 실패: $e');
     }
     return null;
   }
@@ -171,9 +171,9 @@ class FirebaseSyncService {
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
-      print('FirebaseSyncService: 버스 $routeNumber 시간표 업로드 완료 ($docId)');
+      debugPrint('FirebaseSyncService: 버스 $routeNumber 시간표 업로드 완료 ($docId)');
     } catch (e) {
-      print('FirebaseSyncService: 버스 시간표 업로드 실패: $e');
+      debugPrint('FirebaseSyncService: 버스 시간표 업로드 실패: $e');
     }
   }
 
@@ -210,9 +210,9 @@ class FirebaseSyncService {
       }
 
       await batch.commit();
-      print('FirebaseSyncService: 전체 버스 시간표 업로드 완료');
+      debugPrint('FirebaseSyncService: 전체 버스 시간표 업로드 완료');
     } catch (e) {
-      print('FirebaseSyncService: 전체 버스 시간표 업로드 실패: $e');
+      debugPrint('FirebaseSyncService: 전체 버스 시간표 업로드 실패: $e');
     }
   }
 
@@ -236,7 +236,7 @@ class FirebaseSyncService {
         return BusTimetable.fromJson(data);
       }
     } catch (e) {
-      print('FirebaseSyncService: 버스 시간표 가져오기 실패 ($routeNumber): $e');
+      debugPrint('FirebaseSyncService: 버스 시간표 가져오기 실패 ($routeNumber): $e');
     }
     return null;
   }
@@ -260,7 +260,7 @@ class FirebaseSyncService {
 
       return timetables;
     } catch (e) {
-      print('FirebaseSyncService: 전체 버스 시간표 가져오기 실패: $e');
+      debugPrint('FirebaseSyncService: 전체 버스 시간표 가져오기 실패: $e');
       return {};
     }
   }
@@ -304,7 +304,7 @@ class FirebaseSyncService {
         }
       }
     } catch (e) {
-      print('FirebaseSyncService: 실시간 버스 데이터 가져오기 실패: $e');
+      debugPrint('FirebaseSyncService: 실시간 버스 데이터 가져오기 실패: $e');
     }
     return null;
   }
@@ -344,7 +344,7 @@ class FirebaseSyncService {
         return timestamp?.toDate();
       }
     } catch (e) {
-      print('FirebaseSyncService: 마지막 업데이트 시간 가져오기 실패: $e');
+      debugPrint('FirebaseSyncService: 마지막 업데이트 시간 가져오기 실패: $e');
     }
     return null;
   }
@@ -370,9 +370,9 @@ class FirebaseSyncService {
       }
 
       await batch.commit();
-      print('FirebaseSyncService: 버스 $routeNumber 정류장 ${stops.length}개 업로드 완료');
+      debugPrint('FirebaseSyncService: 버스 $routeNumber 정류장 ${stops.length}개 업로드 완료');
     } catch (e) {
-      print('FirebaseSyncService: 버스 정류장 업로드 실패: $e');
+      debugPrint('FirebaseSyncService: 버스 정류장 업로드 실패: $e');
     }
   }
 
@@ -387,7 +387,7 @@ class FirebaseSyncService {
 
       return snapshot.docs.map((doc) => BusStop.fromJson(doc.data())).toList();
     } catch (e) {
-      print('FirebaseSyncService: 버스 정류장 가져오기 실패 ($routeNumber): $e');
+      debugPrint('FirebaseSyncService: 버스 정류장 가져오기 실패 ($routeNumber): $e');
       return [];
     }
   }

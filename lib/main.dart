@@ -19,6 +19,8 @@ import 'ad_service.dart';
 import 'premium_service.dart';
 import 'onboarding_screen.dart';
 import 'favorite_service.dart';
+import 'keyword_alert_service.dart';
+import 'club_event_alert_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -34,8 +36,14 @@ void callbackDispatcher() {
         options: DefaultFirebaseOptions.currentPlatform,
       );
       await PreferencesService.loadSettings();
-      final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
-      await fetchMealApi(targetDate, defaultSourceNotifier.value);
+      if (task == kNoticeCheckTask) {
+        await KeywordAlertService.checkAndNotify();
+      } else if (task == kClubEventCheckTask) {
+        await ClubEventAlertService.checkAndNotify();
+      } else {
+        final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
+        await fetchMealApi(targetDate, defaultSourceNotifier.value);
+      }
     } catch (e) {
       debugPrint("Workmanager error: $e");
     }
@@ -137,6 +145,8 @@ void main() async {
           frequency: const Duration(minutes: 15),
           constraints: Constraints(networkType: NetworkType.connected),
         );
+        await KeywordAlertService.syncRegistration();
+        await ClubEventAlertService.syncRegistration();
       } catch (e) {
         debugPrint("Workmanager setup error: $e");
       }
@@ -297,7 +307,7 @@ class MyApp extends StatelessWidget {
                 ),
                 textTheme: GoogleFonts.notoSansKrTextTheme(
                   ThemeData(brightness: Brightness.light).textTheme,
-                ),
+                ).apply(letterSpacingDelta: -0.4),
                 scaffoldBackgroundColor: const Color(0xFFF8F9FE),
                 cardColor: Colors.white,
                 cardTheme: CardThemeData(
@@ -340,7 +350,7 @@ class MyApp extends StatelessWidget {
                 ),
                 textTheme: GoogleFonts.notoSansKrTextTheme(
                   ThemeData(brightness: Brightness.dark).textTheme,
-                ),
+                ).apply(letterSpacingDelta: -0.4),
                 scaffoldBackgroundColor: const Color(0xFF0D0D0F),
                 cardColor: const Color(0xFF1E1E22),
                 cardTheme: CardThemeData(

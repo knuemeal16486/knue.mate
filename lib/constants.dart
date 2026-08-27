@@ -13,6 +13,7 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:home_widget/home_widget.dart';
 import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
+import 'schedule_model.dart';
 
 // [1] 전역 설정
 const String kBaseUrl = "https://knue-meal-api.onrender.com";
@@ -73,6 +74,7 @@ enum MealType {
 enum ServeStatus { open, waiting, closed, notToday }
 
 enum AppTab {
+  home("홈", Icons.home_rounded, Colors.indigo),
   meal("식단", Icons.restaurant_menu_rounded, Colors.orange),
   bus("버스", Icons.directions_bus_rounded, Colors.blue),
   run("런", Icons.directions_run_rounded, Colors.green),
@@ -94,9 +96,31 @@ List<String> asStringList(dynamic data) {
   return [];
 }
 
-ServeStatus statusFor(MealType type, DateTime now, DateTime targetDate) {
+/// 식당(source)별 실제 운영 시간. 기숙사 식당(a)은 [MealType.timeRange]와 같지만,
+/// 학생회관(b)은 시간이 다르고 조식을 운영하지 않는다 — _isRatingAllowed/_getTimeRangeText
+/// (meal_screen.dart)와 같은 값으로 맞춰뒀다.
+String? mealTimeRangeFor(MealType type, MealSource source) {
+  if (source == MealSource.a) return type.timeRange;
+  switch (type) {
+    case MealType.breakfast:
+      return null; // 학생회관 조식 미운영
+    case MealType.lunch:
+      return "11:00 ~ 14:00";
+    case MealType.dinner:
+      return "17:00 ~ 18:30";
+  }
+}
+
+ServeStatus statusFor(
+  MealType type,
+  DateTime now,
+  DateTime targetDate, {
+  MealSource source = MealSource.a,
+}) {
   if (!isSameDate(now, targetDate)) return ServeStatus.notToday;
-  final times = type.timeRange.split("~");
+  final range = mealTimeRangeFor(type, source);
+  if (range == null) return ServeStatus.closed;
+  final times = range.split("~");
   final startStr = times[0].trim().split(":");
   final endStr = times[1].trim().split(":");
   final start = DateTime(
@@ -509,15 +533,64 @@ class PreferencesService {
   static const String keyWidgetTrans = 'widget_trans';
   static const String keyWidgetTheme = 'widget_theme';
   static const String keyWidgetSource = 'widget_source';
-  static const String keyTabOrder = 'tab_order_v1';
+  static const String keyTabOrder = 'tab_order_v2'; // v1 → v2
+  static const String keyNoticeKeywords = 'notice_keywords';
+  static const String keyFavBoards = 'fav_boards';
+  static const String keyNoticeAlarm = 'notice_alarm_on';
+  static const String keyDdayItems = 'dday_items';
+  static const String keyPersonalEvents = 'personal_events';
 
   static final ValueNotifier<List<AppTab>> tabOrder = ValueNotifier([
+    AppTab.home,
     AppTab.meal,
     AppTab.bus,
-    AppTab.run,
     AppTab.map,
     AppTab.settings,
   ]);
+
+  static final ValueNotifier<List<String>> noticeKeywords =
+      ValueNotifier(['장학', '수강', '졸업']);
+  static final ValueNotifier<List<String>> favoriteBoards =
+      ValueNotifier(['대학소식', '학사공지']);
+  static final ValueNotifier<bool> noticeAlarmOn = ValueNotifier(true);
+  static final ValueNotifier<List<DdayItem>> ddayItems = ValueNotifier([]);
+  static final ValueNotifier<List<PersonalEvent>> personalEvents =
+      ValueNotifier([]);
+
+  /// 하단 탭에 배치 가능한 탭 (run은 캠퍼스런 화면으로만 진입, 하단 탭엔 없음)
+  static const List<AppTab> navigableTabs = [
+    AppTab.home,
+    AppTab.meal,
+    AppTab.bus,
+    AppTab.map,
+    AppTab.settings,
+  ];
+
+  /// 저장된 탭 이름 목록 → 5탭 구조로 정규화. 순수 함수(테스트 대상).
+  /// home은 완전히 사라진 경우에만 맨 앞에 재삽입되고, 나머지 탭 순서(설정 포함)는
+  /// 사용자가 자유롭게 정할 수 있다 — 강제로 고정되는 위치는 없다.
+  static List<AppTab> migrateTabOrder(List<String> savedNames) {
+    final mapped = savedNames
+        .map((name) {
+          try {
+            return AppTab.values.firstWhere((t) => t.name == name);
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<AppTab>()
+        .where((t) => navigableTabs.contains(t))
+        .toList();
+    final result = <AppTab>[];
+    for (final t in mapped) {
+      if (!result.contains(t)) result.add(t);
+    }
+    if (!result.contains(AppTab.home)) result.insert(0, AppTab.home);
+    for (final t in navigableTabs) {
+      if (!result.contains(t)) result.add(t);
+    }
+    return result;
+  }
 
   static Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -536,15 +609,41 @@ class PreferencesService {
     final int? wSource = prefs.getInt(keyWidgetSource);
     if (wSource != null) widgetSource.value = MealSource.values[wSource];
 
-    final List<String>? savedOrder = prefs.getStringList(keyTabOrder);
-    if (savedOrder != null) {
-      try {
-        tabOrder.value = savedOrder
-            .map((e) => AppTab.values.firstWhere((t) => t.name == e))
+    final savedV2 = prefs.getStringList(keyTabOrder);
+    final savedV1 = prefs.getStringList('tab_order_v1');
+    if (savedV2 != null) {
+      tabOrder.value = migrateTabOrder(savedV2);
+    } else if (savedV1 != null) {
+      tabOrder.value = migrateTabOrder(savedV1);
+      await prefs.setStringList(
+          keyTabOrder, tabOrder.value.map((t) => t.name).toList());
+    }
+    noticeKeywords.value =
+        prefs.getStringList(keyNoticeKeywords) ?? ['장학', '수강', '졸업'];
+    favoriteBoards.value =
+        prefs.getStringList(keyFavBoards) ?? ['대학소식', '학사공지'];
+    noticeAlarmOn.value = prefs.getBool(keyNoticeAlarm) ?? true;
+
+    // 별도 try/catch — 한쪽 JSON이 손상되어도 다른 쪽까지 조용히 날아가지 않도록.
+    try {
+      final ddayRaw = prefs.getString(keyDdayItems);
+      if (ddayRaw != null) {
+        ddayItems.value = (jsonDecode(ddayRaw) as List)
+            .map((e) => DdayItem.fromJson(e as Map<String, dynamic>))
             .toList();
-      } catch (e) {
-        debugPrint("PreferencesService: 탭 순서 로드 실패 - $e");
       }
+    } catch (e) {
+      debugPrint('dday load error: $e');
+    }
+    try {
+      final peRaw = prefs.getString(keyPersonalEvents);
+      if (peRaw != null) {
+        personalEvents.value = (jsonDecode(peRaw) as List)
+            .map((e) => PersonalEvent.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('personal event load error: $e');
     }
   }
 
@@ -552,6 +651,38 @@ class PreferencesService {
     final prefs = await SharedPreferences.getInstance();
     tabOrder.value = order;
     await prefs.setStringList(keyTabOrder, order.map((e) => e.name).toList());
+  }
+
+  static Future<void> saveNoticeKeywords(List<String> keywords) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(keyNoticeKeywords, keywords);
+    noticeKeywords.value = List.from(keywords);
+  }
+
+  static Future<void> saveFavoriteBoards(List<String> boards) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(keyFavBoards, boards);
+    favoriteBoards.value = List.from(boards);
+  }
+
+  static Future<void> saveNoticeAlarm(bool on) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(keyNoticeAlarm, on);
+    noticeAlarmOn.value = on;
+  }
+
+  static Future<void> saveDdayItems(List<DdayItem> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        keyDdayItems, jsonEncode(items.map((e) => e.toJson()).toList()));
+    ddayItems.value = List.from(items);
+  }
+
+  static Future<void> savePersonalEvents(List<PersonalEvent> events) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(keyPersonalEvents,
+        jsonEncode(events.map((e) => e.toJson()).toList()));
+    personalEvents.value = List.from(events);
   }
 
   static Future<void> saveThemeMode(ThemeMode mode) async {
@@ -567,6 +698,8 @@ class PreferencesService {
   static Future<void> saveMealSource(MealSource source) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(keyMealSource, source.index);
+    // 홈/월간 탭 등 defaultSourceNotifier를 구독하는 화면이 재시작 없이 바로 반영되게.
+    defaultSourceNotifier.value = source;
   }
 
   static Future<void> saveWidgetSettings(
@@ -591,6 +724,21 @@ class PreferencesService {
     widgetTransparency.value = 0.0;
     widgetTheme.value = ThemeMode.system;
     widgetSource.value = MealSource.a;
+    // prefs.clear()는 저장소만 지운다 — 이미 화면들이 구독 중인 나머지 알림자들도
+    // 기본값으로 되돌려야 재시작 없이도 화면이 초기화 상태를 반영한다.
+    defaultSourceNotifier.value = MealSource.a;
+    tabOrder.value = [
+      AppTab.home,
+      AppTab.meal,
+      AppTab.bus,
+      AppTab.map,
+      AppTab.settings,
+    ];
+    noticeKeywords.value = ['장학', '수강', '졸업'];
+    favoriteBoards.value = ['대학소식', '학사공지'];
+    noticeAlarmOn.value = true;
+    ddayItems.value = [];
+    personalEvents.value = [];
   }
 }
 
@@ -622,7 +770,7 @@ class NotificationService {
     );
     try {
       await flutterLocalNotificationsPlugin.initialize(
-        const InitializationSettings(android: android, iOS: ios),
+        settings: const InitializationSettings(android: android, iOS: ios),
       );
     } on PlatformException catch (e) {
       debugPrint("Native Notification Platform Error (Likely permission denied): $e");
@@ -691,7 +839,7 @@ class NotificationService {
 
   Future<void> cancelAlarm(int id) async {
     try {
-      await flutterLocalNotificationsPlugin.cancel(id);
+      await flutterLocalNotificationsPlugin.cancel(id: id);
     } catch (e) {
       debugPrint("cancelAlarm error: $e");
     }
@@ -708,11 +856,11 @@ class NotificationService {
     }
     try {
       await flutterLocalNotificationsPlugin.zonedSchedule(
-        id,
-        title,
-        body,
-        tz.TZDateTime.from(scheduledTime, tz.local),
-        const NotificationDetails(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: tz.TZDateTime.from(scheduledTime, tz.local),
+        notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'meal_alarm_channel',
             '식단 알림',
@@ -721,8 +869,6 @@ class NotificationService {
           iOS: DarwinNotificationDetails(),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {
@@ -745,10 +891,10 @@ class NotificationService {
     );
     try {
       await flutterLocalNotificationsPlugin.show(
-        id,
-        title,
-        body,
-        const NotificationDetails(android: android, iOS: ios),
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(android: android, iOS: ios),
       );
     } catch (e) {
       // 알림 권한이 없거나 플랫폼 제약으로 실패한 경우 — 앱 크래시 방지

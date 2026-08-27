@@ -31,7 +31,13 @@ class _TabEditScreenState extends State<TabEditScreen> {
   }
 
   Future<void> _saveAndExit() async {
-    await PreferencesService.saveTabOrder(_tempOrder);
+    // 드래그 중에는 임의 순서를 허용하지만, 저장 시점에는 항상 migrateTabOrder를
+    // 거쳐 정규화한다: home은 (드래그로는 제거될 수 없지만) 목록에서 사라진 경우
+    // 맨 앞에 재삽입되어 항상 존재가 보장된다. 그 외 탭 순서는 전부 자유.
+    final normalized = PreferencesService.migrateTabOrder(
+      _tempOrder.map((t) => t.name).toList(),
+    );
+    await PreferencesService.saveTabOrder(normalized);
     if (mounted) Navigator.pop(context);
     showToast(context, "새로운 탭 구성이 적용되었습니다. ✨");
   }
