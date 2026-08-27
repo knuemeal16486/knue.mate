@@ -2224,7 +2224,7 @@ class DeveloperInfoPage extends StatelessWidget {
 
 // _BottomNavBar 는 RootNavigationScreen으로 이전되었으므로 삭제됨
 
-class _CalendarGrid extends StatelessWidget {
+class _CalendarGrid extends StatefulWidget {
   final DateTime focusedMonth;
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateSelected;
@@ -2238,48 +2238,120 @@ class _CalendarGrid extends StatelessWidget {
     required this.source,
   });
   @override
+  State<_CalendarGrid> createState() => _CalendarGridState();
+}
+
+class _CalendarGridState extends State<_CalendarGrid> {
+  // dateStr("YYYY-MM-DD") → {lunch: "650~700kcal", dinner: "700~750kcal"}
+  final Map<String, Map<String, String>> _calorieData = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCalories();
+  }
+
+  @override
+  void didUpdateWidget(_CalendarGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusedMonth != widget.focusedMonth ||
+        oldWidget.source != widget.source) {
+      _loadCalories();
+    }
+  }
+
+  Future<void> _loadCalories() async {
+    final year = widget.focusedMonth.year;
+    final month = widget.focusedMonth.month;
+    final daysInMonth = DateUtils.getDaysInMonth(year, month);
+    final sourceStr = widget.source.name;
+
+    final docIds = <String>[];
+    for (int d = 1; d <= daysInMonth; d++) {
+      final dt = DateTime(year, month, d);
+      final dateStr =
+          '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+      docIds.add('${dateStr}_$sourceStr');
+    }
+
+    final newData = <String, Map<String, String>>{};
+    try {
+      for (var i = 0; i < docIds.length; i += 30) {
+        final batch = docIds.sublist(
+          i,
+          (i + 30).clamp(0, docIds.length),
+        );
+        final snapshot = await FirebaseFirestore.instance
+            .collection('daily_meals')
+            .where(FieldPath.documentId, whereIn: batch)
+            .get()
+            .timeout(const Duration(seconds: 5));
+        for (final doc in snapshot.docs) {
+          final calories = doc.data()['calories'] as Map<String, dynamic>?;
+          if (calories == null) continue;
+          final dateStr = doc.id.substring(0, doc.id.lastIndexOf('_'));
+          final entry = <String, String>{};
+          final lunch = calories['lunch'] as String?;
+          final dinner = calories['dinner'] as String?;
+          if (lunch != null && lunch.isNotEmpty) entry['lunch'] = lunch;
+          if (dinner != null && dinner.isNotEmpty) entry['dinner'] = dinner;
+          if (entry.isNotEmpty) newData[dateStr] = entry;
+        }
+      }
+    } catch (_) {}
+
+    if (mounted) setState(() => _calorieData..clear()..addAll(newData));
+  }
+
+  // "650~750kcal" → "650"
+  String _lowerKcal(String calorie) {
+    final match = RegExp(r'\d+').firstMatch(calorie);
+    return match?.group(0) ?? '';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final daysInMonth = DateUtils.getDaysInMonth(
-      focusedMonth.year,
-      focusedMonth.month,
+      widget.focusedMonth.year,
+      widget.focusedMonth.month,
     );
     final firstDayWeekday = DateTime(
-      focusedMonth.year,
-      focusedMonth.month,
+      widget.focusedMonth.year,
+      widget.focusedMonth.month,
       1,
     ).weekday;
     final offset = firstDayWeekday % 7;
-    DateTime now = DateTime.now();
-    DateTime thisWeekMonday = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(Duration(days: now.weekday - 1));
-    DateTime thisWeekFriday = thisWeekMonday.add(const Duration(days: 4));
+    final now = DateTime.now();
+    final thisWeekMonday = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
+    final thisWeekFriday = thisWeekMonday.add(const Duration(days: 4));
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 7,
+        childAspectRatio: 0.58,
       ),
       itemCount: daysInMonth + offset,
       itemBuilder: (context, index) {
         if (index < offset) return const SizedBox();
         final day = index - offset + 1;
-        final date = DateTime(focusedMonth.year, focusedMonth.month, day);
+        final date = DateTime(
+            widget.focusedMonth.year, widget.focusedMonth.month, day);
         bool isEnabled = true;
-        if (source == MealSource.b) {
+        if (widget.source == MealSource.b) {
           if (date.weekday == DateTime.saturday ||
               date.weekday == DateTime.sunday)
             isEnabled = false;
-          DateTime target = DateTime(date.year, date.month, date.day);
-          if (target.isBefore(thisWeekMonday) || target.isAfter(thisWeekFriday))
+          final target = DateTime(date.year, date.month, date.day);
+          if (target.isBefore(thisWeekMonday) ||
+              target.isAfter(thisWeekFriday))
             isEnabled = false;
         }
-        final isSel = DateUtils.isSameDay(date, selectedDate);
-        final isToday = DateUtils.isSameDay(date, DateTime.now());
+        final isSel = DateUtils.isSameDay(date, widget.selectedDate);
+        final isToday = DateUtils.isSameDay(date, now);
         Color textColor;
         if (!isEnabled)
           textColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
@@ -2292,28 +2364,75 @@ class _CalendarGrid extends StatelessWidget {
         else
           textColor = isDark ? Colors.white : Colors.black87;
 
+        final dateStr =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        final dayCalories = _calorieData[dateStr];
+        final lunchKcal = dayCalories != null
+            ? _lowerKcal(dayCalories['lunch'] ?? '')
+            : null;
+        final dinnerKcal = dayCalories != null
+            ? _lowerKcal(dayCalories['dinner'] ?? '')
+            : null;
+
         return GestureDetector(
-          onTap: isEnabled ? () => onDateSelected(date) : null,
-          child: Container(
-            margin: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isSel ? primaryColor : null,
-              border: (isToday && !isSel)
-                  ? Border.all(color: primaryColor, width: 2)
-                  : null,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              "$day",
-              style: TextStyle(
-                color: textColor,
-                fontWeight: (isSel || isToday)
-                    ? FontWeight.bold
-                    : FontWeight.normal,
-                decoration: !isEnabled ? TextDecoration.lineThrough : null,
+          onTap: isEnabled ? () => widget.onDateSelected(date) : null,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              AspectRatio(
+                aspectRatio: 1.0,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSel ? widget.primaryColor : null,
+                      border: (isToday && !isSel)
+                          ? Border.all(color: widget.primaryColor, width: 2)
+                          : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      "$day",
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: (isSel || isToday)
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        decoration:
+                            !isEnabled ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              if (lunchKcal != null && lunchKcal.isNotEmpty)
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '점~$lunchKcal',
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      color: isDark
+                          ? Colors.orange.shade200
+                          : Colors.orange.shade700,
+                    ),
+                  ),
+                ),
+              if (dinnerKcal != null && dinnerKcal.isNotEmpty)
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '저~$dinnerKcal',
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      color: isDark
+                          ? Colors.blue.shade200
+                          : Colors.blue.shade600,
+                    ),
+                  ),
+                ),
+            ],
           ),
         );
       },
@@ -2862,7 +2981,14 @@ class _MealDetailCardState extends State<_MealDetailCard> {
 
     try {
       await Future.delayed(const Duration(milliseconds: 500));
-      String result = await GeminiService.estimateCalories(widget.items);
+      final dateStr =
+          "${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}";
+      final mealDocId = '${dateStr}_${widget.source.name}';
+      String result = await GeminiService.estimateCalories(
+        widget.items,
+        mealDocId: mealDocId,
+        mealTypeKey: widget.type.stdKey,
+      );
       if (mounted) {
         setState(() {
           _caloriesInfo = result;
