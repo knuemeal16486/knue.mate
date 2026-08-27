@@ -262,7 +262,26 @@ class BusCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  _FavoriteButton(busNumber: bus.number),
+                  ValueListenableBuilder<Set<String>>(
+                    valueListenable: FavoriteService.favoritesNotifier,
+                    builder: (context, favorites, _) {
+                      final isFav = favorites.contains(bus.number);
+                      return IconButton(
+                        icon: Icon(
+                          isFav ? Icons.star : Icons.star_border,
+                          color: isFav ? Colors.amber : Colors.grey,
+                          size: 20,
+                        ),
+                        onPressed: () async {
+                          if (isFav) {
+                            await FavoriteService.remove(bus.number);
+                          } else {
+                            await FavoriteService.add(bus.number);
+                          }
+                        },
+                      );
+                    },
+                  ),
                   if (hasInfo && etaText.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -437,54 +456,6 @@ class BusCard extends StatelessWidget {
     );
   }
 
-}
-
-/// 즐겨찾기 별 버튼. 탭 즉시 로컬 상태를 갱신해 다음 데이터 새로고침을 기다리지 않고 반영한다.
-class _FavoriteButton extends StatefulWidget {
-  final String busNumber;
-
-  const _FavoriteButton({required this.busNumber});
-
-  @override
-  State<_FavoriteButton> createState() => _FavoriteButtonState();
-}
-
-class _FavoriteButtonState extends State<_FavoriteButton> {
-  bool? _isFav;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadFavorite();
-  }
-
-  Future<void> _loadFavorite() async {
-    final isFav = await FavoriteService.isFavorite(widget.busNumber);
-    if (mounted) setState(() => _isFav = isFav);
-  }
-
-  Future<void> _toggle() async {
-    final next = !(_isFav ?? false);
-    setState(() => _isFav = next);
-    if (next) {
-      await FavoriteService.add(widget.busNumber);
-    } else {
-      await FavoriteService.remove(widget.busNumber);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isFav = _isFav ?? false;
-    return IconButton(
-      icon: Icon(
-        isFav ? Icons.star : Icons.star_border,
-        color: isFav ? Colors.amber : Colors.grey,
-        size: 20,
-      ),
-      onPressed: _toggle,
-    );
-  }
 }
 
 class _RouteDetailSheet extends StatefulWidget {

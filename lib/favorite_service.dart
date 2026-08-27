@@ -1,16 +1,22 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FavoriteService {
   static const _key = 'favoriteBuses';
 
-  // add/remove의 읽기→수정→쓰기가 겹치면 먼저 끝난 쪽 변경이 유실될 수 있어
-  // 하나의 Future 체인으로 직렬화한다.
-  static Future<void> _mutex = Future.value();
+  static final ValueNotifier<Set<String>> favoritesNotifier = ValueNotifier({});
 
+  // 읽기→수정→쓰기가 겹치지 않도록 직렬화
+  static Future<void> _mutex = Future.value();
   static Future<T> _synchronized<T>(Future<T> Function() action) {
     final result = _mutex.then((_) => action());
     _mutex = result.then((_) {}, onError: (_) {});
     return result;
+  }
+
+  static Future<void> loadFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    favoritesNotifier.value = (prefs.getStringList(_key) ?? []).toSet();
   }
 
   static Future<Set<String>> _load() async {
@@ -24,6 +30,7 @@ class FavoriteService {
       set.add(busNumber);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(_key, set.toList());
+      favoritesNotifier.value = Set.from(set);
     });
   }
 
@@ -33,13 +40,17 @@ class FavoriteService {
       set.remove(busNumber);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(_key, set.toList());
+      favoritesNotifier.value = Set.from(set);
     });
   }
 
-  static Future<bool> isFavorite(String busNumber) async {
-    final set = await _load();
-    return set.contains(busNumber);
+  static bool isFavoriteSync(String busNumber) {
+    return favoritesNotifier.value.contains(busNumber);
   }
 
-  static Future<Set<String>> getAll() async => await _load();
+  static Future<bool> isFavorite(String busNumber) async {
+    return favoritesNotifier.value.contains(busNumber);
+  }
+
+  static Future<Set<String>> getAll() async => favoritesNotifier.value;
 }

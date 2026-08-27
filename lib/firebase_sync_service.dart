@@ -102,6 +102,7 @@ class FirebaseSyncService {
         'source': source.name,
         'meals': mealData['meals'],
         'lastUpdated': FieldValue.serverTimestamp(),
+        'cacheVersion': 2,
       });
     } catch (e) {
       debugPrint('FirebaseSyncService: 식단 저장 실패: $e');
@@ -120,7 +121,28 @@ class FirebaseSyncService {
 
       final doc = await _firestore.collection('daily_meals').doc(docId).get();
       if (doc.exists) {
-        return doc.data();
+        final data = doc.data()!;
+
+        // MealSource.b (학생회관): URL이 www.knue.ac.kr 로 변경됨 (v2)
+        // cacheVersion < 2 이거나, 이번 주 월요일 이전 캐시는 삭제 후 재스크래핑
+        if (source == MealSource.b) {
+          final cacheVersion = (data['cacheVersion'] as int?) ?? 1;
+          final lastUpdated = (data['lastUpdated'] as Timestamp?)?.toDate();
+          final now = DateTime.now();
+          final thisMonday = now.subtract(Duration(days: now.weekday - 1));
+          final mondayStart = DateTime(thisMonday.year, thisMonday.month, thisMonday.day);
+          final isStale = lastUpdated == null || lastUpdated.isBefore(mondayStart);
+
+          if (cacheVersion < 2 || isStale) {
+            print(
+              'FirebaseSyncService: 학생회관 캐시 무효 (v$cacheVersion, 저장=$lastUpdated) → 삭제 후 재스크래핑',
+            );
+            _firestore.collection('daily_meals').doc(docId).delete().catchError((_) {});
+            return null;
+          }
+        }
+
+        return data;
       }
     } catch (e) {
       debugPrint('FirebaseSyncService: 식단 가져오기 실패: $e');

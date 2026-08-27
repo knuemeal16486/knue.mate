@@ -9,6 +9,8 @@ import 'constants.dart';
 import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_card.dart';
+import 'favorite_service.dart';
+import 'ad_service.dart';
 import 'bus_timetable_data.dart';
 import 'ui_utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -548,6 +550,23 @@ class _BusAppScreenState extends State<BusAppScreen>
               ),
             ),
 
+          // 즐겨찾기 섹션 (최상단 고정)
+          ValueListenableBuilder<Set<String>>(
+            valueListenable: FavoriteService.favoritesNotifier,
+            builder: (_, favorites, __) {
+              final favBuses = _realtimeBusList.where((b) => favorites.contains(b.number)).toList();
+              if (favBuses.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionHeader("⭐ 즐겨찾기", isDark, subtitle: "빠른 접근"),
+                  ...favBuses.map((b) => BusCard(bus: b)),
+                  const SizedBox(height: 20),
+                ],
+              );
+            },
+          ),
+
           if (directBuses.isNotEmpty) ...[
             _buildSectionHeader("🎯 교원대 직행", isDark, subtitle: "정문까지 직통"),
             ...directBuses.map((b) => BusCard(bus: b)),
@@ -565,6 +584,12 @@ class _BusAppScreenState extends State<BusAppScreen>
           ],
 
           _buildArrivalInfoSection(isDark),
+
+          // 하단 배너 광고
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: AdBannerWidget(adUnitId: AdService.busBannerId),
+          ),
         ],
       ),
     );

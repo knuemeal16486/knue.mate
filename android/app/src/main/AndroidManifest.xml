@@ -34,6 +34,11 @@
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:allowBackup="true">
+
+        <!-- TODO: 실제 AdMob App ID로 교체할 것 (ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
         
         <receiver 
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shimmer/shimmer.dart';
 import 'constants.dart';
 import 'gemini_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,6 +10,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'tab_edit_screen.dart';
 import 'root_screen.dart';
+import 'ad_service.dart';
+import 'premium_service.dart';
+import 'premium_upgrade_sheet.dart';
 import 'ui_utils.dart';
 import 'club_event_admin_screen.dart';
 
@@ -444,12 +448,7 @@ class _TodayMealPageState extends State<TodayMealPage>
               ),
               const SizedBox(height: 16),
               if (_loading)
-                SizedBox(
-                  height: 300,
-                  child: Center(
-                    child: CircularProgressIndicator(color: primaryColor),
-                  ),
-                )
+                _MealShimmer()
               else if (_error != null)
                 _ErrorCard(message: _error!)
               else
@@ -472,7 +471,10 @@ class _TodayMealPageState extends State<TodayMealPage>
                     ),
                   ),
                 ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 8),
+              // 식단 화면 배너 광고
+              AdBannerWidget(adUnitId: AdService.mealBannerId),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -1348,6 +1350,15 @@ class _SettingsPageState extends State<SettingsPage> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
+                    // Pro 카드
+                    ValueListenableBuilder<bool>(
+                      valueListenable: isPremiumNotifier,
+                      builder: (context, isPro, _) => _PremiumStatusCard(
+                        isPro: isPro,
+                        onUpgrade: () => PremiumUpgradeSheet.show(context),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     _buildSectionTitle("맞춤 설정"),
                     _buildAppInfoItem(
                       context: context,
@@ -1768,6 +1779,21 @@ class _SettingsPageState extends State<SettingsPage> {
                       subtitle: "버그 제보 및 기능 제안",
                       iconColor: Colors.amber[700]!,
                       onTap: () => _showFeedbackDialog(context),
+                    ),
+
+                    const SizedBox(height: 12),
+                    _buildAppInfoItem(
+                      context: context,
+                      icon: Icons.favorite_rounded,
+                      title: "개발자 후원",
+                      subtitle: "Toss로 커피 한 잔 ☕ 응원해 주세요",
+                      iconColor: Colors.pinkAccent,
+                      onTap: () async {
+                        final uri = Uri.parse('https://toss.me/knuemeal');
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
                     ),
 
                     _buildAppInfoItem(
@@ -2479,6 +2505,30 @@ class _MealTabs extends StatelessWidget {
               })
               .toList(),
         ),
+      ),
+    );
+  }
+}
+
+class _MealShimmer extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.grey.shade800 : Colors.grey.shade300;
+    final highlightColor = isDark ? Colors.grey.shade700 : Colors.grey.shade100;
+
+    return Shimmer.fromColors(
+      baseColor: baseColor,
+      highlightColor: highlightColor,
+      child: Column(
+        children: List.generate(3, (i) => Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          height: i == 0 ? 140 : 80,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+        )),
       ),
     );
   }
@@ -3503,6 +3553,106 @@ class AppSwitchOption extends StatelessWidget {
             const Spacer(),
             if (isSelected)
               Icon(Icons.check_circle_rounded, color: activeColor),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 프리미엄 상태 카드 (설정 화면 최상단)
+// =============================================================================
+class _PremiumStatusCard extends StatelessWidget {
+  final bool isPro;
+  final VoidCallback onUpgrade;
+
+  const _PremiumStatusCard({required this.isPro, required this.onUpgrade});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isPro) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.amber.shade700, Colors.orange.shade400],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 28),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('KNUE Mate Pro',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+                  SizedBox(height: 2),
+                  Text('프리미엄 사용 중 · 광고 없음',
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
+          ],
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: onUpgrade,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.amber.shade700.withOpacity(0.15), Colors.orange.shade400.withOpacity(0.1)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.amber.shade300.withOpacity(0.5), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.amber.shade600, Colors.orange.shade400],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('KNUE Mate Pro',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  SizedBox(height: 2),
+                  Text('광고 없음 · 칼로리 기록 · 위젯 테마',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade600,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text('업그레이드',
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
           ],
         ),
       ),
