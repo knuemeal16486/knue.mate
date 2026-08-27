@@ -176,7 +176,7 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
 
   final url = source == MealSource.a
       ? 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1959&siteSe=one&searchStdde=$dateStr'
-      : 'https://pot.knue.ac.kr/enview/knue/mobileMenu.html#';
+      : 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1960&siteSe=cafe&searchStdde=$dateStr';
 
   try {
     // 1. 파이어베이스에서 먼저 확인 (타임아웃 단축 - 3초로 충분히 확인 가능)
@@ -206,9 +206,8 @@ Future<dynamic> fetchMealApi(DateTime date, MealSource source) async {
 
     if (response.statusCode == 200) {
       final html = utf8.decode(response.bodyBytes, allowMalformed: true);
-      final result = source == MealSource.a
-          ? _parseSadoHtml(html, date)
-          : _parseCafeHtml(html, date);
+      // 두 소스 모두 www.knue.ac.kr 의 동일한 HTML 구조 사용
+      final result = _parseSadoHtml(html, date);
 
       // 3. 크롤링 결과 저장 (사용자를 기다리게 하지 않음)
       final meals = result['meals'] as Map<String, dynamic>;
