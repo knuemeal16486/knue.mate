@@ -136,8 +136,10 @@ class FirebaseSyncService {
             );
             if (lastUpdated.isBefore(mondayStart)) {
               print(
-                'FirebaseSyncService: 학생회관 캐시 만료 (저장=$lastUpdated, 기준=$mondayStart) → 재스크래핑',
+                'FirebaseSyncService: 학생회관 캐시 만료 (저장=$lastUpdated, 기준=$mondayStart) → 삭제 후 재스크래핑',
               );
+              // 만료된 캐시를 Firestore에서 즉시 삭제 (비동기, 에러 무시)
+              _firestore.collection('daily_meals').doc(docId).delete().catchError((_) {});
               return null;
             }
           }
