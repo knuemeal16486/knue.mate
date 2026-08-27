@@ -44,7 +44,13 @@ class GeminiService {
   }
 
   // 메뉴 리스트로 칼로리 예상하기
-  static Future<String> estimateCalories(List<String> menuItems) async {
+  // [mealDocId] "YYYY-MM-DD_a" 형식의 daily_meals 문서 ID (있으면 결과를 해당 문서에도 저장)
+  // [mealTypeKey] "lunch" | "dinner" | "breakfast"
+  static Future<String> estimateCalories(
+    List<String> menuItems, {
+    String? mealDocId,
+    String? mealTypeKey,
+  }) async {
     if (menuItems.isEmpty) return "";
 
     final validItems = menuItems.where((item) {
@@ -73,6 +79,7 @@ class GeminiService {
         final calories = doc.data()?['calories'] as String?;
         if (calories != null && calories.isNotEmpty) {
           _cache[cacheKey] = calories;
+          _saveToDailyMeals(mealDocId, mealTypeKey, calories);
           return calories;
         }
       }
@@ -98,6 +105,9 @@ class GeminiService {
           'createdAt': FieldValue.serverTimestamp(),
         }).catchError((_) {});
 
+        // 5. daily_meals 문서에도 칼로리 저장 (달력 표시용)
+        _saveToDailyMeals(mealDocId, mealTypeKey, result);
+
         _cache[cacheKey] = result;
         return result;
       } catch (e) {
@@ -111,7 +121,16 @@ class GeminiService {
     // 완전히 실패 시 자체 계산
     final fallback = _generateFallbackCalories(validItems);
     _cache[cacheKey] = fallback;
+    _saveToDailyMeals(mealDocId, mealTypeKey, fallback);
     return fallback;
+  }
+
+  static void _saveToDailyMeals(String? mealDocId, String? mealTypeKey, String calorie) {
+    if (mealDocId == null || mealTypeKey == null) return;
+    _firestore.collection('daily_meals').doc(mealDocId).set(
+      {'calories': {mealTypeKey: calorie}},
+      SetOptions(merge: true),
+    ).catchError((_) {});
   }
 
   static String _buildPrompt(List<String> menuItems) {
