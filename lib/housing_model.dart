@@ -1,21 +1,156 @@
-import 'package:latlong2/latlong.dart';
+import 'package:flutter/material.dart';
 
-/// 자취방 매물 한 건. 학교 주변은 부동산보다 건물에 붙은 번호로 집주인과
-/// 직거래하는 경우가 많아 [landlordPhone]을 핵심 필드로 둔다.
-class HousingListing {
+/// 자취방 구역. 학생들이 "CU 뒤", "메이 근처"처럼 덩어리로 부르기 때문에
+/// 학생회 «교원대 원룸 지도»가 나눠 놓은 구역을 그대로 따른다.
+enum HousingZone {
+  gateBack('정문상가 뒷편', Color(0xFFEF5350)),
+  apartments('수정·서호아파트', Color(0xFF757575)),
+  mayToCu('메이–CU 사이', Color(0xFF039BE5)),
+  aroundCu('CU 편의점 주변', Color(0xFF43A047)),
+  gyowonVilla('교원빌라', Color(0xFFAB47BC)),
+  hqPath('대학본부 샛길', Color(0xFF5C6BC0)),
+  dreamVilla('드림빌라·만광', Color(0xFFFB8C00)),
+  dorm('기숙사', Color(0xFF00897B)),
+  backGate('후문', Color(0xFFEC407A)),
+  darak('다락탑연리', Color(0xFF26A69A));
+
+  final String label;
+  final Color color;
+  const HousingZone(this.label, this.color);
+}
+
+/// 원룸 이름 후보.
+///
+/// ⚠️ **좌표가 없다.** 건물 모양·위치는 VWorld 실측 데이터(BaseBuilding)에서
+/// 오고, 이 목록은 "그 건물이 어느 원룸인지" 이름을 붙일 때 쓰는 사전이다.
+///
+/// 처음에는 사진을 보고 좌표를 손으로 찍어 넣었는데, VWorld 실측과 대조해 보니
+/// 원룸촌 자체가 예상한 곳에서 500m 떨어져 있었다. 추측한 좌표로 지도를 그리면
+/// 학생이 엉뚱한 건물을 찾아가게 되므로, 좌표는 실측만 쓰고 이름은 사람이
+/// 붙이도록 바꿨다.
+class OneRoomName {
   final String id;
   final String name;
-  final LatLng position;
-  final int monthlyRent;
-  final String landlordPhone;
-  final String? memo;
 
-  const HousingListing({
+  /// 건축물 사용승인 연도. 출처: 충북 부동산정보조회 시스템.
+  final int? builtYear;
+
+  final HousingZone zone;
+
+  /// 사진 지도의 괄호 설명(1층 상가 등).
+  final String? note;
+
+  const OneRoomName({
     required this.id,
     required this.name,
-    required this.position,
-    required this.monthlyRent,
-    required this.landlordPhone,
-    this.memo,
+    required this.zone,
+    this.builtYear,
+    this.note,
   });
 }
+
+OneRoomName _n(
+  String id,
+  String name,
+  HousingZone zone, [
+  int? year,
+  String? note,
+]) =>
+    OneRoomName(id: id, name: name, zone: zone, builtYear: year, note: note);
+
+/// 학생회 «교원대 원룸 지도»(2020.05 수정본)에 실린 원룸 목록.
+final List<OneRoomName> kOneRoomNames = [
+  // 정문상가 뒷편
+  _n('daehyeon-a', '대현빌라 A동', HousingZone.gateBack, 2002),
+  _n('daehyeon-b', '대현빌라 B동', HousingZone.gateBack, 2002),
+  _n('samsung-free', '삼성프리하우스', HousingZone.gateBack, 2008, '대현 C동'),
+  _n('dungji', '둥지빌', HousingZone.gateBack, 2010),
+
+  // 수정·서호아파트
+  _n('sujeong-101ga', '수정아파트 101-가동', HousingZone.apartments, 1997),
+  _n('sujeong-101na', '수정아파트 101-나동', HousingZone.apartments, 1997),
+  _n('sujeong-102', '수정아파트 102동', HousingZone.apartments, 1997),
+  _n('seoho-101', '서호아파트 101동', HousingZone.apartments, 2001),
+  _n('seoho-102', '서호아파트 102동', HousingZone.apartments, 2001),
+
+  // 메이–CU 편의점 사이
+  _n('miraero', '미래로빌', HousingZone.mayToCu, 2018),
+  _n('haeoreum', '해오름빌', HousingZone.mayToCu, 2017),
+  _n('geulmaru', '글마루빌', HousingZone.mayToCu, 2017),
+  _n('chaeum', '채움빌', HousingZone.mayToCu, 2017),
+  _n('kkumteo', '꿈터빌', HousingZone.mayToCu, 2017),
+  _n('yeonheung', '연흥빌', HousingZone.mayToCu, 2016),
+  _n('daewon', '대원빌', HousingZone.mayToCu, 2018),
+  _n('misoga', '미소가', HousingZone.mayToCu, 2017),
+  _n('somang', '소망빌', HousingZone.mayToCu, 2018),
+  _n('maple', '메이플빌', HousingZone.mayToCu, 2013),
+
+  // CU 편의점 주변
+  _n('dasom', '다솜빌', HousingZone.aroundCu, 2013),
+  _n('white', '화이트빌', HousingZone.aroundCu, 2012),
+  _n('saeteo', '새터빌', HousingZone.aroundCu, 2011),
+  _n('pine', '파인빌', HousingZone.aroundCu, 2012),
+  _n('daeseong', '대성빌', HousingZone.aroundCu, 2011),
+  _n('eco', '에코빌', HousingZone.aroundCu, 2015),
+  _n('thebase', '더베이스', HousingZone.aroundCu, 2015),
+  _n('seungbang', '승방빌', HousingZone.aroundCu, 2011),
+  _n('edu', '에듀빌', HousingZone.aroundCu, 2011),
+  _n('haneulchae', '하늘채', HousingZone.aroundCu, 2015),
+  _n('prime', '프라임빌', HousingZone.aroundCu, 2017),
+  _n('eoullim', '어울림빌', HousingZone.aroundCu, 2011),
+  _n('hanmaeum', '한마음빌', HousingZone.aroundCu, 2011),
+  _n('elite', '엘리트빌', HousingZone.aroundCu, 2015),
+  _n('winners', '위너스빌', HousingZone.aroundCu, 2017),
+  _n('aureum', '아우름빌', HousingZone.aroundCu, 2017),
+  _n('deungyongmun', '등용문', HousingZone.aroundCu, 2015),
+  _n('greencastle', '그린캐슬', HousingZone.aroundCu, 2015),
+
+  // 교원빌라
+  _n('gyowon-a', '교원빌라 A동', HousingZone.gyowonVilla, 2005),
+  _n('gyowon-101', '교원빌라 101동', HousingZone.gyowonVilla, 1998),
+  _n('gyowon-102', '교원빌라 102동', HousingZone.gyowonVilla, 1998),
+  _n('gyowon-103', '교원빌라 103동', HousingZone.gyowonVilla, 1998),
+  _n('gyowon-105', '교원빌라 105동', HousingZone.gyowonVilla, 1998),
+  _n('gyowon-106', '교원빌라 106동', HousingZone.gyowonVilla, 1998),
+  _n('gyowon-107', '교원빌라 107동', HousingZone.gyowonVilla, 1997),
+  _n('gyowon-108', '교원빌라 108동', HousingZone.gyowonVilla, 1999),
+  _n('gyowon-109', '교원빌라 109동', HousingZone.gyowonVilla, 1998),
+  _n('gyowon-110', '교원빌라 110동', HousingZone.gyowonVilla, 1998),
+  _n('gyowon-111', '교원빌라 111동', HousingZone.gyowonVilla, 1999),
+  _n('gyowon-112', '교원빌라 112동', HousingZone.gyowonVilla, 1999),
+  _n('gyowon-113', '교원빌라 113동', HousingZone.gyowonVilla, 2012),
+  _n('bogwang', '보광빌', HousingZone.gyowonVilla, 2013),
+  _n('yeonsong', '연송빌', HousingZone.gyowonVilla, 2014),
+  _n('gukbo', '국보빌', HousingZone.gyowonVilla, 2014),
+  _n('bauhaus-a', '바우하우스 A동', HousingZone.gyowonVilla, 2020),
+  _n('bauhaus-b', '바우하우스 B동', HousingZone.gyowonVilla, 2020),
+
+  // 대학본부 샛길 주변
+  _n('bugwang', '부광빌', HousingZone.hqPath, 2013),
+  _n('chorok', '초록빌', HousingZone.hqPath, 2013),
+  _n('jayeon', '자연빌', HousingZone.hqPath, 2013),
+  _n('wonder', '원더빌', HousingZone.hqPath, 2013, '1층 카페 MAY'),
+  _n('gaon', '가온빌', HousingZone.hqPath, 2013, '1층 카페 늘품'),
+  _n('haengun', '행운빌', HousingZone.hqPath, 2016),
+  _n('cheongram-a', '청람드림빌 A동', HousingZone.hqPath, 2010),
+  _n('cheongram-b', '청람드림빌 B동', HousingZone.hqPath, 2010),
+  _n('cheongram-c', '청람드림빌 C동', HousingZone.hqPath, 2010),
+  _n('cheongram-d', '청람드림빌 D동', HousingZone.hqPath, 2010),
+
+  // 드림빌라·만광 방향
+  _n('dream-a', '드림빌라 A동', HousingZone.dreamVilla, 2001),
+  _n('dream-b', '드림빌라 B동', HousingZone.dreamVilla, 2001),
+  _n('dream-c', '드림빌라 C동', HousingZone.dreamVilla, 2002),
+  _n('dream-d', '드림빌라 D동', HousingZone.dreamVilla, 2004),
+  _n('dream-e', '드림빌라 E동', HousingZone.dreamVilla, 2004),
+  _n('gyowon-haksa', '교원학사', HousingZone.dreamVilla, 2010),
+  _n('seonggyungwan', '성균관빌', HousingZone.dreamVilla, 2010),
+  _n('green-a', '그린빌라 A동', HousingZone.dreamVilla, 2011),
+  _n('green-b', '그린빌라 B동', HousingZone.dreamVilla),
+  _n('wonang', '원앙빌라', HousingZone.dreamVilla, 2001),
+];
+
+/// 이름으로 빠르게 찾기 위한 색인.
+final Map<String, OneRoomName> kOneRoomNameById = {
+  for (final n in kOneRoomNames) n.id: n,
+};

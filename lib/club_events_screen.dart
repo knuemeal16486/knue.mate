@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -5,11 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'club_event_admin_screen.dart';
 import 'club_event_model.dart';
 import 'club_event_service.dart';
 import 'constants.dart';
+import 'ui_utils.dart';
 
-/// 동아리 공연·행사 학생용 전체 목록 화면.
+/// 학과 행사 및 동아리 공연 전체 목록 화면.
 /// 녹출(isFeatured) 항목을 상단에 강조하고, 나머지는 시작일 오름차순으로 보여준다.
 class ClubEventsScreen extends StatefulWidget {
   const ClubEventsScreen({super.key});
@@ -81,13 +84,11 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
     }
   }
 
-  List<ClubEvent> get _featuredEvents =>
-      _events.where((e) => e.isFeatured).toList()
-        ..sort((a, b) => a.startDate.compareTo(b.startDate));
-
-  List<ClubEvent> get _regularEvents =>
-      _events.where((e) => !e.isFeatured).toList()
-        ..sort((a, b) => a.startDate.compareTo(b.startDate));
+  /// 진행중인 행사가 맨 위, 아래로 갈수록 시작이 먼 순.
+  /// 끝난 행사는 ClubEventService.fetchAll이 이미 걸러낸다.
+  List<ClubEvent> _sortedEvents(DateTime now) =>
+      List<ClubEvent>.of(_events)
+        ..sort((a, b) => ClubEvent.compareForList(a, b, now));
 
   Future<void> _openExternalLink(String link) async {
     final uri = Uri.tryParse(link);
@@ -108,14 +109,45 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
         return Scaffold(
           appBar: AppBar(
             centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
-            title: const Text("동아리 공연·행사"),
-            backgroundColor: color,
+            title: const Text("공연·행사"),
+            backgroundColor: Colors.transparent,
+            flexibleSpace: AppleAppBarFlexibleSpace(
+              themeColor: color,
+              isDark: isDark,
+            ),
             iconTheme: const IconThemeData(color: Colors.white),
             actions: [
               IconButton(
                 onPressed: () => _load(force: true),
                 icon: const Icon(Icons.refresh),
                 tooltip: "새로고침",
+              ),
+              // 등록 화면(ClubEventAdminScreen)이 개발자 코드를 직접 묻는다.
+              // 메뉴 자체는 숨기지 않는다 — 막는 것은 코드이지 메뉴가 아니고,
+              // 숨겨두면 정작 등록할 사람이 들어갈 길을 못 찾는다.
+              PopupMenuButton<String>(
+                tooltip: "행사 관리",
+                onSelected: (_) async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ClubEventAdminScreen(),
+                    ),
+                  );
+                  if (mounted) _load(force: true);
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'admin',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_calendar_outlined, size: 18),
+                        SizedBox(width: 10),
+                        Text("행사 등록·수정"),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -143,14 +175,17 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
             Center(
               child: Column(
                 children: [
-                  Icon(Icons.error_outline,
-                      size: 40,
-                      color: isDark ? Colors.white38 : Colors.black38),
+                  Icon(
+                    Icons.error_outline,
+                    size: 40,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
                   const SizedBox(height: 12),
                   Text(
                     "불러오기 실패",
                     style: TextStyle(
-                        color: isDark ? Colors.white54 : Colors.black54),
+                      color: isDark ? Colors.white54 : Colors.black54,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   TextButton(
@@ -176,144 +211,332 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
       );
     }
 
-    final featured = _featuredEvents;
-    final regular = _regularEvents;
+    final now = DateTime.now();
+    final sorted = _sortedEvents(now);
+    final ongoing = sorted.where((e) => e.isOngoing(now)).toList();
+    final upcoming = sorted.where((e) => !e.isOngoing(now)).toList();
 
+    // 예전에는 위쪽이 4초마다 저절로 넘어가는 가로 캐러셀이었다. 읽는 중에
+    // 카드가 바뀌고, 몇 개가 있는지도 알 수 없었다. 전부 세로로 쌓는다.
     return RefreshIndicator(
       onRefresh: () => _load(force: true),
       child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.only(bottom: 24, top: 8),
         children: [
-          if (featured.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text(
-                "녹출",
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ),
-            ...featured.map((e) => _buildCard(e, color, isDark, featured: true)),
-            const SizedBox(height: 8),
+          if (ongoing.isNotEmpty) ...[
+            _buildSectionTitle("지금 열리는 중", isDark),
+            ...ongoing.map((e) => _buildHighlightCard(e, color, isDark, now)),
           ],
-          ...regular.map((e) => _buildCard(e, color, isDark, featured: false)),
+          if (upcoming.isNotEmpty) ...[
+            _buildSectionTitle(ongoing.isEmpty ? "다가오는 행사" : "이후 예정", isDark),
+            ...upcoming.map((e) => _buildModernCard(e, color, isDark, now)),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildCard(ClubEvent event, Color color, bool isDark,
-      {required bool featured}) {
-    final dateFmt = DateFormat('M월 d일 HH:mm', 'ko_KR');
+  Widget _buildSectionTitle(String text, bool isDark) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+    child: Text(
+      text,
+      style: TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.bold,
+        color: isDark ? Colors.white : Colors.black87,
+      ),
+    ),
+  );
+
+  /// 종류 딱지. 학교 행사·동아리 공연·버스킹·학과 행사를 한눈에 가른다.
+  Widget _categoryBadge(
+    ClubEventCategory c,
+    bool isDark, {
+    bool onImage = false,
+  }) {
+    final ink = KnueTokens.inkAt(c.inkIndex, isDark);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: onImage
+            ? Colors.black.withValues(alpha: 0.45)
+            : ink.withValues(alpha: isDark ? 0.24 : 0.12),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        c.label,
+        style: TextStyle(
+          color: onImage ? Colors.white : ink,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  /// 카드에 쓸 짧은 날짜. 기간 행사는 "9월 20일 (토) ~ 9월 22일".
+  String _whenText(ClubEvent e) {
+    final full = DateFormat('M월 d일 (E)', 'ko_KR');
+    final end = e.endDate;
+    if (end != null && !DateUtils.isSameDay(e.startDate, end)) {
+      return "${full.format(e.startDate)} ~ "
+          "${DateFormat('M월 d일', 'ko_KR').format(end)}";
+    }
+    final hhmm = DateFormat('HH:mm').format(e.startDate);
+    // 시각 없이 등록하면 00:00이 되는데, 그대로 보이면 새벽 행사처럼 읽힌다.
+    return hhmm == '00:00'
+        ? full.format(e.startDate)
+        : "${full.format(e.startDate)} $hhmm";
+  }
+
+  String _ddayText(ClubEvent e, DateTime now) {
+    if (e.isOngoing(now)) return '진행중';
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(
+      e.startDate.year,
+      e.startDate.month,
+      e.startDate.day,
+    );
+    final days = start.difference(today).inDays;
+    if (days <= 0) return '오늘';
+    if (days == 1) return '내일';
+    return "D-$days";
+  }
+
+  /// 진행중인 행사 카드. 포스터를 배경으로 깔고 종류 딱지와 제목,
+  /// 날짜·장소만 얹는다. 세로로 쌓이므로 스크롤로 전부 훑을 수 있다.
+  Widget _buildHighlightCard(
+    ClubEvent event,
+    Color color,
+    bool isDark,
+    DateTime now,
+  ) {
     return GestureDetector(
       onTap: () => _showDetail(event, color, isDark),
       child: Container(
+        height: 190,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: featured
-                ? color
-                : (isDark ? Colors.white12 : const Color(0xFFE5E7EB)),
-            width: featured ? 1.5 : 1,
-          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: isDark ? 0.18 : 0.22),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildPosterThumb(event.posterUrl, color, isDark),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      if (featured) ...[
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (event.posterUrl != null && event.posterUrl!.isNotEmpty)
+                Image.network(
+                  event.posterUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stack) =>
+                      _buildPosterFallback(color),
+                )
+              else
+                _buildPosterFallback(color),
+              // 글씨가 포스터 위에서 묻히지 않도록 아래쪽만 어둡게.
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black12,
+                      Colors.black87,
+                    ],
+                    stops: [0.3, 0.6, 1.0],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _categoryBadge(event.category, isDark, onImage: true),
+                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: color,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(7),
                           ),
-                          child: const Text(
-                            "녹출",
-                            style: TextStyle(
+                          child: Text(
+                            _ddayText(event, now),
+                            style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 10,
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
                       ],
-                      Expanded(
-                        child: Text(
-                          event.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            height: 1.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    event.clubName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? Colors.white54 : Colors.black54,
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.schedule,
-                          size: 13,
-                          color: isDark ? Colors.white38 : Colors.black38),
-                      const SizedBox(width: 4),
-                      Text(
-                        dateFmt.format(event.startDate),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white54 : Colors.black54,
-                        ),
+                    const SizedBox(height: 8),
+                    Text(
+                      event.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(Icons.place_outlined,
-                          size: 13,
-                          color: isDark ? Colors.white38 : Colors.black38),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          event.location,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_today,
+                          size: 12,
+                          color: Colors.white70,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _whenText(event),
+                          style: const TextStyle(
+                            color: Colors.white70,
                             fontSize: 12,
-                            color: isDark ? Colors.white54 : Colors.black54,
                           ),
                         ),
+                        if (event.location.isNotEmpty) ...[
+                          const SizedBox(width: 12),
+                          const Icon(
+                            Icons.place,
+                            size: 12,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              event.location,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPosterFallback(Color color) => Container(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [color.withValues(alpha: 0.7), color.withValues(alpha: 0.3)],
+      ),
+    ),
+    child: Center(
+      child: Icon(
+        Icons.festival_rounded,
+        size: 64,
+        color: Colors.white.withValues(alpha: 0.4),
+      ),
+    ),
+  );
+
+  Widget _buildModernCard(
+    ClubEvent event,
+    Color color,
+    bool isDark,
+    DateTime now,
+  ) {
+    return GestureDetector(
+      onTap: () => _showDetail(event, color, isDark),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
+            width: 1,
+          ),
+          boxShadow: [
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+          ],
+        ),
+        child: Row(
+          children: [
+            _buildPosterThumb(event.posterUrl, color, isDark),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _categoryBadge(event.category, isDark),
+                        const Spacer(),
+                        Text(
+                          _ddayText(event, now),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      event.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _cardMetaRow(Icons.schedule, _whenText(event), isDark),
+                    if (event.location.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      _cardMetaRow(
+                        Icons.place_outlined,
+                        event.location,
+                        isDark,
                       ),
                     ],
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -322,37 +545,54 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
     );
   }
 
-  Widget _buildPosterThumb(String? posterUrl, Color color, bool isDark) {
-    const size = 56.0;
-    if (posterUrl == null || posterUrl.isEmpty) {
-      return _posterPlaceholder(color, isDark, size);
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Image.network(
-        posterUrl,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            _posterPlaceholder(color, isDark, size),
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return _posterPlaceholder(color, isDark, size);
-        },
-      ),
+  /// 카드 아래쪽 한 줄(날짜·장소). 아이콘과 글씨 크기를 한 곳에서 맞춘다.
+  Widget _cardMetaRow(IconData icon, String text, bool isDark) {
+    final sub = isDark ? Colors.white54 : Colors.black54;
+    return Row(
+      children: [
+        Icon(icon, size: 12, color: sub),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, color: sub),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _posterPlaceholder(Color color, bool isDark, double size) {
-    return Container(
+  Widget _buildPosterThumb(String? posterUrl, Color color, bool isDark) {
+    const size = 96.0;
+    Widget placeholder = Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: isDark ? 0.15 : 0.1),
-        borderRadius: BorderRadius.circular(10),
+      color: color.withValues(alpha: isDark ? 0.2 : 0.1),
+      child: Icon(
+        Icons.festival_rounded,
+        color: color.withValues(alpha: 0.5),
+        size: 28,
       ),
-      child: Icon(Icons.theater_comedy_outlined, color: color, size: 26),
+    );
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(16),
+        bottomLeft: Radius.circular(16),
+      ),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: posterUrl != null && posterUrl.isNotEmpty
+            ? Image.network(
+                posterUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => placeholder,
+              )
+            : placeholder,
+      ),
     );
   }
 
@@ -363,133 +603,195 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(sheetContext).size.height * 0.9,
           ),
-          child: Container(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(sheetContext).size.height * 0.85,
-            ),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Edge-to-edge Header
+              Stack(
                 children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.grey[700] : Colors.grey[300],
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
                   if (event.posterUrl != null && event.posterUrl!.isNotEmpty)
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
                       child: Image.network(
                         event.posterUrl!,
                         width: double.infinity,
-                        height: 180,
+                        height: 260,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) =>
-                            const SizedBox.shrink(),
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const SizedBox(
-                            height: 180,
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        },
+                            _buildDetailPlaceholder(color),
                       ),
+                    )
+                  else
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
+                      child: _buildDetailPlaceholder(color),
                     ),
-                  if (event.posterUrl != null && event.posterUrl!.isNotEmpty)
-                    const SizedBox(height: 16),
-                  if (event.isFeatured)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: BorderRadius.circular(8),
+                  // Close button
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black45,
+                        shape: const CircleBorder(),
                       ),
-                      child: const Text(
-                        "녹출",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  Text(
-                    event.title,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    event.clubName,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? Colors.white54 : Colors.black54,
+                      onPressed: () => Navigator.pop(sheetContext),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  _detailRow(
-                    Icons.schedule,
-                    event.endDate != null
-                        ? "${dateFmt.format(event.startDate)} ~ ${dateFmt.format(event.endDate!)}"
-                        : dateFmt.format(event.startDate),
-                    isDark,
-                  ),
-                  const SizedBox(height: 6),
-                  _detailRow(Icons.place_outlined, event.location, isDark),
-                  const SizedBox(height: 16),
-                  Text(
-                    event.description.isEmpty
-                        ? "상세 설명이 없습니다."
-                        : event.description,
-                    style: TextStyle(
-                      fontSize: 14,
-                      height: 1.5,
-                      color: isDark ? Colors.white70 : Colors.black87,
-                    ),
-                  ),
-                  if (event.externalLink != null &&
-                      event.externalLink!.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () =>
-                            _openExternalLink(event.externalLink!),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: color,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: const Text("신청/문의"),
-                      ),
-                    ),
-                  ],
-                  SizedBox(height: MediaQuery.of(sheetContext).padding.bottom + 8),
                 ],
               ),
-            ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 28,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (event.isFeatured)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            "🔥 오늘의 추천",
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      Text(
+                        event.title,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _categoryBadge(event.category, isDark),
+                          if (event.clubName.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                event.clubName,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: color,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+                      _detailRow(
+                        Icons.schedule,
+                        event.endDate != null
+                            ? "${dateFmt.format(event.startDate)} ~ ${dateFmt.format(event.endDate!)}"
+                            : dateFmt.format(event.startDate),
+                        isDark,
+                      ),
+                      const SizedBox(height: 12),
+                      _detailRow(Icons.place_outlined, event.location, isDark),
+                      const SizedBox(height: 28),
+                      const Divider(),
+                      const SizedBox(height: 20),
+                      Text(
+                        event.description.isEmpty
+                            ? "상세 설명이 없습니다."
+                            : event.description,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.6,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                      if (event.externalLink != null &&
+                          event.externalLink!.isNotEmpty) ...[
+                        const SizedBox(height: 36),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () =>
+                                _openExternalLink(event.externalLink!),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: color,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: const Text(
+                              "신청 및 문의하기",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      SizedBox(
+                        height: MediaQuery.of(sheetContext).padding.bottom + 24,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildDetailPlaceholder(Color color) {
+    return Container(
+      height: 260,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [color.withValues(alpha: 0.8), color.withValues(alpha: 0.4)],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.festival_rounded,
+          size: 80,
+          color: Colors.white.withValues(alpha: 0.5),
+        ),
+      ),
     );
   }
 
@@ -497,14 +799,15 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: isDark ? Colors.white54 : Colors.black54),
-        const SizedBox(width: 6),
+        Icon(icon, size: 18, color: isDark ? Colors.white54 : Colors.black54),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               color: isDark ? Colors.white70 : Colors.black87,
+              height: 1.3,
             ),
           ),
         ),

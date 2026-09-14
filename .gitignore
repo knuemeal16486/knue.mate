@@ -49,3 +49,14 @@ app.*.map.json
 # Firebase CLI
 firebase.exe
 .superpowers/
+
+# 지도 추출 도구가 만드는 중간 산출물 (원본 캡처 3장은 커밋한다)
+tool/mapsrc/*_ov.png
+tool/mapsrc/ov_*.png
+tool/mapsrc/debug.png
+tool/mapsrc/z_*.png
+tool/mapsrc/dbg_*.png
+tool/mapsrc/iso_*.png
+tool/mapsrc/crop*.png
+tool/mapsrc/traced_raw.json
+tool/mapsrc/outline.json

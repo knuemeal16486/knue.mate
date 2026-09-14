@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cp949_codec/cp949_codec.dart';
 import 'package:flutter/foundation.dart';
 import 'notice_model.dart';
+import 'offline_cache.dart';
 
 class KnueScraper {
   // 모든 게시판 그룹 (기존과 동일)
@@ -165,7 +166,13 @@ class KnueScraper {
     if (!forceRefresh) {
       final cached = await NoticeCache.load();
       if (cached != null && cached.isNotEmpty) {
-        _fetchAndUpdateCache(onlyCategories: onlyCategories); // await 없이 갱신
+        // throttle이 없으면 revision→재로드→갱신이 끝없이 돌며 즐겨찾기
+        // 게시판 전체를 계속 스크래핑한다.
+        final key = 'notices_${(onlyCategories?.toList()?..sort())?.join(",") ?? "all"}';
+        RefreshThrottle.deferred(
+          key,
+          () => _fetchAndUpdateCache(onlyCategories: onlyCategories),
+        );
         return cached;
       }
     }
@@ -318,8 +325,14 @@ class KnueScraper {
     final String category = params['category'];
     final String url = params['url'];
 
-    final notices = <Notice>[];
     final doc = parser.parse(html);
+    // 신문방송사는 게시판이 아니라 기사 목록이라 표가 없다. 구조가 아예 달라
+    // 전용 경로로 보낸다.
+    if (url.contains('news.knue.ac.kr')) {
+      return _parseNewsList(doc, group, category, url);
+    }
+
+    final notices = <Notice>[];
     final rows = doc.querySelectorAll('tbody tr');
 
     for (var row in rows) {
@@ -338,12 +351,25 @@ class KnueScraper {
         String? date;
         String author = '학교';
 
+        // 제목 칸은 건너뛴다. 제목에 날짜가 들어간 공지가 있어서
+        // ("제42권 제6호(2026.11.30.발간예정)") 앞에서부터 찾으면 그 날짜를
+        // 게시일로 읽고, 미래 날짜라 목록 맨 위에 박힌다. 등록일은 보통
+        // 마지막 날짜 칸이다.
         for (var td in tds) {
-          date = _normalizeDate(td.text.trim());
-          if (date != null) break;
+          if (td.querySelector('a') != null) continue;
+          final d = _normalizeDate(td.text.trim());
+          if (d != null) date = d;
         }
 
-        // 정규식으로 못 찾았을 때만 컬럼 위치로 추정 — 이 추정치도 실제 날짜
+        // 날짜 칸을 하나도 못 찾았을 때만 제목 칸까지 포함해 훑는다.
+        if (date == null) {
+          for (var td in tds) {
+            date = _normalizeDate(td.text.trim());
+            if (date != null) break;
+          }
+        }
+
+        // 그래도 없으면 컬럼 위치로 추정 — 이 추정치도 실제 날짜
         // 형태일 때만 채택한다(조회수/작성자 등 엉뚱한 값이 날짜로 둔갑하는 것 방지).
         if (date == null && tds.length > 2) {
           date = tds.length > 4
@@ -355,7 +381,9 @@ class KnueScraper {
         if (tds.length > 2) {
           String tempAuthor = tds[2].text.trim();
           if (tempAuthor != dateStr && !RegExp(r'\d{4}').hasMatch(tempAuthor)) {
-            author = tempAuthor;
+            // 3번째 칸은 작성자가 아니라 첨부파일 칸인 게시판이 많다.
+            // 거르지 않으면 "여러개의 파일 첨부"가 작성자로 들어간다.
+            if (!tempAuthor.contains('첨부')) author = tempAuthor;
           }
         }
 
@@ -379,6 +407,60 @@ class KnueScraper {
       }
     }
     return notices;
+  }
+
+  /// 신문방송사 기사 목록. 표가 아니라 `#section-list li` 구조이고,
+  /// 날짜가 "09.07 09:22"처럼 연도 없이 나온다.
+  static List<Notice> _parseNewsList(
+    dynamic doc,
+    String group,
+    String category,
+    String url,
+  ) {
+    final notices = <Notice>[];
+    final today = DateTime.now();
+    for (final li in doc.querySelectorAll('#section-list li')) {
+      final a = li.querySelector('a');
+      if (a == null) continue;
+      final titleEl = li.querySelector('.titles') ?? a;
+      final title = titleEl.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+      if (title.isEmpty) continue;
+
+      final link = _resolveLinkStatic(url, a.attributes['href'] ?? '');
+      final author = li.querySelector('.info.name')?.text.trim() ?? '';
+      final dateStr =
+          _newsDate(li.querySelector('.info.dated')?.text.trim() ?? '', today);
+
+      notices.add(
+        Notice(
+          id: Object.hash(group, category, title, link),
+          category: category,
+          group: group,
+          title: title,
+          date: dateStr,
+          author: author.isEmpty ? '한국교원대신문' : author,
+          link: link,
+          isNew: dateStr == DateFormat('yyyy-MM-dd').format(today),
+        ),
+      );
+    }
+    return notices;
+  }
+
+  /// 기사 날짜. 연도가 없으면 올해로 보되, 그 결과가 미래면 작년 기사로 본다
+  /// (연초에 작년 12월 기사를 올해 12월로 읽어 목록 맨 위에 박히는 것을 막는다).
+  static String _newsDate(String raw, DateTime today) {
+    final full = _normalizeDate(raw);
+    if (full != null) return full;
+    final m = RegExp(r'(\d{1,2})[.-](\d{1,2})').firstMatch(raw);
+    if (m == null) return '';
+    final month = int.parse(m.group(1)!), day = int.parse(m.group(2)!);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return '';
+    var d = DateTime(today.year, month, day);
+    if (d.isAfter(today.add(const Duration(days: 1)))) {
+      d = DateTime(today.year - 1, month, day);
+    }
+    return DateFormat('yyyy-MM-dd').format(d);
   }
 
   /// 게시판마다 다른 날짜 표기(2/4자리 연도, '-'/'.' 구분자)를 "yyyy-MM-dd"로
@@ -409,13 +491,38 @@ class KnueScraper {
   // Isolate에서는 정적 메서드만 사용하므로 기존 인스턴스 메서드들은 삭제되었습니다.
 
   // 달력 행사 스크래핑
-  Future<List<CalendarEvent>> fetchCalendarEvents(int year, int month) async {
+  /// 학사일정. 공지·동아리와 같은 "캐시 먼저, 갱신은 뒤에서" 방식이다.
+  /// 한 달치 일정은 자주 바뀌지 않는데 매번 스크래핑을 기다리느라 홈 카드가
+  /// 800ms 가까이 비어 있었다.
+  Future<List<CalendarEvent>> fetchCalendarEvents(
+    int year,
+    int month, {
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = await CalendarCache.load(year, month);
+      if (cached != null) {
+        // throttle이 없으면 갱신→재로드→갱신으로 계속 스크래핑한다.
+        RefreshThrottle.deferred(
+          "calendar_${year}_$month",
+          () => _fetchCalendarAndCache(year, month),
+        );
+        return cached;
+      }
+    }
+    return _fetchCalendarAndCache(year, month);
+  }
+
+  Future<List<CalendarEvent>> _fetchCalendarAndCache(
+      int year, int month) async {
     final baseUrl = 'https://www.knue.ac.kr/www/selectSchdleWebList.do';
     final monthStr = month.toString().padLeft(2, '0');
     final url = Uri.parse('$baseUrl?key=542&searchY=$year&searchM=$monthStr');
 
     try {
-      final response = await http.get(url);
+      // 타임아웃이 없어서, 응답이 안 오면 카드가 영원히 로딩 상태였다.
+      final response =
+          await http.get(url).timeout(const Duration(seconds: 8));
       if (response.statusCode != 200) return [];
 
       final document = parser.parse(response.body);
@@ -466,31 +573,114 @@ class KnueScraper {
           );
         }
       }
+      await CalendarCache.save(year, month, events);
       return events;
     } catch (e) {
       debugPrint('Calendar Fetch Error: $e');
-      return [];
+      // 네트워크가 실패해도 저장해둔 값이 있으면 그걸 쓴다.
+      return await CalendarCache.load(year, month) ?? [];
     }
+  }
+}
+
+/// 학사일정 캐시. 월 단위로 저장한다.
+class CalendarCache {
+  /// 백그라운드 갱신이 끝나면 값이 바뀐다. 화면은 이걸 구독해 다시 그린다.
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  static String _key(int year, int month) => 'calendarCache_${year}_$month';
+
+  static Future<List<CalendarEvent>?> load(int year, int month) async {
+    // 학사일정은 학기 중 드물게 바뀐다. 오래된 값이라도 빈 카드보다 낫고,
+    // 어차피 백그라운드로 갱신된다.
+    final raw = await JsonCache.load(_key(year, month),
+        maxAge: const Duration(days: 3));
+    if (raw is! List) return null;
+    try {
+      return raw
+          .map((e) => CalendarEvent(
+                startDate: DateTime.parse(e['start'] as String),
+                endDate: DateTime.parse(e['end'] as String),
+                title: e['title'] as String,
+              ))
+          .toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> save(
+      int year, int month, List<CalendarEvent> events) async {
+    final changed = await JsonCache.save(
+      _key(year, month),
+      events
+          .map((e) => {
+                'start': e.startDate.toIso8601String(),
+                'end': e.endDate.toIso8601String(),
+                'title': e.title,
+              })
+          .toList(),
+    );
+    // 내용이 같으면 revision을 올리지 않는다 — 올리면 화면이 다시 로드하고,
+    // 그게 또 갱신을 불러 무한 루프가 된다.
+    if (changed) revision.value++;
   }
 }
 
 /// 공지 캐시 — bus의 OfflineCache와 동일 패턴 (SharedPreferences + JSON)
 class NoticeCache {
   static const _key = 'noticeCache';
-  static const _maxItems = 500;
+  static const _maxItems = 1000;
+
+  /// 게시판마다 최소한 이만큼은 남긴다.
+  static const _minPerBoard = 20;
 
   /// save()될 때마다 값이 바뀐다. fetchAllNotices()는 캐시를 먼저 반환하고
   /// 백그라운드로 갱신하는데(await 없이), 이 리스너가 있어야 화면이 갱신 완료를
   /// 알아채고 최신 데이터로 다시 그릴 수 있다.
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
+  /// 상한에 맞춰 잘라내되, 게시판마다 [_minPerBoard]건은 남긴다.
+  ///
+  /// 날짜순으로만 자르면 글이 뜸한 게시판이 통째로 사라진다. 실제로 교환학생·
+  /// 체육교육과·윤리교육과 등 6개 게시판은 크롤링이 멀쩡히 되는데도 앱에서는
+  /// 0건이었고, 화면은 그걸 "불러오지 못했습니다"로 표시했다.
+  static List<Notice> _trim(List<Notice> notices) {
+    if (notices.length <= _maxItems) return notices;
+    final sorted = List<Notice>.of(notices)
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    final perBoard = <String, int>{};
+    final kept = <Notice>[];
+    final rest = <Notice>[];
+    for (final n in sorted) {
+      final seen = perBoard[n.category] ?? 0;
+      if (seen < _minPerBoard) {
+        perBoard[n.category] = seen + 1;
+        kept.add(n);
+      } else {
+        rest.add(n);
+      }
+    }
+    // 게시판 몫을 채우고 남은 자리는 최신 순으로 메운다.
+    for (final n in rest) {
+      if (kept.length >= _maxItems) break;
+      kept.add(n);
+    }
+    kept.sort((a, b) => b.date.compareTo(a.date));
+    return kept;
+  }
+
   static Future<void> save(List<Notice> notices) async {
     final prefs = await SharedPreferences.getInstance();
-    final trimmed = notices.take(_maxItems).toList();
-    await prefs.setString(
-        _key, jsonEncode(trimmed.map((e) => e.toJson()).toList()));
+    final trimmed = _trim(notices);
+    final encoded = jsonEncode(trimmed.map((e) => e.toJson()).toList());
+    // 내용이 같으면 revision을 올리지 않는다 — 올리면 화면이 다시 로드하고,
+    // 그게 또 갱신을 불러 무한 루프가 된다.
+    final changed = prefs.getString(_key) != encoded;
+    await prefs.setString(_key, encoded);
     await prefs.setInt('${_key}_ts', DateTime.now().millisecondsSinceEpoch);
-    revision.value++;
+    if (changed) revision.value++;
   }
 
   static Future<List<Notice>?> load() async {

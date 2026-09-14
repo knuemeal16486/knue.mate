@@ -41,6 +41,17 @@ service cloud.firestore {
     match /knue_buildings/{doc=**} { allow read, write: if true; }
     match /notices/{doc=**}        { allow read, write: if true; }
 
+    // ── 자취방 시세 제보 ────────────────────────────────────────
+    // 학생이 직접 남기는 제보라 무인증 create가 필요하다.
+    // 다만 남의 제보를 고치거나 지우지는 못하게 update/delete는 막는다 —
+    // 시세는 여러 사람의 기록이 쌓여야 의미가 있는데, 누구나 수정할 수 있으면
+    // 한 사람이 통째로 바꿔놓을 수 있다.
+    match /housing_reports/{doc} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
     // 그 외 경로는 명시하지 않아 기본 거부(default-deny).
   }
 }

@@ -15,9 +15,10 @@ import 'package:http/http.dart' as http;
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:screenshot/screenshot.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'constants.dart';
 import 'admin_staff_data.dart';
+import 'staff_contacts_screen.dart';
+import 'ui_utils.dart';
 
 // ─────────────────────────────────────────────────── 데이터 모델 ──
 
@@ -173,202 +174,7 @@ const String _trailsKey = 'campus_trails_v2';
 
 // ─────────────────────── 과 사무실 모델 ──
 
-class DeptOffice {
-  final String dept;
-  final String college;
-  final String building;
-  final String room;
-  final String phone;
-  const DeptOffice({
-    required this.dept,
-    required this.college,
-    required this.building,
-    required this.room,
-    required this.phone,
-  });
-}
 
-const List<DeptOffice> kDeptOffices = [
-  // 제 1대학
-  DeptOffice(
-    dept: '교육학과',
-    college: '제1대학',
-    building: '인문과학관',
-    room: '337호',
-    phone: '043-230-3410',
-  ),
-  DeptOffice(
-    dept: '유아교육과',
-    college: '제1대학',
-    building: '종합교육관',
-    room: '401호',
-    phone: '043-230-3411',
-  ),
-  DeptOffice(
-    dept: '초등교육과',
-    college: '제1대학',
-    building: '종합교육관',
-    room: '303호',
-    phone: '043-230-3417, 043-230-3418',
-  ),
-  DeptOffice(
-    dept: '특수교육과',
-    college: '제1대학',
-    building: '교양학관',
-    room: '216호',
-    phone: '043-230-3440',
-  ),
-  // 제 2대학
-  DeptOffice(
-    dept: '국어교육과',
-    college: '제2대학',
-    building: '인문과학관',
-    room: '223호',
-    phone: '043-230-3500',
-  ),
-  DeptOffice(
-    dept: '영어교육과',
-    college: '제2대학',
-    building: '인문과학관',
-    room: '227-1호',
-    phone: '043-230-3502',
-  ),
-  DeptOffice(
-    dept: '독어교육과',
-    college: '제2대학',
-    building: '인문과학관',
-    room: '330호',
-    phone: '043-230-3503',
-  ),
-  DeptOffice(
-    dept: '불어교육과',
-    college: '제2대학',
-    building: '인문과학관',
-    room: '331호',
-    phone: '043-230-3504',
-  ),
-  DeptOffice(
-    dept: '중국어교육과',
-    college: '제2대학',
-    building: '인문과학관',
-    room: '120-1호',
-    phone: '043-230-3580',
-  ),
-  DeptOffice(
-    dept: '윤리교육과',
-    college: '제2대학',
-    building: '종합교육관',
-    room: '622호',
-    phone: '043-230-3506',
-  ),
-  DeptOffice(
-    dept: '일반사회교육과',
-    college: '제2대학',
-    building: '종합교육관',
-    room: '516호',
-    phone: '043-230-3507',
-  ),
-  DeptOffice(
-    dept: '지리교육과',
-    college: '제2대학',
-    building: '종합교육관',
-    room: '108호',
-    phone: '043-230-3508',
-  ),
-  DeptOffice(
-    dept: '역사교육과',
-    college: '제2대학',
-    building: '종합교육관',
-    room: '415호',
-    phone: '043-230-3509',
-  ),
-  // 제 3대학
-  DeptOffice(
-    dept: '수학교육과',
-    college: '제3대학',
-    building: '응용과학관',
-    room: '406호',
-    phone: '043-230-3601',
-  ),
-  DeptOffice(
-    dept: '물리교육과',
-    college: '제3대학',
-    building: '자연과학관',
-    room: '417호',
-    phone: '043-230-3602',
-  ),
-  DeptOffice(
-    dept: '화학교육과',
-    college: '제3대학',
-    building: '자연과학관',
-    room: '318호',
-    phone: '043-230-3604',
-  ),
-  DeptOffice(
-    dept: '생물교육과',
-    college: '제3대학',
-    building: '자연과학관',
-    room: '101호',
-    phone: '043-230-3605',
-  ),
-  DeptOffice(
-    dept: '지구과학교육과',
-    college: '제3대학',
-    building: '자연과학관',
-    room: '204호',
-    phone: '043-230-3606',
-  ),
-  DeptOffice(
-    dept: '가정교육과',
-    college: '제3대학',
-    building: '응용과학관',
-    room: '301호',
-    phone: '043-230-3607',
-  ),
-  DeptOffice(
-    dept: '환경교육과',
-    college: '제3대학',
-    building: '융합과학관',
-    room: '407호',
-    phone: '043-230-3608',
-  ),
-  DeptOffice(
-    dept: '기술교육과',
-    college: '제3대학',
-    building: '융합과학관',
-    room: '311호',
-    phone: '043-230-3610',
-  ),
-  DeptOffice(
-    dept: '컴퓨터교육과',
-    college: '제3대학',
-    building: '융합과학관',
-    room: '508호',
-    phone: '043-230-3611',
-  ),
-  // 제 4대학
-  DeptOffice(
-    dept: '음악교육과',
-    college: '제4대학',
-    building: '음악관',
-    room: '202호',
-    phone: '043-230-3700',
-  ),
-  DeptOffice(
-    dept: '미술교육과',
-    college: '제4대학',
-    building: '미술관',
-    room: '201호',
-    phone: '043-230-3701',
-  ),
-  DeptOffice(
-    dept: '체육교육과',
-    college: '제4대학',
-    building: '체육관',
-    room: '206호',
-    phone: '043-230-3702',
-  ),
-];
 
 // 행정직원 데이터는 admin_staff_data.dart에서 불러온 kAdminStaff 리스트를 사용합니다.
 
@@ -630,11 +436,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   // Custom Names & Favorites
   Map<int, String> _customBuildingNames = {};
   Map<int, String> _customFacilityNames = {};
-  List<String> _favoriteDepts = [];
-  List<String> _favoriteAdmins = [];
-  String deptSearchQuery = '';
-  String adminSearchQuery = '';
-  final Set<String> _expandedAdminDepts = {};
 
   // 위치 관련
   Position? _userPosition;
@@ -642,11 +443,19 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   AnimationController? _zoomAnim;
   bool _locationPermGranted = false; // ignore: unused_field
 
+  // 탭 7개(지도·건물·부속시설·산책로·과사무실·행정·강의실)를 3그룹으로 접었다.
+  // 기능은 그대로 두고 "들어가는 문"만 줄인 것 — 각 그룹 안에서 세그먼트로 나눈다.
+  //   0 지도 / 1 장소(건물·부속시설·강의실) / 2 연락처(과 사무실·행정)
+  int _placeSegment = 0; // 0 건물, 1 부속시설, 2 강의실
+
+  /// 첫 진입 1회 기능 안내 시트를 이미 봤는지. (발견성 문제 보완)
+  static const String _kGuideSeenKey = 'campus_map_guide_seen_v1';
+
   @override
   void initState() {
     super.initState();
     _mapController = MapController();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
 
     // 학생들이 많이 이용하는 건물 우선 배치 (학부생 위주 정렬) - 실제 존재하는 인덱스만 필터링
     final pop = [
@@ -684,6 +493,14 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     _loadFavoritesAndCategories();
     _startLocationTracking();
     _fetchWeather();
+    // 첫 프레임 뒤에 안내 — 기능이 7개 탭에 흩어져 있어 아무도 모른다는 문제 보완.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _maybeShowFirstRunGuide(
+        themeColor.value,
+        Theme.of(context).brightness == Brightness.dark,
+      );
+    });
     // 백그라운드 Firebase 건물 동기화가 화면이 열려있는 동안 끝나도 반영되도록 구독.
     kBuildingsRevision.addListener(_onBuildingsUpdated);
   }
@@ -694,10 +511,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
   Future<void> _loadFavoritesAndCategories() async {
     final prefs = await SharedPreferences.getInstance();
-    final f = prefs.getStringList('knue_fav_depts');
-    if (f != null) _favoriteDepts = f;
-    final fa = prefs.getStringList('knue_fav_admins');
-    if (fa != null) _favoriteAdmins = fa;
     final c = prefs.getStringList('knue_category_order');
     if (c != null && c.length == 4) _categoryOrder = c;
     if (mounted) setState(() {});
@@ -705,8 +518,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
   Future<void> _saveFavoritesAndCategories() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('knue_fav_depts', _favoriteDepts);
-    await prefs.setStringList('knue_fav_admins', _favoriteAdmins);
     await prefs.setStringList('knue_category_order', _categoryOrder);
   }
 
@@ -958,12 +769,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
               controller: _tabController,
               children: [
                 _buildMapTab(primary, isDark),
-                _buildBuildingTab(primary, isDark),
-                _buildFacilityTab(primary, isDark),
-                _buildTrailTab(primary, isDark),
-                _buildDeptOfficeTab(isDark),
-                _buildAdminOfficeTab(isDark),
-                _buildClassroomSearchTab(primary, isDark),
+                _buildPlacesTab(primary, isDark),
               ],
             ),
             if (_searchOpen) _buildSearchOverlay(primary, isDark),
@@ -1013,6 +819,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                         ),
                       ),
                       const Spacer(),
+                      // 검색만 상단에 남긴다 — 건물표시/산책로 토글은 지도 위
+                      // 세로 스택으로 내려, 조작 대상 옆에서 조작하게 했다.
                       _TopBarBtn(
                         icon: _searchOpen
                             ? Icons.search_off_rounded
@@ -1029,26 +837,11 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                         }),
                       ),
                       _TopBarBtn(
-                        icon: _showBuildings
-                            ? Icons.location_city_rounded
-                            : Icons.location_city_outlined,
-                        active: _showBuildings,
+                        icon: Icons.help_outline_rounded,
+                        active: false,
                         isDark: isDark,
                         activeColor: primary,
-                        onTap: () =>
-                            setState(() => _showBuildings = !_showBuildings),
-                      ),
-                      _TopBarBtn(
-                        icon: _trailMode
-                            ? Icons.edit_off_rounded
-                            : Icons.route_rounded,
-                        active: _trailMode,
-                        isDark: isDark,
-                        activeColor: Colors.amber.shade600,
-                        onTap: () => setState(() {
-                          _trailMode = !_trailMode;
-                          if (!_trailMode) _trailPoints.clear();
-                        }),
+                        onTap: () => _showFeatureGuide(primary, isDark),
                       ),
                     ],
                   ),
@@ -1080,17 +873,12 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
-                  tabAlignment: TabAlignment.start,
-                  isScrollable: true,
-                  padding: const EdgeInsets.only(left: 12, bottom: 8),
+                  // 3개뿐이라 스크롤 없이 균등 분할 — 한눈에 전체 구조가 보인다.
+                  isScrollable: false,
+                  padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
                   tabs: const [
-                    Tab(text: '지도', height: 32),
-                    Tab(text: '건물', height: 32),
-                    Tab(text: '부속시설', height: 32),
-                    Tab(text: '산책로', height: 32),
-                    Tab(text: '과 사무실', height: 32),
-                    Tab(text: '행정사무실', height: 32),
-                    Tab(text: '강의실', height: 32),
+                    _MapGroupTab(icon: Icons.map_rounded, label: '지도'),
+                    _MapGroupTab(icon: Icons.place_rounded, label: '장소'),
                   ],
                 ),
               ],
@@ -1148,11 +936,59 @@ class _CampusMapScreenState extends State<CampusMapScreen>
           },
         ),
       ),
+      // 강의실 — 예전엔 전용 탭에 들어가 건물을 고른 뒤에야 찾을 수 있었다.
+      // 이제 강의실 이름만 알면 통합 검색에서 바로 나온다.
+      for (final b in kBuildings)
+        for (final f in b.floors)
+          for (final room in f.rooms)
+            _SearchItem(
+              name: room,
+              sub: '${b.name} ${f.floor}',
+              icon: Icons.meeting_room_rounded,
+              color: b.color,
+              onTap: () {
+                _searchCtrl.clear();
+                setState(() {
+                  _searchOpen = false;
+                  _searchQuery = '';
+                  _selectedClassroomBuilding = b;
+                  _placeSegment = 2; // 장소 > 강의실
+                });
+                _tabController.animateTo(1);
+              },
+            ),
+      // 연락처는 캠퍼스맵에서 다루지 않지만, 검색에서는 계속 찾히게 둔다.
+      // 여기서 "과 사무실"을 검색하는 사람이 많고, 결과가 없으면 앱 어디에도
+      // 없다고 오해하기 쉬워서다. 탭하면 교직원 연락처 화면으로 넘긴다.
+      ...kDeptOffices.map(
+        (d) => _SearchItem(
+          name: d.dept,
+          sub: '${d.building} ${d.room} · ${d.phone}',
+          icon: Icons.school_rounded,
+          color: primary,
+          onTap: () => _openContacts(deptOnly: true),
+        ),
+      ),
+      ...kAdminStaff.map(
+        (a) => _SearchItem(
+          name: '${a.dept} ${a.category}',
+          sub: a.duties.isNotEmpty ? '${a.duties} · ${a.phone}' : a.phone,
+          icon: Icons.badge_rounded,
+          color: primary,
+          onTap: () => _openContacts(deptOnly: false),
+        ),
+      ),
     ];
+    // 강의실·연락처까지 합치면 후보가 2천 건이 넘는다. 한 글자만 쳐도 수백 건이
+    // 매칭될 수 있어 상한을 두고, 대소문자 구분 없이 찾는다.
+    final q = query.toLowerCase();
     final results = query.isEmpty
         ? <_SearchItem>[]
         : allItems
-              .where((i) => i.name.contains(query) || i.sub.contains(query))
+              .where((i) =>
+                  i.name.toLowerCase().contains(q) ||
+                  i.sub.toLowerCase().contains(q))
+              .take(60)
               .toList();
 
     return Positioned.fill(
@@ -1185,7 +1021,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                       autofocus: true,
                       onChanged: (v) => setState(() => _searchQuery = v),
                       decoration: InputDecoration(
-                        hintText: '건물/시설 검색...',
+                        hintText: '건물·시설·강의실·연락처 검색...',
                         hintStyle: TextStyle(
                           color: isDark ? Colors.white38 : Colors.black38,
                           fontSize: 15,
@@ -1545,6 +1381,14 @@ class _CampusMapScreenState extends State<CampusMapScreen>
           child: _buildFilterBar(isDark),
         ),
 
+        // 지도 조작 토글 — 예전엔 상단바에 있었으나, 조작 대상(지도) 옆에
+        // 두어야 무슨 버튼인지 즉시 이해된다.
+        Positioned(
+          right: 12,
+          top: MediaQuery.of(context).padding.top + 104 + 60,
+          child: _buildMapToggleStack(primary, isDark),
+        ),
+
         // 줌 컨트롤
         Positioned(
           right: 12,
@@ -1565,6 +1409,101 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   }
 
   // ─── 필터 바 (카테고리) ───
+
+  /// 지도 위 세로 토글 스택 — 건물 라벨 표시 / 산책로 그리기 / 저장 목록.
+  Widget _buildMapToggleStack(Color primary, bool isDark) {
+    final warm = KnueTokens.warm(isDark);
+    Widget btn({
+      required IconData icon,
+      required bool active,
+      required Color activeColor,
+      required VoidCallback onTap,
+      required String tooltip,
+      bool last = false,
+    }) {
+      return Tooltip(
+        message: tooltip,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              border: last
+                  ? null
+                  : Border(
+                      bottom: BorderSide(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                        width: 0.5,
+                      ),
+                    ),
+            ),
+            child: Icon(
+              icon,
+              size: 19,
+              color: active
+                  ? activeColor
+                  : (isDark ? Colors.white54 : Colors.black45),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark
+                ? const Color(0xFF1C1C1E).withValues(alpha: 0.75)
+                : Colors.white.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? Colors.white12 : Colors.black12,
+              width: 0.5,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              btn(
+                icon: _showBuildings
+                    ? Icons.location_city_rounded
+                    : Icons.location_city_outlined,
+                active: _showBuildings,
+                activeColor: primary,
+                tooltip: '건물 이름 표시',
+                onTap: () => setState(() => _showBuildings = !_showBuildings),
+              ),
+              btn(
+                icon: _trailMode
+                    ? Icons.edit_off_rounded
+                    : Icons.route_rounded,
+                active: _trailMode,
+                activeColor: warm,
+                tooltip: _trailMode ? '산책로 그리기 종료' : '산책로 그리기',
+                onTap: () => setState(() {
+                  _trailMode = !_trailMode;
+                  if (!_trailMode) _trailPoints.clear();
+                }),
+              ),
+              btn(
+                icon: Icons.format_list_bulleted_rounded,
+                active: false,
+                activeColor: primary,
+                tooltip: '저장된 산책로',
+                last: true,
+                onTap: () => _showTrailListSheet(primary, isDark),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildFilterBar(bool isDark) {
     List<FacilityType> orderedTypes = _facilityOrder
@@ -1941,7 +1880,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         .toList();
     return Column(
       children: [
-        SizedBox(height: MediaQuery.of(context).padding.top + 104),
+        // 상단 여백은 그룹 탭(_buildPlacesTab)이 이미 잡아준다.
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
@@ -2142,9 +2081,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         .toList();
     return Column(
       children: [
-        SizedBox(
-          height: MediaQuery.of(context).padding.top + 96,
-        ), // padding for the new floating app bar
+        // 상단 여백은 그룹 탭(_buildPlacesTab)이 이미 잡아준다.
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
@@ -2479,52 +2416,342 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     );
   }
 
-  Widget _buildTrailTab(Color primary, bool isDark) {
-    if (_savedTrails.isEmpty) {
-      return Column(
-        children: [
-          SizedBox(height: MediaQuery.of(context).padding.top + 96),
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.route_rounded,
-                    size: 56,
-                    color: isDark ? Colors.white24 : Colors.black12,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '저장된 산책로가 없습니다',
+  // ─── 그룹 탭: 장소 / 연락처 ───
+
+  /// 세그먼트 바. 그룹 안에서 하위 화면을 고르는 공통 UI.
+  Widget _buildSegmentBar({
+    required List<String> labels,
+    required int selected,
+    required ValueChanged<int> onSelect,
+    required Color primary,
+    required bool isDark,
+  }) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFEFEFF4),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: List.generate(labels.length, (i) {
+          final active = i == selected;
+          return Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onSelect(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                decoration: BoxDecoration(
+                  color: active
+                      ? (isDark ? const Color(0xFF3A3A3C) : Colors.white)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: active
+                      ? [
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: isDark ? 0.3 : 0.06),
+                            blurRadius: 6,
+                            offset: const Offset(0, 1),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Center(
+                  child: Text(
+                    labels[i],
                     style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white38 : Colors.black38,
+                      fontSize: 13,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                      color: active
+                          ? primary
+                          : (isDark ? Colors.white54 : Colors.black54),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '지도 탭에서 🛤️ 버튼을 눌러 산책로를 그려보세요',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? Colors.white24 : Colors.black26,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
+          );
+        }),
+      ),
+    );
+  }
+
+  /// 장소 그룹 — 건물 / 부속시설 / 강의실.
+  /// 세 화면 모두 "캠퍼스 어딘가를 찾는" 같은 목적이라 한 문 뒤로 모았다.
+  Widget _buildPlacesTab(Color primary, bool isDark) {
+    return Column(
+      children: [
+        SizedBox(height: MediaQuery.of(context).padding.top + 104),
+        _buildSegmentBar(
+          labels: const ['건물', '부속시설', '강의실'],
+          selected: _placeSegment,
+          onSelect: (i) => setState(() => _placeSegment = i),
+          primary: primary,
+          isDark: isDark,
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: _placeSegment,
+            children: [
+              _buildBuildingTab(primary, isDark),
+              _buildFacilityTab(primary, isDark),
+              _buildClassroomSearchTab(primary, isDark),
+            ],
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+
+  /// 검색 오버레이를 닫고 교직원 연락처 화면을 연다.
+  /// 연락처는 캠퍼스맵에서 빠졌지만 검색으로는 여전히 닿을 수 있게 한다.
+  void _openContacts({required bool deptOnly}) {
+    _searchCtrl.clear();
+    setState(() {
+      _searchOpen = false;
+      _searchQuery = '';
+    });
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StaffContactsScreen(initialDeptOnly: deptOnly),
+      ),
+    );
+  }
+
+  // ─── 기능 안내 (발견성 보완) ───
+
+  /// 첫 진입 때 1회 자동으로, 이후에는 상단 ? 버튼으로 열리는 안내.
+  /// 7개 탭에 흩어져 아무도 모르던 기능들을 한 장으로 보여준다.
+  Future<void> _maybeShowFirstRunGuide(Color primary, bool isDark) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kGuideSeenKey) == true) return;
+    if (!mounted) return;
+    await prefs.setBool(_kGuideSeenKey, true);
+    if (!mounted) return;
+    _showFeatureGuide(primary, isDark);
+  }
+
+  void _showFeatureGuide(Color primary, bool isDark) {
+    const items = [
+      (
+        Icons.route_rounded,
+        '산책로 그리기',
+        '지도 오른쪽 산책로 버튼을 켜고 지도를 탭하면 나만의 경로가 그려집니다.'
+      ),
+      (
+        Icons.meeting_room_rounded,
+        '강의실 찾기',
+        '장소 → 강의실에서 건물을 고르면 층별 강의실·연구실을 볼 수 있어요.'
+      ),
+      (
+        Icons.call_rounded,
+        '연락처는 검색으로',
+        '학과·부서 이름을 검색하면 교직원 연락처 화면으로 바로 넘어갑니다.'
+      ),
+      (
+        Icons.tune_rounded,
+        '내 맞춤 정렬',
+        '장소 목록 우측 상단에서 순서 변경·숨김·이름 바꾸기를 할 수 있어요.'
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF161618) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 10, 22, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 18),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Text(
+                  '캠퍼스맵에는 이런 기능이 있어요',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...items.map(
+                  (it) => Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: primary.withValues(
+                                alpha: isDark ? 0.18 : 0.10),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(it.$1, size: 18, color: primary),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                it.$2,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color:
+                                      isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                it.$3,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  height: 1.4,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).maybePop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      '알겠어요',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 저장된 산책로 목록. 예전에는 별도 탭이었지만, 산책로는 지도에서 그리고
+  /// 지도에서 보는 것이라 지도 탭의 바텀시트로 옮겼다. 내용은 그대로다.
+  void _showTrailListSheet(Color primary, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.55,
+        minChildSize: 0.35,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (ctx, scrollCtrl) => Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF161618) : Colors.white,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 38,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(child: _buildTrailList(primary, isDark, scrollCtrl)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrailList(
+      Color primary, bool isDark, ScrollController scrollCtrl) {
+    if (_savedTrails.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.route_rounded,
+                size: 56,
+                color: isDark ? Colors.white24 : Colors.black12,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '저장된 산책로가 없습니다',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '지도의 산책로 버튼을 켜고 지도를 탭해 경로를 그려보세요',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white24 : Colors.black26,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
     return Column(
       children: [
-        SizedBox(
-          height: MediaQuery.of(context).padding.top + 104,
-        ), // Padding for floating app bar
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
           child: Row(
             children: [
               Text(
@@ -2540,6 +2767,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         ),
         Expanded(
           child: ListView.separated(
+            controller: scrollCtrl,
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
             itemCount: _savedTrails.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
@@ -2556,7 +2784,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
               return GestureDetector(
                 onTap: () {
                   setState(() => _selectedTrailIdx = isSelected ? null : idx);
-                  _tabController.animateTo(0);
+                  // 시트를 닫으면 바로 뒤가 지도라 탭 이동이 필요 없다.
+                  Navigator.of(ctx).maybePop();
                   Future.delayed(const Duration(milliseconds: 200), () {
                     if (trail.isNotEmpty) _animatedMove(trail.first, 16.5);
                   });
@@ -2825,7 +3054,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
           return Column(
             children: [
-              SizedBox(height: MediaQuery.of(context).padding.top + 20),
+              // 상단 여백은 그룹 탭(_buildPlacesTab)이 이미 잡아준다.
+              const SizedBox(height: 4),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Row(
@@ -2968,7 +3198,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
         return Column(
           children: [
-            SizedBox(height: MediaQuery.of(context).padding.top + 96),
+            // 상단 여백은 그룹 탭(_buildPlacesTab)이 이미 잡아준다.
+            const SizedBox(height: 4),
             // 헤더: 뒤로가기 + 건물 이름
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 6, 16, 2),
@@ -3203,1241 +3434,6 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                 ),
               ),
           ],
-        );
-      },
-    );
-  }
-
-  Widget _buildDeptOfficeTab(bool isDark) {
-    const colleges = ['제1대학', '제2대학', '제3대학', '제4대학'];
-    final collegeColors = [
-      Colors.blue,
-      Colors.orange,
-      Colors.green,
-      Colors.purple,
-    ];
-    final collegeIcons = [
-      Icons.school_rounded,
-      Icons.menu_book_rounded,
-      Icons.science_rounded,
-      Icons.palette_rounded,
-    ];
-
-    return StatefulBuilder(
-      builder: (ctx, setLocal) {
-        final query = deptSearchQuery.trim();
-        List<Widget> tabItems = [];
-
-        tabItems.add(
-          SizedBox(height: MediaQuery.of(context).padding.top + 104),
-        );
-        tabItems.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white12
-                      : Colors.black.withValues(alpha: 0.08),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.search_rounded,
-                    size: 18,
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      onChanged: (v) => setLocal(() => deptSearchQuery = v),
-                      decoration: InputDecoration(
-                        hintText: '학과 또는 건물명 검색...',
-                        hintStyle: TextStyle(
-                          fontSize: 13,
-                          color: isDark ? Colors.white38 : Colors.black38,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 11,
-                        ),
-                      ),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-
-        // 부서 아이템 위젯 생성 헬퍼
-        Widget buildDeptItem(DeptOffice d, String college, Color color) {
-          final isFav = _favoriteDepts.contains(d.dept);
-          return Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withValues(alpha: 0.15)),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(14, 6, 12, 6),
-              leading: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    if (isFav) {
-                      _favoriteDepts.remove(d.dept);
-                    } else {
-                      if (_favoriteDepts.length < 2) {
-                        _favoriteDepts.add(d.dept);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('관심 학과는 최대 2개까지만 등록할 수 있습니다.'),
-                          ),
-                        );
-                      }
-                    }
-                    _saveFavoritesAndCategories();
-                  });
-                },
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: isFav
-                        ? Colors.amber.withValues(alpha: 0.15)
-                        : color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: Icon(
-                      isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-                      color: isFav ? Colors.amber : color,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
-              title: Text(
-                d.dept,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-              subtitle: Text(
-                '${d.building} ${d.room}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.white54 : Colors.black54,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: d.phone.split(',').map((p) {
-                  final phoneNum = p.trim();
-                  return GestureDetector(
-                    onTap: () async {
-                      final now = TimeOfDay.now();
-                      final isLunch =
-                          now.hour == 12 ||
-                          (now.hour == 11 && now.minute >= 55);
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (c) => AlertDialog(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          backgroundColor: isDark
-                              ? const Color(0xFF1C1C2E)
-                              : Colors.white,
-                          title: Row(
-                            children: [
-                              Icon(Icons.phone_rounded, color: color, size: 20),
-                              const SizedBox(width: 8),
-                              const Expanded(
-                                child: Text(
-                                  '전화 시 매너',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (isLunch)
-                                Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(
-                                      alpha: 0.12,
-                                    ),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: Colors.orange.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    children: [
-                                      Icon(
-                                        Icons.warning_amber_rounded,
-                                        color: Colors.orange,
-                                        size: 16,
-                                      ),
-                                      SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          '점심시간(12:00~13:00)입니다.\n연결이 안 될 수 있어요.',
-                                          style: TextStyle(
-                                            color: Colors.orange,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF2A2A3D)
-                                      : const Color(0xFFF8F9FA),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: color.withValues(alpha: 0.3),
-                                    width: 1.5,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: color.withValues(alpha: 0.1),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.format_quote_rounded,
-                                          color: color,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            '이렇게 말해보세요',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w700,
-                                              color: color,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text.rich(
-                                      TextSpan(
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          height: 1.6,
-                                          color: isDark
-                                              ? Colors.white
-                                              : Colors.black87,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        children: [
-                                          const TextSpan(text: '"안녕하세요, '),
-                                          TextSpan(
-                                            text: 'OO교육과 26학번 김청람',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: color,
-                                              backgroundColor: color.withValues(
-                                                alpha: 0.1,
-                                              ),
-                                            ),
-                                          ),
-                                          const TextSpan(text: '입니다.\n'),
-                                          const TextSpan(text: '다름이 아니라 '),
-                                          TextSpan(
-                                            text: '[용건]',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: color,
-                                              backgroundColor: color.withValues(
-                                                alpha: 0.1,
-                                              ),
-                                            ),
-                                          ),
-                                          const TextSpan(
-                                            text: ' 때문에 연락드렸습니다."',
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: color.withValues(alpha: 0.15),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.access_time_rounded,
-                                      size: 14,
-                                      color: color,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '운영시간 09:00~17:30 (점심 12:00~13:00)',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: color.withValues(alpha: 0.8),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(c, false),
-                              child: Text(
-                                '취소',
-                                style: TextStyle(
-                                  color: isDark
-                                      ? Colors.white54
-                                      : Colors.black45,
-                                ),
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () => Navigator.pop(c, true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: color,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(Icons.call_rounded, size: 16),
-                              label: const Text('전화하기'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (confirm == true) {
-                        final uri = Uri.parse('tel:$phoneNum');
-                        if (await canLaunchUrl(uri)) launchUrl(uri);
-                      }
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(left: 6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.call_rounded, size: 13, color: color),
-                          const SizedBox(height: 2),
-                          Text(
-                            phoneNum.replaceFirst('043-', ''),
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              onTap: () {
-                final building = kBuildings.firstWhere(
-                  (b) => b.name.contains(
-                    d.building.replaceAll('관', '').replaceAll('학관', ''),
-                  ),
-                  orElse: () => kBuildings.first,
-                );
-                _tabController.animateTo(0);
-                Future.delayed(
-                  const Duration(milliseconds: 200),
-                  () => _animatedMove(building.position, 18.5),
-                );
-              },
-            ),
-          );
-        }
-
-        // 2. 즐겨찾기 (관심 학과)
-        if (query.isEmpty && _favoriteDepts.isNotEmpty) {
-          final favs = kDeptOffices
-              .where((d) => _favoriteDepts.contains(d.dept))
-              .toList();
-          if (favs.isNotEmpty) {
-            tabItems.add(
-              Padding(
-                padding: const EdgeInsets.only(
-                  top: 12,
-                  bottom: 8,
-                  left: 16,
-                  right: 16,
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.star_rounded,
-                        size: 15,
-                        color: Colors.amber,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      '나의 관심 학과',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-
-            for (final d in favs) {
-              tabItems.add(
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: buildDeptItem(d, '', Colors.amber),
-                ),
-              );
-            }
-            tabItems.add(const SizedBox(height: 12));
-          }
-        }
-
-        // 3. 전체 목록 (전공/학과)
-        if (query.isEmpty) {
-          for (int i = 0; i < colleges.length; i++) {
-            final college = colleges[i];
-            final color = collegeColors[i];
-            final icon = collegeIcons[i];
-
-            final depts = kDeptOffices
-                .where((d) => d.college == college)
-                .toList();
-            if (depts.isEmpty) continue;
-
-            tabItems.add(
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Row(
-                  children: [
-                    Icon(icon, size: 16, color: color),
-                    const SizedBox(width: 8),
-                    Text(
-                      college,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: color,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-
-            for (final d in depts) {
-              tabItems.add(
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: buildDeptItem(d, college, color),
-                ),
-              );
-            }
-          }
-        } else {
-          final results = kDeptOffices
-              .where(
-                (d) =>
-                    d.dept.contains(query) ||
-                    d.building.contains(query) ||
-                    d.phone.contains(query),
-              )
-              .toList();
-
-          if (results.isEmpty) {
-            tabItems.add(
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 64),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.search_off_rounded,
-                      size: 48,
-                      color: isDark ? Colors.white12 : Colors.black12,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '찾으시는 학과가 없습니다',
-                      style: TextStyle(
-                        color: isDark ? Colors.white38 : Colors.black38,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          } else {
-            for (final d in results) {
-              tabItems.add(
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: buildDeptItem(d, '', Colors.blue),
-                ),
-              );
-            }
-          }
-        }
-
-        tabItems.add(const SizedBox(height: 100));
-
-        return ListView(
-          padding: EdgeInsets.zero,
-          physics: const BouncingScrollPhysics(),
-          children: tabItems,
-        );
-      },
-    );
-  }
-
-  Widget _buildAdminOfficeTab(bool isDark) {
-    const color = Colors.indigoAccent;
-
-    return StatefulBuilder(
-      builder: (ctx, setLocal) {
-        final query = adminSearchQuery.trim();
-
-        // 1. 부서별 그룹화 및 검색 필터링
-        final Map<String, List<AdminStaff>> grouped = {};
-        for (final s in kAdminStaff) {
-          if (query.isNotEmpty) {
-            final matches =
-                s.dept.contains(query) ||
-                s.duties.contains(query) ||
-                s.category.contains(query);
-            if (!matches) continue;
-          }
-          grouped.putIfAbsent(s.dept, () => []).add(s);
-        }
-
-        // 2. 정렬: 관심 부서 우선 -> 나머지 가나다순
-        final favDepts = grouped.keys
-            .where((d) => _favoriteAdmins.contains(d))
-            .toList();
-        final otherDepts =
-            grouped.keys.where((d) => !_favoriteAdmins.contains(d)).toList()
-              ..sort();
-        final orderedDepts = [...favDepts, ...otherDepts];
-
-        Future<void> callPhone(String phoneNum) async {
-          final now = TimeOfDay.now();
-          final isLunch =
-              now.hour == 12 || (now.hour == 11 && now.minute >= 55);
-          final confirm = await showDialog<bool>(
-            context: context,
-            builder: (c) => AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              backgroundColor: isDark ? const Color(0xFF1C1C2E) : Colors.white,
-              title: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.phone_in_talk_rounded,
-                      color: color,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    '전화 예절 확인',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (isLunch)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.orange.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(
-                            Icons.restaurant_rounded,
-                            color: Colors.orange,
-                            size: 18,
-                          ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              '현재는 점심시간(12:00~13:00)입니다.\n통화 연결이 어려울 수 있습니다.',
-                              style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.04)
-                          : const Color(0xFFF8F9FA),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isDark
-                            ? Colors.white10
-                            : Colors.black.withValues(alpha: 0.05),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '정중하게 말씀해 주세요',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: color.withValues(alpha: 0.8),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text.rich(
-                          TextSpan(
-                            style: TextStyle(
-                              fontSize: 14,
-                              height: 1.6,
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.9)
-                                  : Colors.black87,
-                            ),
-                            children: [
-                              const TextSpan(text: '"안녕하세요, '),
-                              TextSpan(
-                                text: '김청람 학생',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: color,
-                                ),
-                              ),
-                              const TextSpan(text: '입니다.\n'),
-                              TextSpan(
-                                text: '[용건]',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: color,
-                                ),
-                              ),
-                              const TextSpan(text: ' 때문에 연락드렸습니다."'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.info_outline_rounded,
-                          size: 14,
-                          color: color,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '번호: $phoneNum',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: color,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(c, false),
-                  child: Text(
-                    '취소',
-                    style: TextStyle(
-                      color: isDark ? Colors.white38 : Colors.black38,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 8, bottom: 4),
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(c, true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
-                      '통화 시작',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-          if (confirm == true) {
-            final uri = Uri.parse('tel:$phoneNum');
-            if (await canLaunchUrl(uri)) launchUrl(uri);
-          }
-        }
-
-        List<Widget> items = [];
-        items.add(SizedBox(height: MediaQuery.of(context).padding.top + 104));
-
-        // 3. 검색 섹션
-        items.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Container(
-              height: 52,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white10
-                      : Colors.black.withValues(alpha: 0.05),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.search_rounded,
-                    color: color.withValues(alpha: 0.7),
-                    size: 22,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      onChanged: (v) => setLocal(() => adminSearchQuery = v),
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: isDark ? Colors.white : Colors.black87,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: '부서명, 업무, 직책 등 검색...',
-                        hintStyle: TextStyle(
-                          fontSize: 15,
-                          color: isDark ? Colors.white24 : Colors.black26,
-                        ),
-                        border: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                  if (adminSearchQuery.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      onPressed: () => setLocal(() => adminSearchQuery = ''),
-                      color: isDark ? Colors.white30 : Colors.black26,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-
-        if (grouped.isEmpty) {
-          items.add(
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 80),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.search_off_rounded,
-                    size: 64,
-                    color: isDark
-                        ? Colors.white10
-                        : Colors.black.withValues(alpha: 0.05),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '찾으시는 부서가 없습니다',
-                    style: TextStyle(
-                      color: isDark ? Colors.white30 : Colors.black26,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        // 4. 부서별 아코디언 목록
-        for (final dept in orderedDepts) {
-          final staffList = grouped[dept]!;
-          final isFav = _favoriteAdmins.contains(dept);
-          final isExpanded =
-              _expandedAdminDepts.contains(dept) || query.isNotEmpty;
-
-          items.add(
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  if (isFav)
-                    BoxShadow(
-                      color: Colors.amber.withValues(alpha: isDark ? 0.1 : 0.2),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                ],
-                border: Border.all(
-                  color: isFav
-                      ? Colors.amber.withValues(alpha: 0.5)
-                      : (isExpanded
-                            ? color.withValues(alpha: 0.3)
-                            : isDark
-                            ? Colors.white10
-                            : Colors.black.withValues(alpha: 0.05)),
-                  width: isFav || isExpanded ? 1.5 : 1.0,
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Column(
-                  children: [
-                    // Header
-                    InkWell(
-                      onTap: () => setLocal(() {
-                        if (_expandedAdminDepts.contains(dept)) {
-                          _expandedAdminDepts.remove(dept);
-                        } else {
-                          _expandedAdminDepts.add(dept);
-                        }
-                      }),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  if (isFav) {
-                                    _favoriteAdmins.remove(dept);
-                                  } else {
-                                    if (_favoriteAdmins.length < 5) {
-                                      _favoriteAdmins.add(dept);
-                                    } else {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            '관심 부서는 최대 5개까지 등록 가능합니다.',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  }
-                                  _saveFavoritesAndCategories();
-                                });
-                                setLocal(() {});
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: isFav
-                                      ? Colors.amber.withValues(alpha: 0.15)
-                                      : (isDark
-                                            ? Colors.white.withValues(
-                                                alpha: 0.05,
-                                              )
-                                            : const Color(0xFFF0F2F5)),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  isFav
-                                      ? Icons.star_rounded
-                                      : Icons.star_outline_rounded,
-                                  color: isFav
-                                      ? Colors.amber
-                                      : (isDark
-                                            ? Colors.white24
-                                            : Colors.black26),
-                                  size: 18,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    dept,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 16,
-                                      color: isDark
-                                          ? Colors.white
-                                          : Colors.black87,
-                                      letterSpacing: -0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${staffList.length}명의 담당자',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isDark
-                                          ? Colors.white38
-                                          : Colors.black38,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            AnimatedRotation(
-                              turns: isExpanded ? 0.5 : 0,
-                              duration: const Duration(milliseconds: 300),
-                              child: Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                color: isDark ? Colors.white24 : Colors.black26,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Content
-                    if (isExpanded)
-                      Container(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.02)
-                            : const Color(0xFFFAFAFB),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          padding: EdgeInsets.zero,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: staffList.length,
-                          separatorBuilder: (c, i) => const SizedBox.shrink(),
-                          itemBuilder: (c, idx) {
-                            final s = staffList[idx];
-                            final isDutyEmpty = s.duties.isEmpty;
-
-                            return Container(
-                              margin: EdgeInsets.only(
-                                left: 12,
-                                right: 12,
-                                top: idx == 0 ? 0 : 6,
-                                bottom: idx == staffList.length - 1 ? 12 : 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.04)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.07)
-                                      : Colors.black.withValues(alpha: 0.06),
-                                ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(14),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Row 1: 직책 배지
-                                    Row(
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: color.withValues(alpha: 0.12),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            s.category,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w800,
-                                              color: color,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 10),
-                                    // Row 2: 연락처
-                                    Row(
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.phone_rounded,
-                                          size: 15,
-                                          color: isDark ? Colors.white54 : Colors.black54,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Expanded(
-                                          child: Text(
-                                            s.phone,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: isDark
-                                                  ? Colors.white70
-                                                  : Colors.black87,
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                        ),
-                                        // 전화 버튼
-                                        GestureDetector(
-                                          onTap: () => callPhone(s.phone),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 14,
-                                              vertical: 8,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: color.withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(20),
-                                            ),
-                                            child: const Text(
-                                              '통화',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: color,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    // Row 2: 담당 업무
-                                    if (!isDutyEmpty) ...[
-                                      const SizedBox(height: 10),
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isDark
-                                              ? Colors.white.withValues(
-                                                  alpha: 0.04,
-                                                )
-                                              : const Color(0xFFF5F6FA),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Icon(
-                                              Icons.task_alt_rounded,
-                                              size: 14,
-                                              color:
-                                                  color.withValues(alpha: 0.6),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Expanded(
-                                              child: Text(
-                                                s.duties,
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  height: 1.5,
-                                                  color: isDark
-                                                      ? Colors.white
-                                                          .withValues(
-                                                            alpha: 0.8,
-                                                          )
-                                                      : Colors.black.withValues(
-                                                          alpha: 0.75,
-                                                        ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.info_outline_rounded,
-                                            size: 13,
-                                            color: isDark
-                                                ? Colors.white24
-                                                : Colors.black26,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '담당 업무 정보 없음',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: isDark
-                                                  ? Colors.white24
-                                                  : Colors.black26,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            );
-
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-
-        items.add(const SizedBox(height: 80));
-
-        return ListView(
-          padding: EdgeInsets.zero,
-          physics: const BouncingScrollPhysics(),
-          children: items,
         );
       },
     );
@@ -5472,6 +4468,28 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
 // ───────────────────────────────────────── 지도 레이블 마커 ──
 // 건물 이름처럼 생긴 말풍선 라벨 (하단에 작은 삼각형 pointer)
+
+/// 캠퍼스맵 상단 그룹 탭 — 아이콘과 라벨을 가로로 붙여 높이를 낮게 유지한다.
+class _MapGroupTab extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _MapGroupTab({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tab(
+      height: 34,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15),
+          const SizedBox(width: 5),
+          Text(label),
+        ],
+      ),
+    );
+  }
+}
 
 class _MapLabel extends StatelessWidget {
   final String text;

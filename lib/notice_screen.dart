@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -8,6 +9,7 @@ import 'constants.dart';
 import 'keyword_alert_service.dart';
 import 'notice_model.dart';
 import 'notice_service.dart';
+import 'ui_utils.dart';
 
 /// 청람공지 화면. KnueScraper로 크롤링한 전체 게시판 공지를 게시판 그룹별로
 /// 모아 보여주고, 즐겨찾기 게시판/키워드 알림을 관리한다.
@@ -26,6 +28,20 @@ class _NoticeScreenState extends State<NoticeScreen> {
   DateTime? _lastUpdated;
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  Timer? _searchDebounce;
+
+  // ── 파생 상태 캐시 ────────────────────────────────────────────────────
+  //
+  // 아래 값들은 모두 (_notices, _selectedCategory, _searchQuery)에서만 나온다.
+  // 예전에는 getter로 두어 **매 프레임마다** 공지 500건을 toLowerCase()로
+  // 훑고, 게시판 50개를 정렬해 칩을 전부 다시 만들었다. 스크롤·타이핑 때
+  // 눈에 띄게 버벅인 원인이라 입력이 바뀔 때만 계산하도록 바꿨다.
+  List<Notice> _filtered = const [];
+  bool _failedBoard = false;
+  /// 제목 소문자 사본. 검색할 때마다 새로 만들지 않도록 미리 계산해 둔다.
+  final Map<String, String> _lowerTitleCache = {};
+  List<MapEntry<String, String>> _boardEntries = const [];
+  List<String> _boardEntriesFavKey = const [];
 
   @override
   void initState() {
@@ -39,6 +55,7 @@ class _NoticeScreenState extends State<NoticeScreen> {
   @override
   void dispose() {
     NoticeCache.revision.removeListener(_onCacheUpdated);
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -51,8 +68,21 @@ class _NoticeScreenState extends State<NoticeScreen> {
       setState(() {
         _notices = list;
         _lastUpdated = ts;
+        _recomputeDerived();
       });
     }
+  }
+
+  /// 타이핑할 때마다 500건을 훑으면 입력이 밀린다. 잠깐 멈췄을 때만 거른다.
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
+      setState(() {
+        _searchQuery = value;
+        _recomputeDerived();
+      });
+    });
   }
 
   Future<void> _load({bool force = false}) async {
@@ -65,6 +95,7 @@ class _NoticeScreenState extends State<NoticeScreen> {
       if (mounted) {
         setState(() {
           _notices = list;
+          _recomputeDerived();
           _lastUpdated = ts;
           _loading = false;
         });
@@ -91,28 +122,75 @@ class _NoticeScreenState extends State<NoticeScreen> {
     return names;
   }
 
-  /// 선택된 카테고리(또는 전체) + 검색어로 걸러낸 공지 목록.
-  /// 검색은 선택된 게시판 범위 안에서만 적용된다(MoA의 검색 범위 동작과 동일).
-  List<Notice> get _filteredNotices {
-    var list = _selectedCategory == null
-        ? _notices
-        : _notices.where((n) => n.category == _selectedCategory).toList();
-    final q = _searchQuery.trim().toLowerCase();
-    if (q.isEmpty) return list;
-    return list.where((n) => n.title.toLowerCase().contains(q)).toList();
+  /// 크롤링하지 않고 외부 사이트로 넘기는 게시판의 주소.
+  /// (초등교육과는 학과 공지를 다음 카페에서만 올린다.)
+  String? _linkOnlyUrl(String? category) {
+    if (category == null) return null;
+    for (final group in _scraper.boardGroups.values) {
+      final url = group[category];
+      if (url != null && url.startsWith('LINK:')) return url.substring(5);
+    }
+    return null;
   }
 
-  /// 선택 게시판이 크롤링 결과 0건인지(=크롤링 실패 가능성) 판정.
-  /// fetchAllNotices의 개별 게시판 catchError는 빈 리스트를 반환하므로,
-  /// "해당 카테고리가 전체 게시판 목록엔 존재하지만 결과가 0건"이면 실패로 간주한다.
-  bool get _hasFailedBoard {
-    if (_loading) return false;
-    if (_selectedCategory != null) {
-      return _notices.where((n) => n.category == _selectedCategory).isEmpty;
+  /// 선택된 카테고리(또는 전체) + 검색어로 걸러낸 공지 목록.
+  /// 검색은 선택된 게시판 범위 안에서만 적용된다(MoA의 검색 범위 동작과 동일).
+  /// 목록·배너를 다시 계산한다. 입력(_notices/_selectedCategory/_searchQuery)이
+  /// 바뀌는 지점에서만 부르고, build에서는 결과만 읽는다.
+  void _recomputeDerived() {
+    final base = _selectedCategory == null
+        ? _notices
+        : _notices.where((n) => n.category == _selectedCategory).toList();
+
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) {
+      _filtered = base;
+    } else {
+      _filtered = base.where((n) {
+        final lower =
+            _lowerTitleCache[n.title] ??= n.title.toLowerCase();
+        return lower.contains(q);
+      }).toList();
     }
-    // 전체 보기: 카테고리 중 하나라도 결과가 없으면 일부 실패로 간주.
-    final present = _notices.map((n) => n.category).toSet();
-    return _allCategories.any((c) => !present.contains(c));
+
+    // 선택 게시판이 크롤링 결과 0건인지(=크롤링 실패 가능성) 판정.
+    // fetchAllNotices의 개별 게시판 catchError는 빈 리스트를 반환하므로,
+    // "카테고리가 전체 목록엔 있는데 결과가 0건"이면 실패로 간주한다.
+    if (_loading) {
+      _failedBoard = false;
+    } else if (_selectedCategory != null) {
+      // LINK 게시판은 크롤링 대상이 아니라 0건이 정상이다.
+      _failedBoard = _linkOnlyUrl(_selectedCategory) == null &&
+          !_notices.any((n) => n.category == _selectedCategory);
+    } else {
+      final present = _notices.map((n) => n.category).toSet();
+      _failedBoard = _allCategories.any((c) => !present.contains(c));
+    }
+  }
+
+  /// 게시판 칩 목록. 즐겨찾기가 바뀔 때만 다시 정렬한다.
+  List<MapEntry<String, String>> _boardEntriesFor(List<String> favBoards) {
+    if (_boardEntries.isNotEmpty &&
+        _boardEntriesFavKey.length == favBoards.length &&
+        _boardEntriesFavKey.every(favBoards.contains)) {
+      return _boardEntries;
+    }
+    final entries = <MapEntry<String, String>>[]; // category -> group
+    for (final groupEntry in _scraper.boardGroups.entries) {
+      for (final catEntry in groupEntry.value.entries) {
+        entries.add(MapEntry(catEntry.key, groupEntry.key));
+      }
+    }
+    // 즐겨찾기를 앞으로. 나머지는 원래 그룹 순서를 지키도록 안정 정렬.
+    entries.sort((a, b) {
+      final aFav = favBoards.contains(a.key);
+      final bFav = favBoards.contains(b.key);
+      if (aFav != bFav) return aFav ? -1 : 1;
+      return 0;
+    });
+    _boardEntries = entries;
+    _boardEntriesFavKey = List.of(favBoards);
+    return entries;
   }
 
   Future<void> _openNotice(Notice notice) async {
@@ -145,7 +223,11 @@ class _NoticeScreenState extends State<NoticeScreen> {
           appBar: AppBar(
             centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
             title: const Text("청람공지"),
-            backgroundColor: color,
+            backgroundColor: Colors.transparent,
+            flexibleSpace: AppleAppBarFlexibleSpace(
+              themeColor: color,
+              isDark: isDark,
+            ),
             iconTheme: const IconThemeData(color: Colors.white),
             actions: [
               IconButton(
@@ -164,13 +246,47 @@ class _NoticeScreenState extends State<NoticeScreen> {
             children: [
               _buildSearchField(color, isDark),
               _buildBoardChips(color),
-              if (_hasFailedBoard) _buildFailureBanner(isDark),
+              if (_failedBoard) _buildFailureBanner(isDark),
               Expanded(child: _buildNoticeList(color, isDark)),
               _buildFooter(isDark),
             ],
           ),
         );
       },
+    );
+  }
+
+  /// 외부 사이트에만 공지를 올리는 게시판 안내. 이 안내가 없으면
+  /// "표시할 공지가 없습니다"만 뜨고 어디로 가야 하는지 알 길이 없다.
+  Widget _buildExternalBoardNotice(String url, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        children: [
+          Icon(Icons.open_in_new, size: 36, color: color.withValues(alpha: 0.5)),
+          const SizedBox(height: 12),
+          Text(
+            "$_selectedCategory 공지는 외부 사이트에만 올라옵니다",
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () async {
+              final uri = Uri.tryParse(url);
+              if (uri == null) return;
+              try {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              } catch (_) {
+                // 브라우저가 없으면 조용히 무시 (_openNotice와 동일)
+              }
+            },
+            icon: const Icon(Icons.launch, size: 18),
+            label: const Text("바로 가기"),
+            style: FilledButton.styleFrom(backgroundColor: color),
+          ),
+        ],
+      ),
     );
   }
 
@@ -201,7 +317,7 @@ class _NoticeScreenState extends State<NoticeScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: TextField(
         controller: _searchCtrl,
-        onChanged: (v) => setState(() => _searchQuery = v),
+        onChanged: _onSearchChanged,
         textInputAction: TextInputAction.search,
         style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
@@ -220,7 +336,10 @@ class _NoticeScreenState extends State<NoticeScreen> {
                   tooltip: "검색어 지우기",
                   onPressed: () {
                     _searchCtrl.clear();
-                    setState(() => _searchQuery = '');
+                    setState(() {
+                      _searchQuery = "";
+                      _recomputeDerived();
+                    });
                   },
                 ),
           isDense: true,
@@ -253,44 +372,42 @@ class _NoticeScreenState extends State<NoticeScreen> {
       valueListenable: PreferencesService.favoriteBoards,
       builder: (context, favBoards, child) {
         // 즐겨찾기 게시판을 먼저 배치하고, 나머지는 그룹 순서대로.
-        final entries = <MapEntry<String, String>>[]; // category -> group
-        for (final groupEntry in _scraper.boardGroups.entries) {
-          for (final catEntry in groupEntry.value.entries) {
-            entries.add(MapEntry(catEntry.key, groupEntry.key));
-          }
-        }
-        entries.sort((a, b) {
-          final aFav = favBoards.contains(a.key);
-          final bFav = favBoards.contains(b.key);
-          if (aFav != bFav) return aFav ? -1 : 1;
-          return 0;
-        });
+        // 목록 자체는 즐겨찾기가 바뀔 때만 다시 만든다.
+        final entries = _boardEntriesFor(favBoards);
 
         return SizedBox(
           height: 44,
-          child: ListView(
+          // ListView.builder — 게시판이 50개라 전부 미리 만들면 화면에 들어오지도
+          // 않는 칩까지 매번 생성된다. 보이는 것만 만들게 바꿨다.
+          child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            children: [
-              _buildChip(
-                label: "전체",
-                selected: _selectedCategory == null,
-                color: color,
-                onTap: () => setState(() => _selectedCategory = null),
-              ),
-              ...entries.map((entry) {
-                final category = entry.key;
-                final isFav = favBoards.contains(category);
+            itemCount: entries.length + 1, // +1 = "전체"
+            itemBuilder: (context, index) {
+              if (index == 0) {
                 return _buildChip(
-                  label: category,
-                  selected: _selectedCategory == category,
+                  label: "전체",
+                  selected: _selectedCategory == null,
                   color: color,
-                  onTap: () => setState(() => _selectedCategory = category),
-                  isFavorite: isFav,
-                  onStarTap: () => _toggleFavoriteBoard(category),
+                  onTap: () => setState(() {
+                    _selectedCategory = null;
+                    _recomputeDerived();
+                  }),
                 );
-              }),
-            ],
+              }
+              final category = entries[index - 1].key;
+              return _buildChip(
+                label: category,
+                selected: _selectedCategory == category,
+                color: color,
+                onTap: () => setState(() {
+                  _selectedCategory = category;
+                  _recomputeDerived();
+                }),
+                isFavorite: favBoards.contains(category),
+                onStarTap: () => _toggleFavoriteBoard(category),
+              );
+            },
           ),
         );
       },
@@ -352,18 +469,19 @@ class _NoticeScreenState extends State<NoticeScreen> {
     if (_loading && _notices.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    final list = _filteredNotices;
+    final list = _filtered;
     if (list.isEmpty) {
       final searching = _searchQuery.trim().isNotEmpty;
+      final linkUrl = searching ? null : _linkOnlyUrl(_selectedCategory);
       return RefreshIndicator(
         onRefresh: () => _load(force: true),
         child: ListView(
           children: [
             const SizedBox(height: 120),
             Center(
-              child: Text(
-                searching ? "검색 결과가 없습니다" : "표시할 공지가 없습니다",
-              ),
+              child: linkUrl == null
+                  ? Text(searching ? "검색 결과가 없습니다" : "표시할 공지가 없습니다")
+                  : _buildExternalBoardNotice(linkUrl, color),
             ),
           ],
         ),
@@ -398,47 +516,62 @@ class _NoticeScreenState extends State<NoticeScreen> {
           children: [
             Row(
               children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    notice.category,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
+                // 날짜는 고정 폭으로 먼저 자리를 잡고, 배지 묶음이 남는 폭을
+                // 가져간다. 예전에는 배지가 Flexible 없이 Spacer와 함께 있어
+                // "지구과학교육과" 같은 긴 이름에서 Row가 넘치고 글씨가 잘렸다.
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            notice.category,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (notice.isNew) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            "NEW",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                if (notice.isNew) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      "NEW",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-                const Spacer(),
+                const SizedBox(width: 8),
                 Text(
                   notice.date,
+                  maxLines: 1,
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark ? Colors.white54 : Colors.black45,
+                    fontFeatures: KnueTokens.tabularFigures,
                   ),
                 ),
               ],
@@ -446,12 +579,14 @@ class _NoticeScreenState extends State<NoticeScreen> {
             const SizedBox(height: 8),
             Text(
               notice.title,
-              maxLines: 2,
+              // 공지 제목은 길다. 2줄에서 자르면 핵심이 잘려나가는 경우가 많아
+              // 3줄까지 허용하고 줄간격을 넓혔다.
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
-                height: 1.3,
+                height: 1.4,
               ),
             ),
           ],

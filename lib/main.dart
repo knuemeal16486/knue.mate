@@ -14,6 +14,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'firebase_sync_service.dart';
 import 'root_screen.dart';
+import 'ui_utils.dart';
 import 'keyword_alert_service.dart';
 import 'club_event_alert_service.dart';
 
@@ -113,16 +114,26 @@ void main() async {
     await _initializeFirebase();
 
     await Future.wait([
-      initializeDateFormatting(),
-      dotenv.load(fileName: ".env"),
-      loadBuildingData(),
-      PreferencesService.loadSettings(),
+      initializeDateFormatting('ko_KR', null).catchError((e) {
+        debugPrint("DateFormatting warning: $e");
+      }),
+      dotenv.load(fileName: ".env").catchError((e) {
+        debugPrint("dotenv load warning: $e");
+      }),
+      loadBuildingData().catchError((e) {
+        debugPrint("loadBuildingData warning: $e");
+      }),
+      PreferencesService.loadSettings().catchError((e) {
+        debugPrint("loadSettings warning: $e");
+      }),
     ]);
 
     try {
       _initializeBackgroundTasks();
-      await _initializeHomeWidget();
-      await NotificationService().init();
+      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+        await _initializeHomeWidget();
+        await NotificationService().init();
+      }
     } catch (e) {
       debugPrint("Plugin initialization error: $e");
     }
@@ -173,8 +184,10 @@ Future<void> _initializeFirebase() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    _setupFirebaseMessaging();
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      await _setupFirebaseMessaging();
+    }
   } catch (e) {
     debugPrint("Firebase init error: $e");
   }
@@ -239,7 +252,14 @@ Future<void> _setupFirebaseMessaging() async {
 }
 
 void _initializeBackgroundTasks() {
-  FirebaseSyncService.uploadBuildingsToFirestore();
+  try {
+    // 백그라운드 건물 데이터 업로드 (에러 발생 시 무시)
+    FirebaseSyncService.uploadBuildingsToFirestore().catchError((e) {
+      debugPrint("uploadBuildingsToFirestore background error: $e");
+    });
+  } catch (e) {
+    debugPrint("Background tasks init error: $e");
+  }
 }
 
 Future<void> _initializeHomeWidget() async {
@@ -256,8 +276,61 @@ Future<void> _initializeHomeWidget() async {
   }
 }
 
-class MyApp extends StatelessWidget {
+/// [TextTheme.apply]의 letterSpacingDelta는 모든 스타일에 letterSpacing이
+/// 지정돼 있어야만 쓸 수 있다(null이면 assert 실패 → 앱 전체가 ErrorWidget으로
+/// 대체된다). 웹 빌드의 타이포그래피는 일부 스타일의 letterSpacing이 null이라
+/// 그대로 쓰면 시작하자마자 깨진다. null은 0으로 보고 델타를 직접 더한다.
+TextTheme _applyLetterSpacingDelta(TextTheme base, double delta) {
+  TextStyle? tighten(TextStyle? style) => style?.copyWith(
+        letterSpacing: (style.letterSpacing ?? 0) + delta,
+      );
+  return base.copyWith(
+    displayLarge: tighten(base.displayLarge),
+    displayMedium: tighten(base.displayMedium),
+    displaySmall: tighten(base.displaySmall),
+    headlineLarge: tighten(base.headlineLarge),
+    headlineMedium: tighten(base.headlineMedium),
+    headlineSmall: tighten(base.headlineSmall),
+    titleLarge: tighten(base.titleLarge),
+    titleMedium: tighten(base.titleMedium),
+    titleSmall: tighten(base.titleSmall),
+    bodyLarge: tighten(base.bodyLarge),
+    bodyMedium: tighten(base.bodyMedium),
+    bodySmall: tighten(base.bodySmall),
+    labelLarge: tighten(base.labelLarge),
+    labelMedium: tighten(base.labelMedium),
+    labelSmall: tighten(base.labelSmall),
+  );
+}
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 앱을 켜 둔 채 자정을 넘겼을 수 있으므로, 돌아올 때마다 오늘의 색을
+    // 다시 확인한다. 무지개 모드가 꺼져 있으면 아무 일도 하지 않는다.
+    if (state == AppLifecycleState.resumed) {
+      PreferencesService.refreshRainbowColorIfNeeded();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -280,9 +353,12 @@ class MyApp extends StatelessWidget {
                   secondary: color.withOpacity(0.8),
                   brightness: Brightness.light,
                 ),
-                textTheme: GoogleFonts.notoSansKrTextTheme(
-                  ThemeData(brightness: Brightness.light).textTheme,
-                ).apply(letterSpacingDelta: -0.4),
+                textTheme: _applyLetterSpacingDelta(
+                  GoogleFonts.notoSansKrTextTheme(
+                    ThemeData(brightness: Brightness.light).textTheme,
+                  ),
+                  -0.4,
+                ),
                 scaffoldBackgroundColor: const Color(0xFFF8F9FE),
                 cardColor: Colors.white,
                 cardTheme: CardThemeData(
@@ -303,6 +379,7 @@ class MyApp extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
+                    shadows: KnueTokens.headerTextShadow,
                   ),
                 ),
                 pageTransitionsTheme: const PageTransitionsTheme(
@@ -323,9 +400,12 @@ class MyApp extends StatelessWidget {
                   brightness: Brightness.dark,
                   surface: const Color(0xFF161618),
                 ),
-                textTheme: GoogleFonts.notoSansKrTextTheme(
-                  ThemeData(brightness: Brightness.dark).textTheme,
-                ).apply(letterSpacingDelta: -0.4),
+                textTheme: _applyLetterSpacingDelta(
+                  GoogleFonts.notoSansKrTextTheme(
+                    ThemeData(brightness: Brightness.dark).textTheme,
+                  ),
+                  -0.4,
+                ),
                 scaffoldBackgroundColor: const Color(0xFF0D0D0F),
                 cardColor: const Color(0xFF1E1E22),
                 cardTheme: CardThemeData(
@@ -346,6 +426,7 @@ class MyApp extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
+                    shadows: KnueTokens.headerTextShadow,
                   ),
                 ),
                 pageTransitionsTheme: const PageTransitionsTheme(

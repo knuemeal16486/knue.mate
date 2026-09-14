@@ -6,6 +6,7 @@ import 'constants.dart';
 import 'notice_model.dart';
 import 'notice_service.dart';
 import 'schedule_model.dart';
+import 'ui_utils.dart';
 
 /// 청람일정 화면. 학사일정(월별 크롤링 캐시) + 개인일정을 캘린더에 표시하고,
 /// 하단에는 D-day 카드 목록을 보여준다.
@@ -55,11 +56,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
   List<CalendarEvent> _academicEventsOn(DateTime day) {
     final events = _academicCache[_monthKey(day.year, day.month)] ?? [];
     final target = DateTime(day.year, day.month, day.day);
-    return events.where((e) {
-      final start = DateTime(e.startDate.year, e.startDate.month, e.startDate.day);
+    final onDay = events.where((e) {
+      final start = DateTime(
+        e.startDate.year,
+        e.startDate.month,
+        e.startDate.day,
+      );
       final end = DateTime(e.endDate.year, e.endDate.month, e.endDate.day);
       return !target.isBefore(start) && !target.isAfter(end);
-    }).toList();
+    });
+
+    // 같은 날 같은 제목이 여러 번 잡히는 일이 잦다 — 학교 페이지가 기간 일정을
+    // 행마다 반복해 싣거나, 기간이 겹치는 동일 일정이 따로 등록돼 있어서다.
+    // 화면에 같은 칩이 두세 개씩 붙으므로 제목 기준으로 하나만 남긴다.
+    final seen = <String>{};
+    return onDay.where((e) => seen.add(e.title.trim())).toList();
   }
 
   List<PersonalEvent> _personalEventsOn(DateTime day) {
@@ -69,9 +80,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   List<Object> _mergedEventsOn(DateTime day) => [
-        ..._academicEventsOn(day),
-        ..._personalEventsOn(day),
-      ];
+    ..._academicEventsOn(day),
+    ..._personalEventsOn(day),
+  ];
 
   Future<void> _deleteDday(DdayItem item) async {
     final list = List<DdayItem>.from(PreferencesService.ddayItems.value)
@@ -80,8 +91,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _deletePersonalEvent(PersonalEvent event) async {
-    final list = List<PersonalEvent>.from(PreferencesService.personalEvents.value)
-      ..removeWhere((e) => e.id == event.id);
+    final list = List<PersonalEvent>.from(
+      PreferencesService.personalEvents.value,
+    )..removeWhere((e) => e.id == event.id);
     await PreferencesService.savePersonalEvents(list);
   }
 
@@ -142,8 +154,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         title: title,
         date: day,
       );
-      final list = List<PersonalEvent>.from(PreferencesService.personalEvents.value)
-        ..add(event);
+      final list = List<PersonalEvent>.from(
+        PreferencesService.personalEvents.value,
+      )..add(event);
       await PreferencesService.savePersonalEvents(list);
     }
   }
@@ -215,7 +228,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         title: title,
         date: picked,
       );
-      final list = List<DdayItem>.from(PreferencesService.ddayItems.value)..add(item);
+      final list = List<DdayItem>.from(PreferencesService.ddayItems.value)
+        ..add(item);
       await PreferencesService.saveDdayItems(list);
     }
   }
@@ -237,7 +251,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return Scaffold(
           appBar: AppBar(
             title: const Text("청람일정"),
-            backgroundColor: color,
+            backgroundColor: Colors.transparent,
+            flexibleSpace: AppleAppBarFlexibleSpace(
+              themeColor: color,
+              isDark: isDark,
+            ),
             iconTheme: const IconThemeData(color: Colors.white),
             actions: [
               IconButton(
@@ -254,9 +272,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (_loadingCalendar) const LinearProgressIndicator(minHeight: 2),
+                    if (_loadingCalendar)
+                      const LinearProgressIndicator(minHeight: 2),
                     _buildCalendarCard(color, isDark),
+                    _buildLegend(isDark),
                     _buildSelectedDayEvents(color, isDark),
+                    _buildMonthAgenda(color, isDark),
                     const SizedBox(height: 8),
                     _buildDdaySection(color, isDark),
                     const SizedBox(height: 24),
@@ -302,7 +323,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
           });
         },
         onPageChanged: (focused) {
-          _focusedDay = focused;
+          setState(() {
+            _focusedDay = focused;
+            // 달을 넘겼는데 선택일이 지난 달에 남아 있으면, 달력은 10월을
+            // 보여주는데 아래 카드는 9월 일정을 가리키게 된다.
+            final now = DateTime.now();
+            _selectedDay =
+                (focused.year == now.year && focused.month == now.month)
+                ? now
+                : DateTime(focused.year, focused.month, 1);
+          });
           _loadMonth(focused.year, focused.month);
         },
         headerStyle: HeaderStyle(
@@ -336,10 +366,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
             color: color,
             shape: BoxShape.circle,
           ),
-          markerDecoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          markersMaxCount: 4,
+        ),
+        calendarBuilders: CalendarBuilders<Object>(
+          // 기본 마커는 전부 테마색 한 점이라 무슨 일정인지 알 수 없었다.
+          // 종류별 잉크색 점으로 바꿔 날짜만 봐도 성격이 구분되게 한다.
+          markerBuilder: (context, day, events) {
+            if (events.isEmpty) return null;
+            final dots = events.take(4).map((e) {
+              final ink = e is CalendarEvent
+                  ? KnueTokens.inkAt(e.kind.inkIndex, isDark)
+                  : (isDark ? Colors.white54 : Colors.black38); // 개인 일정
+              return Container(
+                width: 5,
+                height: 5,
+                margin: const EdgeInsets.symmetric(horizontal: 1),
+                decoration: BoxDecoration(color: ink, shape: BoxShape.circle),
+              );
+            }).toList();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(mainAxisSize: MainAxisSize.min, children: dots),
+            );
+          },
         ),
       ),
     );
@@ -379,31 +428,244 @@ class _CalendarScreenState extends State<CalendarScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                ...academic.map((e) => Chip(
-                      label: Text(e.title),
-                      backgroundColor: color.withValues(alpha: 0.12),
-                      labelStyle: TextStyle(color: color, fontSize: 12),
-                      side: BorderSide.none,
-                    )),
-                ...personal.map((e) => GestureDetector(
-                      onLongPress: () => _confirmDeletePersonalEvent(e),
-                      child: Chip(
-                        label: Text(e.title),
-                        backgroundColor: isDark
-                            ? Colors.white.withValues(alpha: 0.12)
-                            : Colors.grey.withValues(alpha: 0.18),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white70 : Colors.black87,
-                        ),
-                        side: BorderSide.none,
+                // 일정 종류마다 다른 잉크색 — 시험/방학/행사가 한눈에 갈린다.
+                ...academic.map((e) {
+                  final ink = KnueTokens.inkAt(e.kind.inkIndex, isDark);
+                  return Chip(
+                    avatar: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: ink,
+                        shape: BoxShape.circle,
                       ),
-                    )),
+                    ),
+                    label: Text(e.title),
+                    backgroundColor: ink.withValues(
+                      alpha: isDark ? 0.18 : 0.10,
+                    ),
+                    labelStyle: TextStyle(color: ink, fontSize: 12),
+                    side: BorderSide.none,
+                  );
+                }),
+                ...personal.map(
+                  (e) => GestureDetector(
+                    onLongPress: () => _confirmDeletePersonalEvent(e),
+                    child: Chip(
+                      label: Text(e.title),
+                      backgroundColor: isDark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : Colors.grey.withValues(alpha: 0.18),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                      side: BorderSide.none,
+                    ),
+                  ),
+                ),
               ],
             ),
         ],
       ),
     );
+  }
+
+  /// 달력 점 색이 무슨 뜻인지 알려주는 줄. 색만 칠해놓고 설명이 없으면
+  /// 시험인지 방학인지 알 길이 없다.
+  Widget _buildLegend(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 6,
+        children: [
+          for (final kind in AcademicEventKind.values)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: KnueTokens.inkAt(kind.inkIndex, isDark),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  kind.label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 보고 있는 달의 학사일정 전체.
+  ///
+  /// 예전에는 날짜를 하나씩 눌러봐야만 일정이 보였다. 학사일정 화면인데
+  /// 정작 일정 목록이 없었던 셈이라, 달력 아래에 그 달치를 죽 펼친다.
+  Widget _buildMonthAgenda(Color color, bool isDark) {
+    final raw =
+        _academicCache[_monthKey(_focusedDay.year, _focusedDay.month)] ?? [];
+
+    // 학교 페이지가 기간 일정을 행마다 반복해 싣는 탓에 같은 일정이 여러 번
+    // 잡힌다. 제목+기간이 같으면 하나로 본다.
+    final seen = <String>{};
+    final events =
+        raw
+            .where(
+              (e) => seen.add("${e.title.trim()}|${e.startDate}|${e.endDate}"),
+            )
+            .toList()
+          ..sort((a, b) => a.startDate.compareTo(b.startDate));
+
+    final now = DateTime.now();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                "${_focusedDay.month}월 학사일정",
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                "${events.length}건",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (events.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                _loadingCalendar ? "불러오는 중…" : "이 달에는 등록된 학사일정이 없습니다",
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+              ),
+            )
+          else
+            ...events.map((e) => _buildAgendaRow(e, isDark, now)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgendaRow(CalendarEvent e, bool isDark, DateTime now) {
+    final ink = KnueTokens.inkAt(e.kind.inkIndex, isDark);
+    final start = DateTime(
+      e.startDate.year,
+      e.startDate.month,
+      e.startDate.day,
+    );
+    final end = DateTime(
+      e.endDate.year,
+      e.endDate.month,
+      e.endDate.day,
+      23,
+      59,
+      59,
+    );
+    final today = DateTime(now.year, now.month, now.day);
+    final ongoing = !today.isBefore(start) && !today.isAfter(end);
+
+    return InkWell(
+      // 목록에서 누르면 달력의 그 날로 이동 — 같은 날 다른 일정도 같이 보인다.
+      onTap: () => setState(() {
+        _selectedDay = start;
+        _focusedDay = start;
+      }),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 3,
+              height: 30,
+              margin: const EdgeInsets.only(right: 10, top: 1),
+              decoration: BoxDecoration(
+                color: ink,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            SizedBox(
+              width: 74,
+              child: Text(
+                _rangeText(e),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: ongoing ? FontWeight.bold : FontWeight.w500,
+                  color: ongoing
+                      ? ink
+                      : (isDark ? Colors.white60 : Colors.black54),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    e.title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.3,
+                      fontWeight: ongoing ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  if (ongoing)
+                    Text(
+                      "진행중",
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: ink,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// "9.1" 또는 "9.1 ~ 9.5". 기간 일정이 대부분이라 시작일만으로는 부족하다.
+  String _rangeText(CalendarEvent e) {
+    String f(DateTime d) => "${d.month}.${d.day}";
+    final s = DateTime(e.startDate.year, e.startDate.month, e.startDate.day);
+    final en = DateTime(e.endDate.year, e.endDate.month, e.endDate.day);
+    return s == en ? f(s) : "${f(s)} ~ ${f(en)}";
   }
 
   Widget _buildDdaySection(Color color, bool isDark) {
@@ -435,7 +697,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ),
                 )
               else
-                ...sorted.map((item) => _buildDdayCard(item, color, isDark, now)),
+                ...sorted.map(
+                  (item) => _buildDdayCard(item, color, isDark, now),
+                ),
             ],
           ),
         );
@@ -492,7 +756,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 item.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
               ),
             ),
             Text(

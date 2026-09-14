@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'bus_timetable_data.dart';
 import 'calendar_screen.dart';
@@ -11,14 +12,20 @@ import 'constants.dart';
 import 'housing_screen.dart';
 import 'notice_model.dart';
 import 'notice_screen.dart';
+import 'firebase_sync_service.dart';
+import 'meal_rating.dart';
 import 'notice_service.dart';
+import 'offline_cache.dart';
 import 'root_screen.dart';
 import 'schedule_model.dart';
 import 'staff_contacts_screen.dart';
+import 'native_ad_card.dart';
 import 'ui_utils.dart';
 
-/// 홈 대시보드. 식단/버스/공지/일정 서브시스템을 한 화면에 모아 보여준다.
-/// 세로 스크롤, 섹션별 독립 위젯 — 2·3단계 카드 추가 시 구조 변경 없이 삽입 가능.
+/// 홈 대시보드 (Apple Inset Grouped & Settings Aesthetic)
+/// 애플 설정(Settings) 및 iOS 기본 앱 특유의 절제된 심플함,
+/// 정교한 스퀘어클(Squircle) 시스템 아이콘, 인셋 그룹(Inset Grouped) 레이아웃을
+/// 완벽하게 반영한 미니멀하고 직관적인 홈 화면.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -29,70 +36,109 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _scraper = KnueScraper();
 
-  // 식단 카드
+  // 식단 상태
   bool _mealLoading = true;
   bool _mealError = false;
   MealType _nextMealType = MealType.breakfast;
   List<String> _nextMealItems = const [];
+  MealSource _currentMealSource = MealSource.a;
 
-  // 버스 카드
+  /// 다음 끼니의 평가 집계. Firestore가 막혀 있으면 null로 남고, 그때는
+  /// 카드에 아무것도 표시하지 않는다(빈 자리를 만들지 않기 위해).
+  MealRatingSummary? _mealRating;
+
+  // 버스 상태
   bool _busLoading = true;
   bool _busError = false;
   String _busLabel = "운행 종료";
+  String _busRemainingHint = "";
 
-  // 키워드 알림 카드
+  // 키워드 알림 상태
   bool _keywordLoading = true;
   bool _keywordError = false;
   List<Notice> _keywordMatches = const [];
 
-  // 공지 미리보기 카드
+  // 공지 미리보기 상태
   bool _noticeLoading = true;
   bool _noticeError = false;
   List<Notice> _favNotices = const [];
 
-  // 일정 카드
+  // 일정 상태
   bool _upcomingLoading = true;
   bool _upcomingError = false;
   List<CalendarEvent> _upcomingAcademic = const [];
   List<DdayItem> _upcomingDdays = const [];
 
-  // 동아리 행사 카드
+  // 동아리 행사 상태
   bool _clubLoading = true;
   bool _clubError = false;
   List<ClubEvent> _clubEvents = const [];
 
+  // 강내면 실시간 날씨
+  KnueWeatherInfo? _weather;
+
   @override
   void initState() {
     super.initState();
-    _loadMeal();
-    _loadBus();
-    _loadKeywordAlerts();
-    _loadNoticePreview();
-    _loadUpcoming();
-    _loadClubEvents();
-    // 식단 탭에서 식당(source)을 바꾸면 홈 카드도 재시작 없이 갱신되도록.
-    defaultSourceNotifier.addListener(_loadMeal);
-    // 공지/동아리 화면의 백그라운드 캐시 갱신이 끝나도 홈 카드가 반영되도록.
-    NoticeCache.revision.addListener(_loadKeywordAlerts);
-    NoticeCache.revision.addListener(_loadNoticePreview);
+    _currentMealSource = defaultSourceNotifier.value;
+    _refreshAll();
+
+    // 리스너 연결.
+    // 각 카드는 캐시를 먼저 그리고 네트워크 갱신은 뒤에서 돈다. 갱신이 끝나면
+    // revision이 올라오고, 그때 최신 데이터로 다시 그린다.
+    defaultSourceNotifier.addListener(_onSourceChanged);
+    NoticeCache.revision.addListener(_onNoticeCacheUpdated);
+    PreferencesService.favoriteBoards.addListener(_onNoticeCacheUpdated);
+    PreferencesService.noticeKeywords.addListener(_onNoticeCacheUpdated);
     ClubEventCache.revision.addListener(_loadClubEvents);
+    MealCache.revision.addListener(_loadMeal);
+    CalendarCache.revision.addListener(_loadUpcoming);
   }
 
   @override
   void dispose() {
-    defaultSourceNotifier.removeListener(_loadMeal);
-    NoticeCache.revision.removeListener(_loadKeywordAlerts);
-    NoticeCache.revision.removeListener(_loadNoticePreview);
+    defaultSourceNotifier.removeListener(_onSourceChanged);
+    NoticeCache.revision.removeListener(_onNoticeCacheUpdated);
+    PreferencesService.favoriteBoards.removeListener(_onNoticeCacheUpdated);
+    PreferencesService.noticeKeywords.removeListener(_onNoticeCacheUpdated);
     ClubEventCache.revision.removeListener(_loadClubEvents);
+    MealCache.revision.removeListener(_loadMeal);
+    CalendarCache.revision.removeListener(_loadUpcoming);
     super.dispose();
   }
 
+  void _onSourceChanged() {
+    _currentMealSource = defaultSourceNotifier.value;
+    _loadMeal();
+  }
+
+  void _onNoticeCacheUpdated() {
+    _loadKeywordAlerts();
+    _loadNoticePreview();
+  }
+
+  /// 사용자가 직접 당겨서 새로고침할 때. 갱신 제한을 풀어 즉시 다시 받아온다.
+  Future<void> _pullToRefresh() async {
+    RefreshThrottle.reset();
+    await _refreshAll();
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _loadMeal(),
+      _loadBus(),
+      _loadKeywordAlerts(),
+      _loadNoticePreview(),
+      _loadUpcoming(),
+      _loadClubEvents(),
+      _loadWeather(),
+    ]);
+  }
+
   // ---------------------------------------------------------------------
-  // 데이터 로딩 (섹션별 독립 — 하나가 실패해도 다른 섹션은 정상 표시)
+  // 데이터 로딩 로직
   // ---------------------------------------------------------------------
 
-  /// 현재 시각 기준 다음 끼니 판정. statusFor로 아직 끝나지 않은(대기중 또는
-  /// 제공중) 첫 끼니를 찾고, 저녁까지 모두 지났으면 내일 아침으로 넘어간다.
   ({MealType type, DateTime date}) _resolveNextMeal(DateTime now) {
     final source = defaultSourceNotifier.value;
     for (final type in [MealType.breakfast, MealType.lunch, MealType.dinner]) {
@@ -101,14 +147,18 @@ class _HomeScreenState extends State<HomeScreen> {
         return (type: type, date: now);
       }
     }
-    // 학생회관은 조식을 운영하지 않으므로 내일 첫 끼니는 점심부터.
-    final tomorrowFirstMeal =
-        source == MealSource.b ? MealType.lunch : MealType.breakfast;
+    final tomorrowFirstMeal = source == MealSource.b
+        ? MealType.lunch
+        : MealType.breakfast;
     return (type: tomorrowFirstMeal, date: now.add(const Duration(days: 1)));
   }
 
   Future<void> _loadMeal() async {
-    if (mounted) setState(() { _mealLoading = true; _mealError = false; });
+    if (mounted)
+      setState(() {
+        _mealLoading = true;
+        _mealError = false;
+      });
     try {
       final now = DateTime.now();
       final source = defaultSourceNotifier.value;
@@ -122,13 +172,35 @@ class _HomeScreenState extends State<HomeScreen> {
         _nextMealItems = items;
         _mealLoading = false;
       });
+      // 별점은 식단이 그려진 뒤에 따로 채운다 — 이걸 기다리느라 카드가
+      // 늦게 뜨면 안 된다.
+      _loadMealRating(next.date, source, next.type);
     } catch (e) {
-      if (mounted) setState(() { _mealLoading = false; _mealError = true; });
+      if (mounted)
+        setState(() {
+          _mealLoading = false;
+          _mealError = true;
+        });
     }
   }
 
+  Future<void> _loadMealRating(
+      DateTime date, MealSource source, MealType type) async {
+    final summary = await FirebaseSyncService.getMealRatingSummary(
+      date: date,
+      source: source,
+      mealType: type,
+    );
+    if (!mounted) return;
+    setState(() => _mealRating = summary);
+  }
+
   Future<void> _loadBus() async {
-    if (mounted) setState(() { _busLoading = true; _busError = false; });
+    if (mounted)
+      setState(() {
+        _busLoading = true;
+        _busError = false;
+      });
     try {
       final isWeekday = DateTime.now().weekday <= 5;
       String? best;
@@ -142,66 +214,123 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (!mounted) return;
       setState(() {
-        _busLabel = (best != null && bestRoute != null)
-            ? "$bestRoute번 · $best"
-            : "운행 종료";
+        if (best != null && bestRoute != null) {
+          _busLabel = "$bestRoute번";
+          _busRemainingHint = "$best 출발";
+        } else {
+          _busLabel = "운행 종료";
+          _busRemainingHint = "첫차 05:30";
+        }
         _busLoading = false;
       });
     } catch (e) {
-      if (mounted) setState(() { _busLoading = false; _busError = true; });
+      if (mounted)
+        setState(() {
+          _busLoading = false;
+          _busError = true;
+        });
     }
   }
 
   Future<void> _loadKeywordAlerts() async {
-    if (mounted) setState(() { _keywordLoading = true; _keywordError = false; });
+    if (mounted)
+      setState(() {
+        _keywordLoading = true;
+        _keywordError = false;
+      });
     try {
       final cached = await NoticeCache.load() ?? [];
       final keywords = PreferencesService.noticeKeywords.value;
       final favBoards = PreferencesService.favoriteBoards.value;
-      // 실제 푸시 알림(KeywordAlertService.filterNewMatches)과 같은 기준(관심 게시판
-      // 제한)을 적용 — 그래야 이 카드에 보이는 매치가 실제로 알림도 오는 매치와 일치한다.
       final matches = keywords.isEmpty
           ? <Notice>[]
           : cached
-              .where((n) => favBoards.isEmpty || favBoards.contains(n.category))
-              .where((n) => keywords.any(
-                  (kw) => n.title.toLowerCase().contains(kw.toLowerCase())))
-              .take(3)
-              .toList();
+                .where(
+                  (n) => favBoards.isEmpty || favBoards.contains(n.category),
+                )
+                .where(
+                  (n) => keywords.any(
+                    (kw) => n.title.toLowerCase().contains(kw.toLowerCase()),
+                  ),
+                )
+                .take(3)
+                .toList();
       if (!mounted) return;
       setState(() {
         _keywordMatches = matches;
         _keywordLoading = false;
       });
     } catch (e) {
-      if (mounted) setState(() { _keywordLoading = false; _keywordError = true; });
+      if (mounted)
+        setState(() {
+          _keywordLoading = false;
+          _keywordError = true;
+        });
     }
   }
 
   Future<void> _loadNoticePreview() async {
-    if (mounted) setState(() { _noticeLoading = true; _noticeError = false; });
+    if (mounted) {
+      setState(() {
+        _noticeLoading = _favNotices.isEmpty;
+        _noticeError = false;
+      });
+    }
     try {
-      final favBoards = PreferencesService.favoriteBoards.value.toSet();
-      // 즐겨찾는 게시판이 없으면 결과는 항상 빈 목록이니 크롤링 자체를 건너뛴다.
-      // (빈 Set을 onlyCategories로 넘기면 모든 게시판이 필터링돼 매번 헛수고만 함)
-      final filtered = favBoards.isEmpty
-          ? <Notice>[]
-          : (await _scraper.fetchAllNotices(onlyCategories: favBoards))
-              .where((n) => favBoards.contains(n.category))
-              .take(5)
-              .toList();
+      var favBoards = PreferencesService.favoriteBoards.value.toSet();
+      if (favBoards.isEmpty) {
+        favBoards = const {"대학소식", "학사공지", "청람소양", "장학금"};
+      }
+
+      // 1. 오프라인 캐시에서 먼저 즉시 로드
+      final cached = await NoticeCache.load();
+      if (cached != null && cached.isNotEmpty && mounted) {
+        final cachedFiltered = cached
+            .where((n) => favBoards.contains(n.category))
+            .take(4)
+            .toList();
+        if (cachedFiltered.isNotEmpty) {
+          setState(() {
+            _favNotices = cachedFiltered;
+            _noticeLoading = false;
+          });
+        }
+      }
+
+      // 2. 최신 공지 스크래핑
+      final fetched = await _scraper.fetchAllNotices(
+        onlyCategories: favBoards,
+      );
+      final filtered = fetched
+          .where((n) => favBoards.contains(n.category))
+          .take(4)
+          .toList();
+
       if (!mounted) return;
       setState(() {
-        _favNotices = filtered;
+        if (filtered.isNotEmpty) {
+          _favNotices = filtered;
+        }
         _noticeLoading = false;
       });
     } catch (e) {
-      if (mounted) setState(() { _noticeLoading = false; _noticeError = true; });
+      if (mounted) {
+        setState(() {
+          _noticeLoading = false;
+          if (_favNotices.isEmpty) {
+            _noticeError = true;
+          }
+        });
+      }
     }
   }
 
   Future<void> _loadUpcoming() async {
-    if (mounted) setState(() { _upcomingLoading = true; _upcomingError = false; });
+    if (mounted)
+      setState(() {
+        _upcomingLoading = true;
+        _upcomingError = false;
+      });
     try {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
@@ -209,8 +338,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final upcoming = events.where((e) {
         final end = DateTime(e.endDate.year, e.endDate.month, e.endDate.day);
         return !end.isBefore(today);
-      }).toList()
-        ..sort((a, b) => a.startDate.compareTo(b.startDate));
+      }).toList()..sort((a, b) => a.startDate.compareTo(b.startDate));
 
       final ddays = List<DdayItem>.from(PreferencesService.ddayItems.value)
         ..sort((a, b) => a.daysLeft(now).compareTo(b.daysLeft(now)));
@@ -218,19 +346,26 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _upcomingAcademic = upcoming.take(3).toList();
-        _upcomingDdays = ddays.take(2).toList();
+        _upcomingDdays = ddays.take(3).toList();
         _upcomingLoading = false;
       });
     } catch (e) {
-      if (mounted) setState(() { _upcomingLoading = false; _upcomingError = true; });
+      if (mounted)
+        setState(() {
+          _upcomingLoading = false;
+          _upcomingError = true;
+        });
     }
   }
 
   Future<void> _loadClubEvents() async {
-    if (mounted) setState(() { _clubLoading = true; _clubError = false; });
+    if (mounted)
+      setState(() {
+        _clubLoading = true;
+        _clubError = false;
+      });
     try {
       final all = await ClubEventService.fetchAll();
-      // 녹출 우선 + 다가오는(시작일 오늘 이후) 순, 상위 3건
       final now = DateTime.now();
       final upcoming = all
           .where((e) => (e.endDate ?? e.startDate).isAfter(now))
@@ -245,122 +380,181 @@ class _HomeScreenState extends State<HomeScreen> {
         _clubLoading = false;
       });
     } catch (e) {
-      if (mounted) setState(() { _clubLoading = false; _clubError = true; });
+      if (mounted)
+        setState(() {
+          _clubLoading = false;
+          _clubError = true;
+        });
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Build
-  // ---------------------------------------------------------------------
+  Future<void> _loadWeather() async {
+    try {
+      final info = await fetchGangnaeWeather();
+      if (!mounted || info == null) return;
+      setState(() {
+        _weather = info;
+        _greeting = pickGreeting(DateTime.now(), weather: info);
+      });
+    } catch (_) {}
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<Color>(
-      valueListenable: themeColor,
-      builder: (context, color, child) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Scaffold(
-          body: SingleChildScrollView(
-            padding: EdgeInsets.zero,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeroHeader(color, isDark),
-                Padding(
-                  // 좌우 16 — 버스/식단 탭 카드 여백과 정렬을 맞춘다.
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildKeywordAlertsCard(color, isDark),
-                      const SizedBox(height: 14),
-                      _buildNoticePreviewCard(color, isDark),
-                      const SizedBox(height: 14),
-                      _buildUpcomingCard(color, isDark),
-                      const SizedBox(height: 14),
-                      _buildClubEventsCard(color, isDark),
-                      const SizedBox(height: 14),
-                      _buildHousingCard(color, isDark),
-                      const SizedBox(height: 14),
-                      _buildMinorShortcutsRow(color, isDark),
-                    ],
-                  ),
-                ),
-              ],
+  /// 임시 날씨 시뮬레이터 (비, 바람, 눈, 맑음 등 테스트용)
+  void _showWeatherSimulatorDialog() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    void applyWeather(KnueWeatherInfo? simulated, String label) {
+      Navigator.pop(context);
+      if (simulated == null) {
+        _loadWeather();
+        showToast(context, "실시간 날씨로 복구했습니다.");
+      } else {
+        setState(() {
+          _weather = simulated;
+          _greeting = pickGreeting(DateTime.now(), weather: simulated);
+        });
+        showToast(context, "$label 모드를 적용했습니다.");
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.tune_rounded, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              "날씨 시뮬레이터 (테스트)",
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              "날씨별 멘트와 컬러 카드 앰비언트 효과를 테스트해보세요.",
+              style: TextStyle(
+                fontSize: 12.5,
+                color: isDark ? Colors.white60 : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildWeatherOption(
+              emoji: "🌧️",
+              title: "비 / 소나기",
+              subtitle: "16°C · 비 멘트 & 물빛 아쿠아 틴트",
+              onTap: () => applyWeather(
+                const KnueWeatherInfo(temp: 16, weatherCode: 61, windSpeed: 8),
+                "🌧️ 비 / 소나기",
+              ),
+            ),
+            _buildWeatherOption(
+              emoji: "💨",
+              title: "강풍 / 쌀쌀함",
+              subtitle: "4°C (풍속 25km/h) · 겉옷 멘트 & 쿨 실버",
+              onTap: () => applyWeather(
+                const KnueWeatherInfo(temp: 4, weatherCode: 2, windSpeed: 25),
+                "💨 강풍 / 쌀쌀함",
+              ),
+            ),
+            _buildWeatherOption(
+              emoji: "❄️",
+              title: "눈 / 한파",
+              subtitle: "-3°C · 눈 멘트 & 스노우 프로스트 글로우",
+              onTap: () => applyWeather(
+                const KnueWeatherInfo(temp: -3, weatherCode: 71, windSpeed: 10),
+                "❄️ 눈 / 한파",
+              ),
+            ),
+            _buildWeatherOption(
+              emoji: "☀️",
+              title: "화창한 맑음",
+              subtitle: "21°C · 맑은 날 멘트 & 골든 틴트",
+              onTap: () => applyWeather(
+                const KnueWeatherInfo(temp: 21, weatherCode: 0, windSpeed: 5),
+                "☀️ 화창한 맑음",
+              ),
+            ),
+            _buildWeatherOption(
+              emoji: "🔥",
+              title: "무더위 / 폭염",
+              subtitle: "33°C · 더위 케어 멘트 & 앰버 펄",
+              onTap: () => applyWeather(
+                const KnueWeatherInfo(temp: 33, weatherCode: 0, windSpeed: 4),
+                "🔥 무더위 / 폭염",
+              ),
+            ),
+            const Divider(height: 20),
+            _buildWeatherOption(
+              emoji: "🔄",
+              title: "실시간 강내면 날씨",
+              subtitle: "Open-Meteo 실제 측정값으로 되돌리기",
+              isReset: true,
+              onTap: () => applyWeather(null, "실시간 강내면 날씨"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("닫기"),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  // --- 1. 히어로 헤더 (브랜디드 그라디언트 + 오늘 브리핑) ---------------
-
-  Widget _buildHeroHeader(Color color, bool isDark) {
-    final now = DateTime.now();
-    final dateStr = DateFormat('M월 d일 EEEE', 'ko_KR').format(now);
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        // themeColor 기반 그라디언트 — 설정에서 앱 색 바꾸면 헤더도 함께 변경.
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.lerp(color, Colors.white, 0.15)!,
-            color,
-            Color.lerp(color, Colors.black, 0.15)!,
-          ],
-        ),
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 22),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildWeatherOption({
+    required String emoji,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    bool isReset = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isReset
+                ? (isDark
+                    ? Colors.blue.withValues(alpha: 0.15)
+                    : Colors.blue.shade50)
+                : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
             children: [
-              Text(
-                dateStr,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.85),
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                _greeting(now),
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 15),
-              // 두 타일 높이를 맞추기 위해 IntrinsicHeight로 Row 높이를 한정한다.
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              Text(emoji, style: const TextStyle(fontSize: 20)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: _HeroTile(
-                        icon: Icons.restaurant_menu_rounded,
-                        label: _nextMealType.label,
-                        onTap: () =>
-                            RootNavigationScreen.switchTab(AppTab.meal),
-                        child: _mealHeroChild(),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isReset
+                            ? Colors.blue
+                            : (isDark ? Colors.white : Colors.black87),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _HeroTile(
-                        icon: Icons.directions_bus_rounded,
-                        label: "다음 버스",
-                        onTap: () =>
-                            RootNavigationScreen.switchTab(AppTab.bus),
-                        child: _busHeroChild(),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: isDark ? Colors.white54 : Colors.grey.shade600,
                       ),
                     ),
                   ],
@@ -373,32 +567,427 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _heroLoading() => const SizedBox(
-        height: 18,
-        width: 18,
-        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-      );
+  // ---------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------
 
-  Widget _heroRetry(VoidCallback onRetry) => GestureDetector(
-        onTap: onRetry,
-        child: Text(
-          "다시 시도",
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withValues(alpha: 0.9),
-            decoration: TextDecoration.underline,
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<Color>(
+      valueListenable: themeColor,
+      builder: (context, color, child) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
+        return Scaffold(
+          backgroundColor: KnueTokens.bg(isDark),
+          body: RefreshIndicator(
+            onRefresh: _pullToRefresh,
+            color: color,
+            edgeOffset: 120,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. 브랜드 히어로 헤더 (청람 그라디언트 + 오늘의 브리핑)
+                  //    — 청람밥상/청람버스 헤더와 같은 색 공식을 써서 첫 화면부터
+                  //    같은 앱이라는 감각을 만든다.
+                  _buildHeroHeader(color, isDark),
+
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 2. 주요 서비스 빠른 실행 (테마색 단일 톤)
+                        const KnueSectionHeader(title: "빠른 실행"),
+                        _buildQuickActionsGrid(color, isDark),
+                        const SizedBox(height: 22),
+
+                        // 3. 학사일정 및 D-Day
+                        KnueSectionHeader(
+                          title: "학사일정 & D-DAY",
+                          actionText: "전체보기",
+                          actionColor: color,
+                          onAction: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CalendarScreen(),
+                            ),
+                          ),
+                        ),
+                        _buildUpcomingInsetGroup(color, isDark),
+                        const SizedBox(height: 20),
+
+                        // 스폰서 / 추천 네이티브 카드
+                        const KnueNativeAdCard(placement: 'home'),
+                        const SizedBox(height: 22),
+
+                        // 4. 키워드 맞춤 알림
+                        KnueSectionHeader(
+                          title: "키워드 알림",
+                          actionText: "설정",
+                          actionColor: color,
+                          onAction: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NoticeScreen(),
+                            ),
+                          ),
+                        ),
+                        _buildKeywordInsetGroup(color, isDark),
+                        const SizedBox(height: 22),
+
+                        // 5. 청람 공지사항
+                        KnueSectionHeader(
+                          title: "청람 공지사항",
+                          actionText: "전체보기",
+                          actionColor: color,
+                          onAction: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NoticeScreen(),
+                            ),
+                          ),
+                        ),
+                        _buildNoticeInsetGroup(color, isDark),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // 1. 애플 스타일 헤더 (iOS Large Title & Date Caption)
+  // ---------------------------------------------------------------------
+
+  Widget _buildHeroHeader(Color color, bool isDark) {
+    final now = DateTime.now();
+    final dateStr = DateFormat('M월 d일 EEEE', 'ko_KR').format(now);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        // 청람밥상 앱바와 같은 펄 공식 + 날씨 앰비언트(비, 바람, 눈 등) 미세 조색
+        gradient: KnueWeatherAtmosphere.headerGradient(color, isDark, _weather),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        // 헤더 안의 모든 흰 글씨·아이콘에 그림자를 한 번에 건다. 개별 Text가
+        // shadows를 지정하지 않으면 이 값이 상속되므로, 색을 밝은 노랑으로
+        // 바꿔도 글씨가 묻히지 않는다.
+        child: DefaultTextStyle.merge(
+          style: TextStyle(shadows: KnueTokens.headerTextShadow),
+          child: IconTheme.merge(
+            data: IconThemeData(shadows: KnueTokens.headerTextShadow),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            dateStr,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.1,
+                              color: Colors.white.withValues(alpha: 0.9),
+                              shadows: KnueTokens.headerTextShadow,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => _showWeatherSimulatorDialog(),
+                            child: Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.3),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _weather != null
+                                        ? "${_weather!.emoji} ${_weather!.temp.round()}°"
+                                        : "🌤️ 날씨",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white.withValues(alpha: 0.95),
+                                      fontFeatures: KnueTokens.tabularFigures,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Icon(
+                                    Icons.tune_rounded,
+                                    size: 11,
+                                    color: Colors.white.withValues(alpha: 0.75),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          "KNUE MATE",
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: Colors.white.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _greeting,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.6,
+                      color: Colors.white,
+                      shadows: KnueTokens.headerTextShadow,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // 오늘의 브리핑 — 식단/버스 요약을 반투명 타일로 헤더 안에 담는다.
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: _buildHeroTile(
+                            icon: Icons.restaurant_menu_rounded,
+                            title: "오늘의 식단",
+                            chip:
+                                "${_nextMealType.label} · ${_currentMealSource.shortLabel}",
+                            footer: "식단 상세",
+                            extra: _buildHeroMealRating(),
+                            onTap: () =>
+                                RootNavigationScreen.switchTab(AppTab.meal),
+                            body: _buildHeroMealBody(),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildHeroTile(
+                            icon: Icons.directions_bus_rounded,
+                            title: "다음 버스",
+                            chip: "조치원·청주",
+                            footer: "실시간 위치",
+                            onTap: () =>
+                                RootNavigationScreen.switchTab(AppTab.bus),
+                            body: _buildHeroBusBody(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-      );
+      ),
+    );
+  }
 
-  Widget _mealHeroChild() {
-    if (_mealLoading) return _heroLoading();
-    if (_mealError) return _heroRetry(_loadMeal);
+  /// 히어로 위 흰 글씨용 그림자. 유리 타일은 반투명 흰색을 덧씌워 배경을 더
+  /// 밝게 만들기 때문에, 헤더 본문보다 오히려 대비가 불리하다 — 같은 그림자를
+  /// 타일 글씨에도 깐다.
+  List<Shadow> get _heroShadow => KnueTokens.headerTextShadow;
+
+  /// 히어로 안의 반투명 브리핑 타일 한 장. 흰 텍스트 + 유리 질감.
+  Widget _buildHeroTile({
+    required IconData icon,
+    required String title,
+    required String chip,
+    required String footer,
+    required VoidCallback onTap,
+    required Widget body,
+    /// 하단 링크 줄 위에 덧붙일 한 줄(식단 타일의 별점 등).
+    Widget? extra,
+  }) {
+    return AnimatedScaleButton(
+      onTap: onTap,
+      scaleFactor: 0.96,
+      child: GlassContainer(
+        opacity: 0.12,
+        blur: 12,
+        borderRadius: BorderRadius.circular(16),
+        padding: const EdgeInsets.all(12),
+        border: Border.all(
+          color: KnueWeatherAtmosphere.tileBorderColor(_weather),
+          width: 1.0,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, size: 17, color: Colors.white),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    chip,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+                color: Colors.white,
+                shadows: _heroShadow,
+              ),
+            ),
+            const SizedBox(height: 5),
+            body,
+            const Spacer(),
+            if (extra != null) ...[
+              const SizedBox(height: 6),
+              extra,
+            ],
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Text(
+                  footer,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 13,
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 식단 타일의 별점 줄. 평가가 하나도 없거나 불러오지 못했으면 아무것도
+  /// 그리지 않는다 — "0.0점" 같은 표시가 오히려 오해를 부른다.
+  Widget? _buildHeroMealRating() {
+    final s = _mealRating;
+    if (s == null || !s.hasRatings) return null;
+    final style = s.majorityStyle;
+    return Row(
+      children: [
+        const Icon(Icons.star_rounded, size: 13, color: Colors.white),
+        const SizedBox(width: 3),
+        Text(
+          s.average.toStringAsFixed(1),
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+            fontFeatures: KnueTokens.tabularFigures,
+            shadows: _heroShadow,
+          ),
+        ),
+        const SizedBox(width: 3),
+        Flexible(
+          child: Text(
+            style == null ? "· ${s.count}명" : "· ${style.label}",
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.8),
+              fontFeatures: KnueTokens.tabularFigures,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeroMealBody() {
+    if (_mealLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        ),
+      );
+    }
+    if (_mealError) {
+      return Text(
+        "불러오기 실패 · 당겨서 새로고침",
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.white.withValues(alpha: 0.75),
+        ),
+      );
+    }
     if (_nextMealItems.isEmpty) {
       return Text(
-        "등록된 메뉴가 없습니다",
-        style:
-            TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
+        "등록된 식단 없음",
+        style: TextStyle(
+          fontSize: 11.5,
+          color: Colors.white.withValues(alpha: 0.7),
+        ),
       );
     }
     return Text(
@@ -406,623 +995,727 @@ class _HomeScreenState extends State<HomeScreen> {
       maxLines: 3,
       overflow: TextOverflow.ellipsis,
       style: const TextStyle(
-        fontSize: 12,
-        height: 1.4,
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
-
-  Widget _busHeroChild() {
-    if (_busLoading) return _heroLoading();
-    if (_busError) return _heroRetry(_loadBus);
-    return Text(
-      _busLabel,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
+        fontSize: 11.5,
+        height: 1.45,
+        fontWeight: FontWeight.w500,
+        letterSpacing: -0.1,
         color: Colors.white,
       ),
     );
   }
 
-  String _greeting(DateTime now) {
-    final hour = now.hour;
-    if (hour < 9) return "좋은 아침이에요";
-    if (hour < 14) return "점심 맛있게 드세요";
-    if (hour < 19) return "오늘 하루도 힘내세요";
-    return "편안한 저녁 보내세요";
-  }
-
-  // --- 2. 키워드 알림 카드 ------------------------------------------------
-
-  Widget _buildKeywordAlertsCard(Color color, bool isDark) {
-    return _SectionCard(
-      isDark: isDark,
-      title: "키워드 알림",
-      icon: Icons.notifications_active_outlined,
-      color: color,
-      accentColor: const Color(0xFFF59E0B),
-      child: _keywordLoading
-          ? const _CardLoading()
-          : _keywordError
-              ? _CardFailure(onRetry: _loadKeywordAlerts)
-              : (PreferencesService.noticeKeywords.value.isEmpty
-                  ? _buildEmptyKeywordPrompt(color, isDark)
-                  : (_keywordMatches.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Text(
-                            "일치하는 새 공지가 없습니다",
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? Colors.white38 : Colors.black38,
-                            ),
-                          ),
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: _keywordMatches
-                              .map((n) => _NoticeRow(notice: n, color: color, isDark: isDark))
-                              .toList(),
-                        ))),
-    );
-  }
-
-  Widget _buildEmptyKeywordPrompt(Color color, bool isDark) {
+  Widget _buildHeroBusBody() {
+    if (_busLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        ),
+      );
+    }
+    if (_busError) {
+      return Text(
+        "불러오기 실패 · 당겨서 새로고침",
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.white.withValues(alpha: 0.75),
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "관심 키워드를 등록해 보세요",
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark ? Colors.white54 : Colors.black54,
+          _busLabel,
+          style: const TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.4,
+            color: Colors.white,
+            fontFeatures: KnueTokens.tabularFigures,
           ),
         ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 32,
-          child: OutlinedButton(
-            // NoticeScreen 내부 키워드 관리 바텀시트는 private 위젯이라 홈에서
-            // 직접 열 수 없어, 청람공지 화면으로 이동시키는 것으로 단순화했다.
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const NoticeScreen()),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: color,
-              side: BorderSide(color: color),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-            child: const Text("키워드 등록하기", style: TextStyle(fontSize: 12)),
+        Text(
+          _busRemainingHint,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w500,
+            color: Colors.white.withValues(alpha: 0.8),
+            fontFeatures: KnueTokens.tabularFigures,
           ),
         ),
       ],
     );
   }
 
-  // --- 3. 공지 미리보기 카드 ----------------------------------------------
+  // ---------------------------------------------------------------------
+  // 2. 주요 서비스 빠른 실행 — 테마색 단일 톤 (2색 체계)
+  // ---------------------------------------------------------------------
 
-  Widget _buildNoticePreviewCard(Color color, bool isDark) {
-    return _SectionCard(
+  Widget _buildQuickActionsGrid(Color themeClr, bool isDark) {
+    // 공연·행사 캡션: 예정 행사 수를 라벨 아래 그레이로만 — 뱃지 금지.
+    final String clubCaption = _clubLoading
+        ? "확인 중"
+        : _clubError
+        ? "확인 실패"
+        : _clubEvents.isEmpty
+        ? "예정 없음"
+        : "행사 ${_clubEvents.length}건";
+
+    return KnueCard(
       isDark: isDark,
-      title: "즐겨찾는 공지",
-      icon: Icons.campaign_outlined,
-      color: color,
-      accentColor: const Color(0xFFFB923C),
-      onSeeAll: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const NoticeScreen()),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      child: Row(
+        children: [
+          // 네 개가 나란히 붙어 있어 같은 색이면 가장 단조로워 보이는 자리.
+          // 게시판과 같은 잉크 팔레트로 서로만 구분되게 한다.
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.festival_rounded,
+              tint: KnueTokens.categoryColor('공연·행사', isDark),
+              label: "공연·행사",
+              caption: clubCaption,
+              isDark: isDark,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ClubEventsScreen()),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.apartment_rounded,
+              tint: KnueTokens.categoryColor('자취방', isDark),
+              label: "자취방",
+              caption: "월세·연락처",
+              isDark: isDark,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HousingScreen()),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.directions_run_rounded,
+              tint: KnueTokens.categoryColor('캠퍼스런', isDark),
+              label: "캠퍼스런",
+              caption: "얼른뛰어!",
+              isDark: isDark,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CampusRunScreen()),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.phone_in_talk_rounded,
+              tint: KnueTokens.categoryColor('교직원 연락처', isDark),
+              label: "연락처",
+              caption: "교직원",
+              isDark: isDark,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const StaffContactsScreen()),
+              ),
+            ),
+          ),
+        ],
       ),
-      child: _noticeLoading
-          ? const _CardLoading()
-          : _noticeError
-              ? _CardFailure(onRetry: _loadNoticePreview)
-              : (_favNotices.isEmpty
-                  ? Text(
-                      "즐겨찾는 게시판의 공지가 없습니다",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white38 : Colors.black38,
-                      ),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: _favNotices
-                          .map((n) => _NoticeRow(notice: n, color: color, isDark: isDark))
-                          .toList(),
-                    )),
     );
   }
 
-  // --- 4. 일정 카드 --------------------------------------------------------
-
-  Widget _buildUpcomingCard(Color color, bool isDark) {
-    return _SectionCard(
-      isDark: isDark,
-      title: "다가오는 일정",
-      icon: Icons.event_note_outlined,
-      color: color,
-      accentColor: const Color(0xFF8B5CF6),
-      onSeeAll: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const CalendarScreen()),
+  Widget _buildQuickActionItem({
+    required IconData icon,
+    required Color tint,
+    required String label,
+    required String caption,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return AnimatedScaleButton(
+      onTap: onTap,
+      scaleFactor: 0.92,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              // 잉크 워시 배경 + 같은 색 아이콘 — 원색 스쿼클보다 훨씬 잔잔하다.
+              color: tint.withValues(alpha: isDark ? 0.18 : 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: tint),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
+              color: isDark ? const Color(0xFFE5E5EA) : const Color(0xFF1C1C1E),
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            caption,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w500,
+              color: KnueTokens.caption(isDark),
+              fontFeatures: KnueTokens.tabularFigures,
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // 4. 학사일정 & D-Day (Inset Grouped)
+  // ---------------------------------------------------------------------
+
+  Widget _buildUpcomingInsetGroup(Color themeClr, bool isDark) {
+    return KnueCard(
+      isDark: isDark,
       child: _upcomingLoading
-          ? const _CardLoading()
+          ? const _AppleLoading()
           : _upcomingError
-              ? _CardFailure(onRetry: _loadUpcoming)
-              : (_upcomingAcademic.isEmpty && _upcomingDdays.isEmpty
-                  ? Text(
-                      "등록된 일정이 없습니다",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white38 : Colors.black38,
-                      ),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ..._upcomingAcademic.map((e) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 3),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.circle,
-                                      size: 5, color: color),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      e.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 13),
-                                    ),
-                                  ),
-                                  Text(
-                                    _formatShortDate(e.startDate),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: isDark
-                                          ? Colors.white38
-                                          : Colors.black38,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )),
-                        if (_upcomingAcademic.isNotEmpty && _upcomingDdays.isNotEmpty)
-                          const SizedBox(height: 6),
-                        if (_upcomingDdays.isNotEmpty)
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            children: _upcomingDdays.map((d) {
-                              final left = d.daysLeft(DateTime.now());
-                              return Chip(
-                                label: Text(
-                                  "${_ddayLabel(left)} ${d.title}",
-                                  style: TextStyle(
-                                      fontSize: 11, color: color),
-                                ),
-                                backgroundColor: color.withValues(alpha: 0.12),
-                                side: BorderSide.none,
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              );
-                            }).toList(),
+          ? _AppleErrorRetry(onRetry: _loadUpcoming)
+          : Column(
+              children: [
+                // D-Day 목록
+                if (_upcomingDdays.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: _upcomingDdays.map((d) {
+                        final left = d.daysLeft(DateTime.now());
+                        // 2색 체계: 임박(D-3 이내)만 보조색(앰버)으로 켠다.
+                        final urgent = left >= 0 && left <= 3;
+                        final warmClr = KnueTokens.warm(isDark);
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
                           ),
-                      ],
-                    )),
-    );
-  }
+                          decoration: BoxDecoration(
+                            color: urgent
+                                ? warmClr.withValues(
+                                    alpha: isDark ? 0.16 : 0.10,
+                                  )
+                                : (isDark
+                                      ? const Color(0xFF2C2C2E)
+                                      : const Color(0xFFF2F2F7)),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _formatDday(left),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  fontFeatures: KnueTokens.tabularFigures,
+                                  color: urgent ? warmClr : themeClr,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                d.title,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF1C1C1E),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  if (_upcomingAcademic.isNotEmpty)
+                    Divider(
+                      height: 0.5,
+                      thickness: 0.5,
+                      color: isDark
+                          ? const Color(0xFF2C2C2E)
+                          : const Color(0xFFE5E5EA),
+                    ),
+                ],
 
-  // --- 5. 동아리 행사 카드 --------------------------------------------------
-
-  Widget _buildClubEventsCard(Color color, bool isDark) {
-    return _SectionCard(
-      isDark: isDark,
-      title: "동아리 공연·행사",
-      icon: Icons.celebration_outlined,
-      color: color,
-      accentColor: const Color(0xFFEC4899),
-      onSeeAll: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ClubEventsScreen()),
-      ),
-      child: _clubLoading
-          ? const _CardLoading()
-          : _clubError
-              ? _CardFailure(onRetry: _loadClubEvents)
-              : (_clubEvents.isEmpty
-                  ? Text(
-                      "예정된 공연·행사가 없습니다",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white38 : Colors.black38,
+                // 학사 일정 목록
+                if (_upcomingAcademic.isEmpty && _upcomingDdays.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: Center(
+                      child: Text(
+                        "예정된 일정이 없습니다",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF8E8E93),
+                        ),
                       ),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: _clubEvents.map((e) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 3),
+                    ),
+                  )
+                else if (_upcomingAcademic.isNotEmpty)
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _upcomingAcademic.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 0.5,
+                      indent: 48,
+                      thickness: 0.5,
+                      color: isDark
+                          ? const Color(0xFF2C2C2E)
+                          : const Color(0xFFE5E5EA),
+                    ),
+                    itemBuilder: (context, index) {
+                      final event = _upcomingAcademic[index];
+                      final dateStr =
+                          "${event.startDate.month}/${event.startDate.day}";
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
                         child: Row(
                           children: [
-                            if (e.isFeatured) ...[
-                              Icon(Icons.star, size: 12, color: color),
-                              const SizedBox(width: 4),
-                            ],
+                            _TintSquircle(
+                              icon: Icons.event_note_rounded,
+                              tint: themeClr,
+                              isDark: isDark,
+                            ),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                "${e.title} · ${e.clubName}",
+                                event.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF000000),
+                                ),
                               ),
                             ),
+                            const SizedBox(width: 8),
                             Text(
-                              _formatShortDate(e.startDate),
+                              dateStr,
                               style: TextStyle(
-                                fontSize: 11,
-                                color: isDark ? Colors.white38 : Colors.black38,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? const Color(0xFF8E8E93)
+                                    : const Color(0xFF8E8E93),
                               ),
                             ),
                           ],
                         ),
-                      )).toList(),
-                    )),
-    );
-  }
-
-  String _formatShortDate(DateTime d) =>
-      "${d.month}.${d.day.toString().padLeft(2, '0')}";
-
-  String _ddayLabel(int daysLeft) {
-    if (daysLeft == 0) return "D-DAY";
-    return daysLeft > 0 ? "D-$daysLeft" : "D+${-daysLeft}";
-  }
-
-  // --- 6. 자취방 구하기 (셸 — 실 데이터 연결 전) -----------------------
-
-  Widget _buildHousingCard(Color color, bool isDark) {
-    return _SectionCard(
-      isDark: isDark,
-      title: "자취방 구하기",
-      icon: Icons.apartment_outlined,
-      color: color,
-      accentColor: const Color(0xFF14B8A6),
-      onSeeAll: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const HousingScreen()),
-      ),
-      child: Text(
-        "학교 주변 자취방 지도·월세·집주인 연락처, 곧 추가돼요",
-        style: TextStyle(
-          fontSize: 12,
-          color: isDark ? Colors.white38 : Colors.black38,
-        ),
-      ),
-    );
-  }
-
-  // --- 7. 기타 기능 (더보기 화면을 대체하는 최소한의 진입로) ---------------
-
-  /// 더보기 화면이 없어지면서 갈 곳을 잃은 캠퍼스런/교직원 연락처의 임시 진입로.
-  /// 카드로 만들면 무게감이 커져서, 얇은 한 줄 버튼 2개로 최대한 가볍게 둔다.
-  Widget _buildMinorShortcutsRow(Color color, bool isDark) {
-    final borderColor = isDark ? Colors.white12 : const Color(0xFFE5E7EB);
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            Expanded(
-              child: _MinorShortcutButton(
-                icon: Icons.directions_run_rounded,
-                label: "캠퍼스런",
-                color: color,
-                isDark: isDark,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CampusRunScreen()),
-                ),
-              ),
-            ),
-            Container(width: 1, color: borderColor),
-            Expanded(
-              child: _MinorShortcutButton(
-                icon: Icons.contact_phone_outlined,
-                label: "교직원 연락처",
-                color: color,
-                isDark: isDark,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const StaffContactsScreen()),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// [_buildMinorShortcutsRow] 안의 탭 가능한 버튼 절반.
-class _MinorShortcutButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  const _MinorShortcutButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedScaleButton(
-      onTap: onTap,
-      scaleFactor: 0.97,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white70 : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ===========================================================================
-// 공용 카드 부품
-// ===========================================================================
-
-/// 히어로 헤더 안의 오늘 브리핑 타일(식단/버스) — 컬러 헤더 위 반투명 흰색 카드.
-class _HeroTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final Widget child;
-
-  const _HeroTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedScaleButton(
-      onTap: onTap,
-      scaleFactor: 0.96,
-      child: GlassContainer(
-        opacity: 0.12,
-        blur: 12.0,
-        borderRadius: BorderRadius.circular(16),
-        padding: const EdgeInsets.all(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 15, color: Colors.white),
-                const SizedBox(width: 5),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                      );
+                    },
                   ),
-                ),
               ],
             ),
-            const SizedBox(height: 7),
-            child,
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // 5. 키워드 맞춤 알림 (Inset Grouped)
+  // ---------------------------------------------------------------------
+
+  Widget _buildKeywordInsetGroup(Color themeClr, bool isDark) {
+    final registeredKeywords = PreferencesService.noticeKeywords.value;
+
+    return KnueCard(
+      isDark: isDark,
+      child: _keywordLoading
+          ? const _AppleLoading()
+          : _keywordError
+          ? _AppleErrorRetry(onRetry: _loadKeywordAlerts)
+          : (registeredKeywords.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        _TintSquircle(
+                          icon: Icons.notifications_active_rounded,
+                          tint: themeClr,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "관심 키워드 등록",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF000000),
+                                ),
+                              ),
+                              Text(
+                                "장학, 수강신청 등 키워드 알림 받기",
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? const Color(0xFF8E8E93)
+                                      : const Color(0xFF8E8E93),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NoticeScreen(),
+                            ),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: themeClr,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              "등록",
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : (_keywordMatches.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: Center(
+                            child: Text(
+                              "일치하는 새로운 키워드 공지가 없습니다",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF8E8E93),
+                              ),
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _keywordMatches.length,
+                          separatorBuilder: (_, __) => Divider(
+                            height: 0.5,
+                            indent: 48,
+                            thickness: 0.5,
+                            color: isDark
+                                ? const Color(0xFF2C2C2E)
+                                : const Color(0xFFE5E5EA),
+                          ),
+                          itemBuilder: (context, index) {
+                            final notice = _keywordMatches[index];
+                            return _buildSettingsNoticeRow(
+                              notice: notice,
+                              // 게시판마다 고정 식별색 — 어느 게시판 글인지
+                              // 제목을 읽기 전에 색으로 먼저 구분된다.
+                              iconColor: KnueTokens.categoryColor(
+                                notice.category,
+                                isDark,
+                              ),
+                              icon: Icons.notifications_rounded,
+                              isDark: isDark,
+                              onTap: () => _openNoticeUrl(notice.link),
+                            );
+                          },
+                        ))),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // 6. 청람 공지사항 (Inset Grouped)
+  // ---------------------------------------------------------------------
+
+  Widget _buildNoticeInsetGroup(Color themeClr, bool isDark) {
+    return KnueCard(
+      isDark: isDark,
+      child: _noticeLoading
+          ? const _AppleLoading()
+          : _noticeError
+          ? _AppleErrorRetry(onRetry: _loadNoticePreview)
+          : (_favNotices.isEmpty
+                ? InkWell(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NoticeScreen(),
+                      ),
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 18, horizontal: 16),
+                      child: Row(
+                        children: [
+                          _TintSquircle(
+                            icon: Icons.campaign_rounded,
+                            tint: themeClr,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "공지사항 바로가기",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF000000),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  "대학소식, 학사공지 등 실시간 확인하기",
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark
+                                        ? const Color(0xFF8E8E93)
+                                        : const Color(0xFF8E8E93),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 20,
+                            color: isDark ? Colors.white38 : Colors.black26,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _favNotices.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 0.5,
+                      indent: 48,
+                      thickness: 0.5,
+                      color: isDark
+                          ? const Color(0xFF2C2C2E)
+                          : const Color(0xFFE5E5EA),
+                    ),
+                    itemBuilder: (context, index) {
+                      final notice = _favNotices[index];
+                      return _buildSettingsNoticeRow(
+                        notice: notice,
+                        iconColor: KnueTokens.categoryColor(
+                          notice.category,
+                          isDark,
+                        ),
+                        icon: Icons.campaign_rounded,
+                        isDark: isDark,
+                        onTap: () => _openNoticeUrl(notice.link),
+                      );
+                    },
+                  )),
+    );
+  }
+
+  Widget _buildSettingsNoticeRow({
+    required Notice notice,
+    required Color iconColor,
+    required IconData icon,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            _TintSquircle(icon: icon, tint: iconColor, isDark: isDark),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          // 뱃지도 아이콘과 같은 게시판 색을 옅게 깔아,
+                          // 둘이 한 덩어리로 읽히게 한다.
+                          color: iconColor.withValues(
+                            alpha: isDark ? 0.20 : 0.11,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          notice.category,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: iconColor,
+                          ),
+                        ),
+                      ),
+                      if (notice.isNew) ...[
+                        const SizedBox(width: 5),
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            // 새 공지 = 시간 신호이므로 보조색(앰버).
+                            color: KnueTokens.warm(isDark),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    notice.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.white : const Color(0xFF000000),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC),
+            ),
           ],
         ),
       ),
     );
   }
+
+  // ---------------------------------------------------------------------
+  // 헬퍼 메소드
+  // ---------------------------------------------------------------------
+
+  Future<void> _openNoticeUrl(String? url) async {
+    if (url == null || url.isEmpty) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const NoticeScreen()),
+      );
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const NoticeScreen()),
+      );
+    }
+  }
+
+  /// 이번 접속에 쓸 인사말. 날씨가 로드되면 날씨 맞춤형 멘트로 업데이트된다.
+  String _greeting = pickGreeting(DateTime.now());
+
+  String _formatDday(int left) {
+    if (left == 0) return "D-DAY";
+    return left > 0 ? "D-$left" : "D+${-left}";
+  }
 }
 
-/// 세로 섹션 카드(키워드/공지/일정) 공통 셸. "전체 보기" 액션은 선택적.
-/// [accentColor]로 카드 왼쪽 컬러 띠 + 같은 색 아이콘 칩을 줘 종류별 위계를 준다.
-/// "전체 보기" 링크 색은 앱 포인트 색([color], themeColor)을 그대로 따라 통일감 유지.
-class _SectionCard extends StatelessWidget {
-  final bool isDark;
-  final String title;
-  final IconData icon;
-  final Color color;
-  final Color accentColor;
-  final Widget child;
-  final VoidCallback? onSeeAll;
+// ===========================================================================
+// 컴포넌트: 테마색 워시 스쿼클 아이콘 (2색 체계)
+// — 원색 배경 + 흰 아이콘이던 iOS 설정st 스쿼클을, 틴트 워시 배경 + 틴트
+//   아이콘으로 바꿔 어떤 테마색에서도 무지개가 생기지 않게 한다.
+// ===========================================================================
 
-  const _SectionCard({
-    required this.isDark,
-    required this.title,
+class _TintSquircle extends StatelessWidget {
+  final IconData icon;
+  final Color tint;
+  final bool isDark;
+
+  const _TintSquircle({
     required this.icon,
-    required this.color,
-    required this.accentColor,
-    required this.child,
-    this.onSeeAll,
+    required this.tint,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final card = Container(
-      width: double.infinity,
-      clipBehavior: Clip.antiAlias,
+    return Container(
+      width: 28,
+      height: 28,
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        // 버스/식단 탭 카드와 동일한 그림자 값 — 탭 간 재질감을 통일한다.
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(
-          color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
-        ),
+        color: tint.withValues(alpha: isDark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(8),
       ),
-      // IntrinsicHeight로 Row 높이를 콘텐츠에 맞춰 한정 → 왼쪽 액센트 띠가
-      // 카드 전체 높이로 stretch 되게 한다.
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(width: 4, color: accentColor),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: accentColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: Icon(icon, size: 17, color: accentColor),
-                        ),
-                        const SizedBox(width: 9),
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        // 카드 전체가 눌리므로 여기서는 갈 수 있다는 표시만 한다.
-                        if (onSeeAll != null) ...[
-                          Text(
-                            "전체 보기",
-                            style: TextStyle(fontSize: 12, color: color),
-                          ),
-                          Icon(Icons.chevron_right, size: 16, color: color),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    child,
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    // "전체 보기"가 있는 카드는 카드 전체가 그 목적지로 가는 버튼이 된다.
-    // 버스 카드와 같은 scaleFactor로 눌리는 느낌까지 통일.
-    if (onSeeAll == null) return card;
-    return AnimatedScaleButton(
-      onTap: onSeeAll!,
-      scaleFactor: 0.98,
-      child: card,
+      child: Center(child: Icon(icon, size: 16, color: tint)),
     );
   }
 }
 
-class _NoticeRow extends StatelessWidget {
-  final Notice notice;
-  final Color color;
-  final bool isDark;
+// ===========================================================================
+// 컴포넌트: 로딩 및 에러
+// ===========================================================================
 
-  const _NoticeRow({required this.notice, required this.color, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              notice.category,
-              style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              notice.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            notice.date,
-            style: TextStyle(
-              fontSize: 11,
-              color: isDark ? Colors.white38 : Colors.black38,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CardLoading extends StatelessWidget {
-  const _CardLoading();
+class _AppleLoading extends StatelessWidget {
+  const _AppleLoading();
 
   @override
   Widget build(BuildContext context) {
     return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 12),
+      padding: EdgeInsets.symmetric(vertical: 14),
       child: Center(
         child: SizedBox(
-          width: 18,
-          height: 18,
+          width: 16,
+          height: 16,
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ),
@@ -1030,24 +1723,26 @@ class _CardLoading extends StatelessWidget {
   }
 }
 
-class _CardFailure extends StatelessWidget {
+class _AppleErrorRetry extends StatelessWidget {
   final VoidCallback onRetry;
-  const _CardFailure({required this.onRetry});
+  const _AppleErrorRetry({required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: TextButton(
-        onPressed: onRetry,
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          minimumSize: const Size(0, 28),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        child: const Text(
-          "불러오기 실패 · 다시 시도",
-          style: TextStyle(fontSize: 12, color: Colors.redAccent),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: TextButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh_rounded, size: 14),
+          label: const Text("불러오기 실패 · 다시 시도", style: TextStyle(fontSize: 12)),
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFFFF3B30),
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(0, 24),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
         ),
       ),
     );

@@ -10,7 +10,9 @@ import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_card.dart';
 import 'bus_timetable_data.dart';
+import 'call_bus_sheet.dart';
 import 'ui_utils.dart';
+import 'native_ad_card.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BusAppScreen extends StatefulWidget {
@@ -44,6 +46,11 @@ class _BusAppScreenState extends State<BusAppScreen>
   bool _isToSchool = false;
   int _selectedStopOffset = 0;
   String? _lastAutoScrollKey; // 시간표 탭 자동 스크롤을 선택이 바뀔 때만 1회 실행하기 위한 키
+
+  // 913번 3개 탭 상태 (0: 미호종점 출발, 1: 교원대 경유, 2: 평동 출발)
+  int _selected913Tab = 1;
+  // 913번 교원대 경유 상하행 구분 (true: 상행[미호종점 방면], false: 하행[평동 방면])
+  bool _is913KnueUpbound = true;
 
   // 513/514/518 시간표·승차 정류장 데이터는 bus_timetable_data.dart를 단일 소스로 사용한다.
   // (과거 이 파일에 별도로 하드코딩된 사본이 있었으나 실제 시간표와 어긋나 있어 제거함)
@@ -294,10 +301,22 @@ class _BusAppScreenState extends State<BusAppScreen>
     }
   }
 
+  /// 학교로 오는 방향(incoming)의 출발지 이름.
   String _getTerminusName() {
     if (_selectedBus == "518") return "보건의료행정타운 출발";
     if (_selectedBus == "502") return "청주역 출발";
+    // 913은 교원대가 종점이 아니라 경유지라 양쪽 다 종점 이름으로 적는다.
+    if (_selectedBus == "913") return "평동 출발";
     return "동부종점 출발";
+  }
+
+  /// 학교에서 나가는 방향(outgoing)의 출발지 이름.
+  ///
+  /// 513·514·518은 교원대가 종점이라 "교원문화관 출발"이 맞지만, 913은
+  /// 교원대를 지나쳐 갈 뿐이라 그렇게 적으면 틀린 시각으로 읽힌다.
+  String _getOriginName() {
+    if (_selectedBus == "913") return "미호종점 출발";
+    return "교원문화관 출발";
   }
 
   @override
@@ -310,7 +329,11 @@ class _BusAppScreenState extends State<BusAppScreen>
           appBar: AppBar(
             centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
             title: const Text("청람버스"),
-            backgroundColor: color,
+            backgroundColor: Colors.transparent,
+            flexibleSpace: AppleAppBarFlexibleSpace(
+              themeColor: color,
+              isDark: isDark,
+            ),
             iconTheme: const IconThemeData(color: Colors.white),
             leading: null, // 햄버거 메뉴 제거
             actions: [
@@ -330,7 +353,19 @@ class _BusAppScreenState extends State<BusAppScreen>
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white60,
               indicatorColor: Colors.white,
-              indicatorWeight: 3,
+              indicatorWeight: 2,
+              indicatorSize: TabBarIndicatorSize.label,
+              dividerColor: Colors.transparent,
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                letterSpacing: -0.2,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+                letterSpacing: -0.2,
+              ),
               tabs: const [
                 Tab(text: "버스 시간표"),
                 Tab(text: "실시간 위치"),
@@ -462,11 +497,13 @@ class _BusAppScreenState extends State<BusAppScreen>
             ),
             const SizedBox(height: 24),
             Text(
-              "현재 운행 중인 버스가 없습니다.",
+              _getEmptyStateMessage(),
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
                 color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
                 fontWeight: FontWeight.w600,
+                height: 1.4,
               ),
             ),
             const SizedBox(height: 8),
@@ -523,24 +560,22 @@ class _BusAppScreenState extends State<BusAppScreen>
                       ),
                     ),
                   ] else ...[
-                    Icon(
-                      Icons.update,
-                      size: 12,
-                      color: isDark ? Colors.white24 : Colors.grey.shade400,
-                    ),
-                    const SizedBox(width: 4),
+                    // 살아있는 데이터라는 신호 — 맥동하는 앰버 점(보조색).
+                    KnueLiveDot(isDark: isDark),
+                    const SizedBox(width: 6),
                     Text(
                       _formatLastUpdate(),
                       style: TextStyle(
                         fontSize: 11,
+                        fontFeatures: KnueTokens.tabularFigures,
                         color:
                             _lastUpdateTime != null &&
                                 DateTime.now()
                                         .difference(_lastUpdateTime!)
                                         .inMinutes >=
                                     3
-                            ? Colors.orange
-                            : (isDark ? Colors.white24 : Colors.grey.shade400),
+                            ? KnueTokens.warm(isDark)
+                            : (isDark ? Colors.white38 : Colors.grey.shade500),
                       ),
                     ),
                   ],
@@ -992,6 +1027,9 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
+  /// 스켈레톤 조각. 예전에는 TweenAnimationBuilder로 1.5초에 걸쳐 한 번만
+  /// 훑고 멈춰서, 로딩이 길어지면 화면이 굳은 것처럼 보였다. 공용 [KnueSkeleton]에
+  /// 위임해 계속 은은히 맥동하게 한다. (base/highlight는 호출부 호환용으로만 유지)
   Widget _buildShimmerBox(
     Color base,
     Color highlight, {
@@ -999,24 +1037,11 @@ class _BusAppScreenState extends State<BusAppScreen>
     required double height,
     required double radius,
   }) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 1500),
-      builder: (context, value, child) {
-        return Container(
-          width: width == double.infinity ? null : width,
-          height: height,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [base, highlight, base],
-              stops: [0.0, 0.5, 1.0],
-              begin: Alignment(-1.0 + (2 * value), 0),
-              end: Alignment(1.0 + (2 * value), 0),
-            ),
-            borderRadius: radius > 0 ? BorderRadius.circular(radius) : null,
-          ),
-        );
-      },
+    return KnueSkeleton(
+      width: width,
+      height: height,
+      radius: radius,
+      isDark: Theme.of(context).brightness == Brightness.dark,
     );
   }
 
@@ -1055,15 +1080,101 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
-  // 시간표 탭 (기존 코드 그대로 유지)
+  Widget _buildSubDirectionToggle(
+    String label,
+    bool isSelected,
+    VoidCallback onTap,
+    bool isDark,
+    Color primary,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: primary.withOpacity(isDark ? 0.25 : 0.15),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: isSelected
+                  ? Colors.white
+                  : (isDark ? Colors.white70 : Colors.black87),
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 시간표 탭
   Widget _buildTimetableTab(bool isDark, Color primary) {
-    final directionKey = _isToSchool ? "incoming" : "outgoing";
-    final dayKey = _isWeekend ? "holiday" : "weekday";
-    final List<String> rawTimeList =
-        _busSchedules[_selectedBus]?[directionKey]?[dayKey] ?? [];
-    final List<String> timeList = rawTimeList
-        .map((t) => _addMinutes(t, _selectedStopOffset))
-        .toList();
+    final String directionKey;
+    final List<String> timeList;
+    final List<String?> subInfoList;
+
+    if (_selectedBus == "913") {
+      if (_selected913Tab == 0) {
+        // 미호종점 출발 (하행 기점)
+        directionKey = "outgoing";
+        final trips = BusTimetableData.route913MihoToPyeongdong;
+        timeList = trips.map((t) => t.originTime).toList();
+        subInfoList = trips
+            .map((t) => "교원대 ${t.knueTime} 경유 · 평동 ${t.destinationTime} 도착")
+            .toList();
+      } else if (_selected913Tab == 1) {
+        // 교원대 경유
+        if (_is913KnueUpbound) {
+          // 상행 (미호종점 방면 / 평동발)
+          directionKey = "knue_up";
+          final trips = BusTimetableData.route913PyeongdongToMiho;
+          timeList = trips.map((t) => t.knueTime).toList();
+          subInfoList = trips
+              .map((t) => "평동 ${t.originTime} 출발 · 미호종점 ${t.destinationTime} 도착")
+              .toList();
+        } else {
+          // 하행 (평동 방면 / 미호발)
+          directionKey = "knue_down";
+          final trips = BusTimetableData.route913MihoToPyeongdong;
+          timeList = trips.map((t) => t.knueTime).toList();
+          subInfoList = trips
+              .map((t) => "미호 ${t.originTime} 출발 · 평동 ${t.destinationTime} 도착")
+              .toList();
+        }
+      } else {
+        // 평동 출발 (상행 기점)
+        directionKey = "incoming";
+        final trips = BusTimetableData.route913PyeongdongToMiho;
+        timeList = trips.map((t) => t.originTime).toList();
+        subInfoList = trips
+            .map((t) => "교원대 ${t.knueTime} 경유 · 미호종점 ${t.destinationTime} 도착")
+            .toList();
+      }
+    } else {
+      directionKey = _isToSchool ? "incoming" : "outgoing";
+      final dayKey = _isWeekend ? "holiday" : "weekday";
+      final List<String> rawTimeList =
+          _busSchedules[_selectedBus]?[directionKey]?[dayKey] ?? [];
+      timeList = rawTimeList
+          .map((t) => _addMinutes(t, _selectedStopOffset))
+          .toList();
+      subInfoList = List.filled(timeList.length, null);
+    }
 
     final now = TimeOfDay.now();
     final currentMinutes = now.hour * 60 + now.minute;
@@ -1081,6 +1192,7 @@ class _BusAppScreenState extends State<BusAppScreen>
       }
     }
 
+    final dayKey = _isWeekend ? "holiday" : "weekday";
     final scrollKey =
         "$_selectedBus:$directionKey:$dayKey:$_selectedStopOffset";
     if (nextBusIndex != -1 && _lastAutoScrollKey != scrollKey) {
@@ -1109,54 +1221,100 @@ class _BusAppScreenState extends State<BusAppScreen>
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: ["513", "514", "518"].map((busNo) {
-                  final isSelected = _selectedBus == busNo;
-                  return GestureDetector(
-                    onTap: () => setState(() {
-                      _selectedBus = busNo;
-                      _selectedStopOffset = 0;
-                    }),
+                children: [
+                  ...["513", "514", "518", "913"].map((busNo) {
+                    final isSelected = _selectedBus == busNo;
+                    return GestureDetector(
+                      onTap: () => setState(() {
+                        _selectedBus = busNo;
+                        _selectedStopOffset = 0;
+                      }),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected ? primary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: isSelected
+                                ? primary
+                                : Colors.grey.withOpacity(0.3),
+                            width: isSelected ? 2 : 1,
+                          ),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: primary.withOpacity(
+                                      isDark ? 0.15 : 0.08,
+                                    ),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Text(
+                          "$busNo번",
+                          style: TextStyle(
+                            color: isSelected
+                                ? Colors.white
+                                : (isDark ? Colors.white : Colors.black87),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(width: 4),
+                  Container(
+                    width: 1,
+                    height: 20,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    color: isDark ? Colors.white12 : Colors.grey.shade300,
+                  ),
+                  GestureDetector(
+                    onTap: () => CallBusBottomSheet.show(context),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 10,
+                        horizontal: 12,
+                        vertical: 9,
                       ),
                       decoration: BoxDecoration(
-                        color: isSelected ? primary : Colors.transparent,
+                        color: primary.withOpacity(isDark ? 0.15 : 0.08),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: isSelected
-                              ? primary
-                              : Colors.grey.withOpacity(0.3),
-                          width: isSelected ? 2 : 1,
+                          color: primary.withOpacity(isDark ? 0.4 : 0.3),
+                          width: 1,
                         ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: primary.withOpacity(
-                                    isDark ? 0.15 : 0.08,
-                                  ),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ]
-                            : null,
                       ),
-                      child: Text(
-                        "$busNo번",
-                        style: TextStyle(
-                          color: isSelected
-                              ? Colors.white
-                              : (isDark ? Colors.white : Colors.black87),
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.directions_bus_outlined,
+                            size: 14,
+                            color: isDark ? Colors.white70 : primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            "콜버스",
+                            style: TextStyle(
+                              color: isDark ? Colors.white70 : primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  );
-                }).toList(),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               Row(
@@ -1180,119 +1338,252 @@ class _BusAppScreenState extends State<BusAppScreen>
                 ],
               ),
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white12 : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildDirectionToggle(
-                        "교원문화관 출발",
-                        !_isToSchool,
-                        () => setState(() {
-                          _isToSchool = false;
-                          _selectedStopOffset = 0;
-                        }),
-                        isDark,
-                        primary,
+              if (_selectedBus == "913") ...[
+                // 913번 전용 3개 탭: 미호종점 출발 | 교원대 경유 | 평동 출발
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white12 : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildDirectionToggle(
+                          "미호종점 출발",
+                          _selected913Tab == 0,
+                          () => setState(() {
+                            _selected913Tab = 0;
+                            _selectedStopOffset = 0;
+                          }),
+                          isDark,
+                          primary,
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: _buildDirectionToggle(
-                        _getTerminusName(),
-                        _isToSchool,
-                        () => setState(() {
-                          _isToSchool = true;
-                          _selectedStopOffset = 0;
-                        }),
-                        isDark,
-                        primary,
+                      Expanded(
+                        child: _buildDirectionToggle(
+                          "교원대 경유",
+                          _selected913Tab == 1,
+                          () => setState(() {
+                            _selected913Tab = 1;
+                            _selectedStopOffset = 0;
+                          }),
+                          isDark,
+                          primary,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              if (_isToSchool) ...[
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "교통상황에 따라 5~10분 정도 차이가 날 수 있습니다.",
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black54,
-                    ),
+                      Expanded(
+                        child: _buildDirectionToggle(
+                          "평동 출발",
+                          _selected913Tab == 2,
+                          () => setState(() {
+                            _selected913Tab = 2;
+                            _selectedStopOffset = 0;
+                          }),
+                          isDark,
+                          primary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _boardingStops[_selectedBus]!.entries.map((
-                      entry,
-                    ) {
-                      final isSelected = _selectedStopOffset == entry.value;
-                      return GestureDetector(
-                        onTap: () =>
-                            setState(() => _selectedStopOffset = entry.value),
-                        child: Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
+                if (_selected913Tab == 1) ...[
+                  const SizedBox(height: 10),
+                  // 교원대 경유 상행/하행 서브 토글
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? primary.withValues(alpha: 0.15)
+                          : primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: primary.withValues(alpha: isDark ? 0.35 : 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildSubDirectionToggle(
+                            "상행 (미호종점 방면)",
+                            _is913KnueUpbound,
+                            () => setState(() => _is913KnueUpbound = true),
+                            isDark,
+                            primary,
                           ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? primary
-                                : (isDark
-                                      ? Colors.grey.shade800
-                                      : Colors.white),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
+                        ),
+                        Expanded(
+                          child: _buildSubDirectionToggle(
+                            "하행 (평동 방면)",
+                            !_is913KnueUpbound,
+                            () => setState(() => _is913KnueUpbound = false),
+                            isDark,
+                            primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: primary.withOpacity(isDark ? 0.15 : 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: primary.withOpacity(isDark ? 0.25 : 0.18),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: isDark ? Colors.white70 : primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _selected913Tab == 0
+                              ? "미호종점에서 평동 방면으로 출발하는 시간표입니다. (교원대까지 약 13분)"
+                              : (_selected913Tab == 1
+                                  ? (_is913KnueUpbound
+                                      ? "교원대 정류장 통과/도착 시간표입니다. (평동 출발 ➔ 교원대 ➔ 미호종점)"
+                                      : "교원대 정류장 통과/도착 시간표입니다. (미호종점 출발 ➔ 교원대 ➔ 가경터미널/평동)")
+                                  : "평동에서 미호종점 방면으로 출발하는 시간표입니다. (교원대까지 약 50분)"),
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.4,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white70 : Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                // 기존 513, 514, 518 2개 탭
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white12 : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildDirectionToggle(
+                          _getOriginName(),
+                          !_isToSchool,
+                          () => setState(() {
+                            _isToSchool = false;
+                            _selectedStopOffset = 0;
+                          }),
+                          isDark,
+                          primary,
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildDirectionToggle(
+                          _getTerminusName(),
+                          _isToSchool,
+                          () => setState(() {
+                            _isToSchool = true;
+                            _selectedStopOffset = 0;
+                          }),
+                          isDark,
+                          primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_isToSchool &&
+                    (_boardingStops[_selectedBus]?.isNotEmpty ?? false)) ...[
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      "교통상황에 따라 5~10분 정도 차이가 날 수 있습니다.",
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black54,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _boardingStops[_selectedBus]!.entries.map((
+                        entry,
+                      ) {
+                        final isSelected = _selectedStopOffset == entry.value;
+                        return GestureDetector(
+                          onTap: () =>
+                              setState(() => _selectedStopOffset = entry.value),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
                               color: isSelected
                                   ? primary
                                   : (isDark
-                                        ? Colors.grey.shade700
-                                        : Colors.grey.shade400),
+                                        ? Colors.grey.shade800
+                                        : Colors.white),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSelected
+                                    ? primary
+                                    : (isDark
+                                          ? Colors.grey.shade700
+                                          : Colors.grey.shade400),
+                              ),
+                            ),
+                            child: Text(
+                              entry.key,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isSelected
+                                    ? Colors.white
+                                    : (isDark
+                                          ? Colors.grey.shade400
+                                          : Colors.grey.shade700),
+                              ),
                             ),
                           ),
-                          child: Text(
-                            entry.key,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: isSelected
-                                  ? Colors.white
-                                  : (isDark
-                                        ? Colors.grey.shade400
-                                        : Colors.grey.shade700),
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                        );
+                      }).toList(),
+                    ),
                   ),
-                ),
+                ],
+                const SizedBox(height: 8),
+                if (!_isToSchool)
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 14,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        "교원대 정문은 약 1분 후 도착합니다.",
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
               ],
-              const SizedBox(height: 8),
-              if (!_isToSchool)
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.info_outline,
-                      size: 14,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      "교원대 정문은 약 1분 후 도착합니다.",
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
-                ),
             ],
           ),
         ),
@@ -1300,9 +1591,16 @@ class _BusAppScreenState extends State<BusAppScreen>
           child: ListView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.all(20),
-            itemCount: timeList.length,
+            itemCount: timeList.isEmpty ? 0 : timeList.length + 1,
             itemBuilder: (context, index) {
+              if (index == timeList.length) {
+                return const Padding(
+                  padding: EdgeInsets.only(top: 8, bottom: 24),
+                  child: KnueNativeAdCard(isCompact: true, placement: 'bus'),
+                );
+              }
               final time = timeList[index];
+              final subInfo = subInfoList[index];
               int busMinutes = 0;
               try {
                 final parts = time.split(":");
@@ -1346,9 +1644,11 @@ class _BusAppScreenState extends State<BusAppScreen>
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 400),
                 curve: Curves.easeOutCubic,
-                height: isNext ? 80 : 64,
                 margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: isNext
                       ? (isDark
@@ -1390,52 +1690,103 @@ class _BusAppScreenState extends State<BusAppScreen>
                           isRunning: isRunning,
                         ),
                         const SizedBox(width: 12),
-                        Text(
-                          time,
-                          style: TextStyle(
-                            fontSize: isNext ? 22 : 18,
-                            fontWeight: isNext
-                                ? FontWeight.w900
-                                : FontWeight.w600,
-                            color: passed
-                                ? Colors.grey
-                                : (isDark ? Colors.white : Colors.black87),
-                            decoration: passed
-                                ? TextDecoration.lineThrough
-                                : null,
-                          ),
-                        ),
-                        if (!passed) ...[
-                          const SizedBox(width: 12),
-                          Builder(
-                            builder: (context) {
-                              final alarmKey =
-                                  "${_selectedBus}:${_isToSchool ? 'in' : 'out'}:${_isWeekend ? 'hol' : 'wkd'}:$time";
-                              final isAlarmSet = _scheduledAlarms.containsKey(
-                                alarmKey,
-                              );
-
-                              return GestureDetector(
-                                onTap: () => _showAlarmDialog(time, busMinutes),
-                                child: Icon(
-                                  isAlarmSet
-                                      ? Icons.notifications_active_rounded
-                                      : Icons.notifications_none_rounded,
-                                  size: 22,
-                                  color: isAlarmSet
-                                      ? Colors.orangeAccent
-                                      : (isNext
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  time,
+                                  style: TextStyle(
+                                    fontSize: isNext ? 22 : 17.5,
+                                    fontWeight: isNext
+                                        ? FontWeight.w900
+                                        : FontWeight.w600,
+                                    letterSpacing: isNext ? -0.6 : -0.3,
+                                    // 시각은 자리수 폭을 고정해 세로로 줄이 맞게.
+                                    fontFeatures: KnueTokens.tabularFigures,
+                                    color: passed
+                                        ? Colors.grey
+                                        : isNext
                                             ? (isDark
-                                                  ? Colors.white70
-                                                  : primary.withOpacity(0.7))
+                                                ? Colors.white
+                                                : Colors.black87)
+                                            // 다음 차 외에는 한 단계 물려 위계를 만든다.
                                             : (isDark
-                                                  ? Colors.white38
-                                                  : Colors.grey.shade400)),
+                                                ? Colors.white70
+                                                : Colors.black.withValues(
+                                                    alpha: 0.62,
+                                                  )),
+                                    decoration: passed
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                  ),
                                 ),
-                              );
-                            },
-                          ),
-                        ],
+                                if (!passed) ...[
+                                  const SizedBox(width: 8),
+                                  Builder(
+                                    builder: (context) {
+                                      final alarmKey =
+                                          "${_selectedBus}:$directionKey:${_isWeekend ? 'hol' : 'wkd'}:$time";
+                                      final isAlarmSet =
+                                          _scheduledAlarms.containsKey(
+                                            alarmKey,
+                                          );
+
+                                      return GestureDetector(
+                                        onTap: () => _showAlarmDialog(
+                                          time,
+                                          busMinutes,
+                                          customDirectionKey: directionKey,
+                                        ),
+                                        child: Icon(
+                                          isAlarmSet
+                                              ? Icons
+                                                  .notifications_active_rounded
+                                              : Icons.notifications_none_rounded,
+                                          size: 20,
+                                          color: isAlarmSet
+                                              ? KnueTokens.warm(isDark)
+                                              : (isNext
+                                                    ? (isDark
+                                                          ? Colors.white70
+                                                          : primary.withOpacity(
+                                                              0.7,
+                                                            ))
+                                                    : (isDark
+                                                          ? Colors.white38
+                                                          : Colors
+                                                              .grey
+                                                              .shade400)),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                            if (subInfo != null) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                subInfo,
+                                style: TextStyle(
+                                  fontSize: isNext ? 12 : 11.5,
+                                  fontWeight: isNext
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: passed
+                                      ? Colors.grey.shade500
+                                      : isNext
+                                          ? (isDark ? Colors.white70 : primary)
+                                          : (isDark
+                                              ? Colors.white54
+                                              : Colors.grey.shade600),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
                     if (isNext)
@@ -1445,7 +1796,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.redAccent,
+                          // 남은 시간 = 시간 신호이므로 보조색(앰버).
+                          color: KnueTokens.warm(isDark),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -1454,6 +1806,7 @@ class _BusAppScreenState extends State<BusAppScreen>
                             color: Colors.white,
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
+                            fontFeatures: KnueTokens.tabularFigures,
                           ),
                         ),
                       )
@@ -1476,9 +1829,14 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
-  void _showAlarmDialog(String timeStr, int busMinutes) {
+  void _showAlarmDialog(
+    String timeStr,
+    int busMinutes, {
+    String? customDirectionKey,
+  }) {
+    final dirKey = customDirectionKey ?? (_isToSchool ? 'in' : 'out');
     final alarmKey =
-        "${_selectedBus}:${_isToSchool ? 'in' : 'out'}:${_isWeekend ? 'hol' : 'wkd'}:$timeStr";
+        "${_selectedBus}:$dirKey:${_isWeekend ? 'hol' : 'wkd'}:$timeStr";
     final isAlarmSet = _scheduledAlarms.containsKey(alarmKey);
 
     showDialog(
@@ -1549,7 +1907,12 @@ class _BusAppScreenState extends State<BusAppScreen>
                     ),
                     onPressed: () {
                       Navigator.pop(ctx);
-                      _scheduleBusAlarm(timeStr, busMinutes, min);
+                      _scheduleBusAlarm(
+                        timeStr,
+                        busMinutes,
+                        min,
+                        customDirectionKey: dirKey,
+                      );
                     },
                     child: Text(
                       '$min분 전',
@@ -1598,10 +1961,12 @@ class _BusAppScreenState extends State<BusAppScreen>
   void _scheduleBusAlarm(
     String timeStr,
     int busMinutes,
-    int minutesBefore,
-  ) async {
+    int minutesBefore, {
+    String? customDirectionKey,
+  }) async {
+    final dirKey = customDirectionKey ?? (_isToSchool ? 'in' : 'out');
     final alarmKey =
-        "${_selectedBus}:${_isToSchool ? 'in' : 'out'}:${_isWeekend ? 'hol' : 'wkd'}:$timeStr";
+        "${_selectedBus}:$dirKey:${_isWeekend ? 'hol' : 'wkd'}:$timeStr";
     final now = DateTime.now();
     final parts = timeStr.split(':');
     if (parts.length != 2) return;

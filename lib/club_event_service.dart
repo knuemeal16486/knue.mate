@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'club_event_model.dart';
+import 'offline_cache.dart';
 
 /// 동아리 행사 Firestore CRUD + Storage 포스터 업로드 + 로컬 캐시.
 class ClubEventService {
@@ -12,27 +13,82 @@ class ClubEventService {
   static const String _collection = 'club_events';
 
   /// 행사 목록. 캐시가 있으면 즉시 반환하고 백그라운드 갱신.
-  static Future<List<ClubEvent>> fetchAll({bool forceRefresh = false}) async {
+  ///
+  /// 끝난 행사는 기본적으로 걸러낸다. 지우는 것은 [purgeEnded]가 따로 하고,
+  /// 여기서는 보여주지만 않는다 — 기기 시계가 틀어진 폰 하나가 공용 목록을
+  /// 지워버리는 일은 없어야 한다.
+  static Future<List<ClubEvent>> fetchAll({
+    bool forceRefresh = false,
+    bool includeEnded = false,
+  }) async {
+    final all = await _fetchAllRaw(forceRefresh: forceRefresh);
+    if (includeEnded) return all;
+    final now = DateTime.now();
+    return all.where((e) => !e.hasEnded(now)).toList();
+  }
+
+  static Future<List<ClubEvent>> _fetchAllRaw({
+    bool forceRefresh = false,
+  }) async {
     if (!forceRefresh) {
       final cached = await ClubEventCache.load();
       if (cached != null && cached.isNotEmpty) {
-        _fetchAndCache(); // await 없이 갱신
+        // throttle이 없으면 갱신→재로드→갱신으로 계속 Firestore를 두드린다.
+        RefreshThrottle.deferred("clubEvents", _fetchAndCache);
         return cached;
       }
     }
     return _fetchAndCache();
   }
 
+  /// 끝난 지 [grace]가 지난 행사를 Firestore에서 지운다.
+  ///
+  /// 관리 화면에서만 부른다. 앱을 켠 모든 기기가 지우게 두면, 시계가 앞서
+  /// 있는 기기 하나가 아직 열리지도 않은 행사를 지울 수 있다. 여유를 일주일
+  /// 두는 것도 같은 이유 — 어제 끝난 행사를 시간대 차이로 오늘 지우지 않게.
+  static Future<int> purgeEnded({
+    Duration grace = const Duration(days: 7),
+  }) async {
+    final cutoff = DateTime.now().subtract(grace);
+    final all = await _fetchAllRaw(forceRefresh: true);
+    final stale = all.where(
+      (e) => e.effectiveEnd.isBefore(cutoff) && e.id.isNotEmpty,
+    );
+    var removed = 0;
+    for (final e in stale) {
+      try {
+        await delete(e.id);
+        removed++;
+      } catch (err) {
+        debugPrint('ClubEventService.purgeEnded error: $err');
+      }
+    }
+    if (removed > 0) await _fetchAndCache();
+    return removed;
+  }
+
   static Future<List<ClubEvent>> _fetchAndCache() async {
+    // 이미 Firestore가 죽어 있다고 확인됐으면 기다리지 않고 캐시로 간다.
+    if (!FirestoreHealth.isAvailable) {
+      return await ClubEventCache.load() ?? const [];
+    }
     try {
-      final snapshot = await _db.collection(_collection).get();
-      final events = snapshot.docs
-          .map((d) => ClubEvent.fromFirestore(d.id, d.data()))
-          .toList()
-        ..sort((a, b) => a.startDate.compareTo(b.startDate));
+      // 타임아웃이 없어서, 권한 오류처럼 실패하는 경우 7초 가까이 매달렸다.
+      // 홈 화면이 그만큼 로딩 상태로 남는다.
+      final snapshot = await _db
+          .collection(_collection)
+          .get()
+          .timeout(const Duration(seconds: 4));
+      final events =
+          snapshot.docs
+              .map((d) => ClubEvent.fromFirestore(d.id, d.data()))
+              .toList()
+            ..sort((a, b) => a.startDate.compareTo(b.startDate));
+      FirestoreHealth.reportSuccess();
       await ClubEventCache.save(events);
       return events;
     } catch (e) {
+      FirestoreHealth.reportFailure();
       debugPrint('ClubEventService.fetchAll error: $e');
       final cached = await ClubEventCache.load();
       if (cached != null) return cached;
@@ -93,10 +149,13 @@ class ClubEventCache {
 
   static Future<void> save(List<ClubEvent> events) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _key, jsonEncode(events.map((e) => e.toJson()).toList()));
+    final encoded = jsonEncode(events.map((e) => e.toJson()).toList());
+    // 내용이 같으면 revision을 올리지 않는다 — 올리면 화면이 다시 로드하고,
+    // 그게 또 갱신을 불러 무한 루프가 된다.
+    final changed = prefs.getString(_key) != encoded;
+    await prefs.setString(_key, encoded);
     await prefs.setInt('${_key}_ts', DateTime.now().millisecondsSinceEpoch);
-    revision.value++;
+    if (changed) revision.value++;
   }
 
   static Future<List<ClubEvent>?> load() async {

@@ -10,7 +10,9 @@ import 'package:flutter/foundation.dart';
 import 'tab_edit_screen.dart';
 import 'root_screen.dart';
 import 'ui_utils.dart';
+import 'meal_rating.dart';
 import 'club_event_admin_screen.dart';
+import 'native_ad_card.dart';
 
 // [개편] 식단 탭 전용 페이지 (기존 MealMainScreen)
 // [복원] 식단 탭 전용 페이지 (기존 스타일 복구)
@@ -23,8 +25,6 @@ class MealTabPage extends StatefulWidget {
 class _MealTabPageState extends State<MealTabPage> {
   int _currentIndex = 0;
   late final PageController _pageController;
-
-  final List<Widget> _pages = [const TodayMealPage(), const MonthlyMealPage()];
 
   @override
   void initState() {
@@ -39,64 +39,96 @@ class _MealTabPageState extends State<MealTabPage> {
   }
 
   void _onTabTapped(int index) {
+    if (_currentIndex == index) return;
     setState(() => _currentIndex = index);
     _pageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = themeColor.value;
-    return Scaffold(
-      // [개편] 식단 탭 내부의 보조 내비게이션: 하단 이중 탭바 대신 상단 세그먼트로 전환
-      body: Column(
-        children: [
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment(
-                    value: 0,
-                    label: Text('오늘'),
-                    icon: Icon(Icons.restaurant, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: 1,
-                    label: Text('월간'),
-                    icon: Icon(Icons.calendar_month, size: 16),
-                  ),
-                ],
-                selected: {_currentIndex},
-                onSelectionChanged: (s) => _onTabTapped(s.first),
-                style: SegmentedButton.styleFrom(
-                  selectedBackgroundColor: color.withValues(alpha: 0.15),
-                ),
+    return PageView(
+      controller: _pageController,
+      physics: const NeverScrollableScrollPhysics(),
+      onPageChanged: (idx) => setState(() => _currentIndex = idx),
+      children: [
+        TodayMealPage(onSwitchTab: _onTabTapped),
+        MonthlyMealPage(onSwitchTab: _onTabTapped),
+      ],
+    );
+  }
+}
+
+/// 상단 앱바에 자연스럽게 녹아드는 오늘/월간 뷰 모드 캡슐형 세그먼트 버튼
+Widget _buildMealModeSegment({
+  required BuildContext context,
+  required int selectedIndex,
+  required ValueChanged<int>? onSwitchTab,
+}) {
+  if (onSwitchTab == null) return const SizedBox.shrink();
+  final primaryColor = themeColor.value;
+  return Container(
+    height: 32,
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: 0.18),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: () => onSwitchTab(0),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: selectedIndex == 0 ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              "오늘",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selectedIndex == 0 ? FontWeight.w800 : FontWeight.w600,
+                color: selectedIndex == 0 ? primaryColor : Colors.white.withValues(alpha: 0.85),
               ),
             ),
           ),
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: (idx) => setState(() => _currentIndex = idx),
-              children: _pages,
+        ),
+        GestureDetector(
+          onTap: () => onSwitchTab(1),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: selectedIndex == 1 ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              "월간",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selectedIndex == 1 ? FontWeight.w800 : FontWeight.w600,
+                color: selectedIndex == 1 ? primaryColor : Colors.white.withValues(alpha: 0.85),
+              ),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 // =============================================================================
 // 2. 오늘 식단 페이지
 // =============================================================================
 class TodayMealPage extends StatefulWidget {
-  const TodayMealPage({super.key});
+  final ValueChanged<int>? onSwitchTab;
+  const TodayMealPage({super.key, this.onSwitchTab});
   @override
   State<TodayMealPage> createState() => _TodayMealPageState();
 }
@@ -212,18 +244,21 @@ class _TodayMealPageState extends State<TodayMealPage>
 
     await NotificationService().cancelAll();
 
+    // 식당 이름은 MealSource에서 가져온다 — 문구에 직접 박아두면 출처가 바뀔 때
+    // 또 어긋난다.
+    final name = source.shortLabel;
     if (source == MealSource.a) {
-      await schedule(1, 7, 30, "기숙사 아침 식사 ☀️", "아침 식사가 시작되었습니다. 든든하게 챙겨 드세요!");
-      await schedule(2, 8, 50, "기숙사 아침 마감 임박 ⏰", "10분 뒤 배식이 종료됩니다.");
-      await schedule(3, 11, 30, "기숙사 점심 식사 🍽️", "맛있는 점심 시간입니다!");
-      await schedule(4, 13, 20, "기숙사 점심 마감 임박 🏃‍♂️", "10분 뒤 점심 식사가 종료됩니다.");
-      await schedule(5, 17, 30, "기숙사 저녁 식사 🌙", "저녁 식사가 준비되었습니다.");
-      await schedule(6, 18, 50, "기숙사 저녁 마감 임박 ⚠️", "10분 뒤 저녁 배식이 끝납니다.");
+      await schedule(1, 7, 30, "$name 아침 식사 ☀️", "아침 식사가 시작되었습니다. 든든하게 챙겨 드세요!");
+      await schedule(2, 8, 50, "$name 아침 마감 임박 ⏰", "10분 뒤 배식이 종료됩니다.");
+      await schedule(3, 11, 30, "$name 점심 식사 🍽️", "맛있는 점심 시간입니다!");
+      await schedule(4, 13, 20, "$name 점심 마감 임박 🏃‍♂️", "10분 뒤 점심 식사가 종료됩니다.");
+      await schedule(5, 17, 30, "$name 저녁 식사 🌙", "저녁 식사가 준비되었습니다.");
+      await schedule(6, 18, 50, "$name 저녁 마감 임박 ⚠️", "10분 뒤 저녁 배식이 끝납니다.");
     } else {
-      await schedule(3, 11, 00, "학생회관 점심 시작 🍽️", "학생회관 점심 식사가 시작되었습니다!");
-      await schedule(4, 13, 50, "학생회관 점심 마감 임박 🏃‍♂️", "10분 뒤 식당이 문을 닫습니다.");
-      await schedule(5, 17, 00, "학생회관 저녁 시작 🌙", "학생회관 저녁 식사 시간입니다.");
-      await schedule(6, 18, 20, "학생회관 저녁 마감 임박 ⚠️", "10분 뒤 저녁 운영이 종료됩니다.");
+      await schedule(3, 11, 00, "$name 점심 시작 🍽️", "$name 점심 식사가 시작되었습니다!");
+      await schedule(4, 13, 50, "$name 점심 마감 임박 🏃‍♂️", "10분 뒤 식당이 문을 닫습니다.");
+      await schedule(5, 17, 00, "$name 저녁 시작 🌙", "$name 저녁 식사 시간입니다.");
+      await schedule(6, 18, 20, "$name 저녁 마감 임박 ⚠️", "10분 뒤 저녁 운영이 종료됩니다.");
     }
   }
 
@@ -253,7 +288,7 @@ class _TodayMealPageState extends State<TodayMealPage>
 
       await _scheduleAlarmsBySource(_source);
       if (!mounted) return;
-      final restaurantName = _source == MealSource.a ? "기숙사" : "학생회관";
+      final restaurantName = _source.shortLabel;
       showToast(context, "$restaurantName 식당 시간으로 알림이 설정되었습니다.");
     } else {
       await NotificationService().cancelAll();
@@ -269,7 +304,7 @@ class _TodayMealPageState extends State<TodayMealPage>
     if (_alarmOn) {
       await _scheduleAlarmsBySource(s);
       if (mounted) {
-        final restaurantName = s == MealSource.a ? "기숙사" : "학생회관";
+        final restaurantName = s.shortLabel;
         showToast(context, "$restaurantName 시간으로 알림이 업데이트되었습니다.");
       }
     }
@@ -325,6 +360,12 @@ class _TodayMealPageState extends State<TodayMealPage>
                 ],
               ),
               actions: [
+                _buildMealModeSegment(
+                  context: context,
+                  selectedIndex: 0,
+                  onSwitchTab: widget.onSwitchTab,
+                ),
+                const SizedBox(width: 4),
                 IconButton(
                   onPressed: _handleAlarmToggle,
                   icon: Icon(
@@ -334,41 +375,60 @@ class _TodayMealPageState extends State<TodayMealPage>
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
               ],
               flexibleSpace: FlexibleSpaceBar(
-                background: Padding(
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + 60,
+                background: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(30),
+                    ),
+                    gradient: KnuePearl.headerGradient(
+                      primaryColor,
+                      Theme.of(context).brightness == Brightness.dark,
+                    ),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white.withValues(alpha: 0.15)
+                            : Colors.black.withValues(alpha: 0.08),
+                        width: 0.8,
+                      ),
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 10),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            children: [
-                              _buildSegmentBtn("기숙사 식당", MealSource.a),
-                              _buildSegmentBtn("학생회관 식당", MealSource.b),
-                            ],
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.of(context).padding.top + 60,
+                    ),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 10),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              children: [
+                                _buildSegmentBtn(MealSource.a.label, MealSource.a),
+                                _buildSegmentBtn(MealSource.b.label, MealSource.b),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 15),
-                      _DateSwitcher(
-                        date: _date,
-                        isToday: isToday,
-                        onPrev: _loading ? null : () => _changeDate(-1),
-                        onNext: _loading ? null : () => _changeDate(1),
-                        primaryColor: primaryColor,
-                      ),
-                    ],
+                        const SizedBox(height: 15),
+                        _DateSwitcher(
+                          date: _date,
+                          isToday: isToday,
+                          onPrev: _loading ? null : () => _changeDate(-1),
+                          onNext: _loading ? null : () => _changeDate(1),
+                          primaryColor: primaryColor,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -444,17 +504,29 @@ class _TodayMealPageState extends State<TodayMealPage>
               ),
               const SizedBox(height: 16),
               if (_loading)
-                SizedBox(
-                  height: 300,
-                  child: Center(
-                    child: CircularProgressIndicator(color: primaryColor),
-                  ),
+                // 스피너 대신 카드 형태를 미리 그려 로딩→표시 전환에 덜컹임이 없게.
+                _MealCardSkeleton(
+                  isDark: Theme.of(context).brightness == Brightness.dark,
                 )
               else if (_error != null)
                 _ErrorCard(message: _error!)
               else
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  // 날짜·식당을 바꿀 때 내용이 살짝 밀려 들어오게 — 전환이 있었다는
+                  // 것만 느껴질 정도의 12px.
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.035),
+                        end: Offset.zero,
+                      ).animate(anim),
+                      child: child,
+                    ),
+                  ),
                   child: _MealDetailCard(
                     key: ValueKey("$_date-$_selected-$_source"),
                     status: statusFor(_selected, DateTime.now(), _date, source: _source),
@@ -472,7 +544,12 @@ class _TodayMealPageState extends State<TodayMealPage>
                     ),
                   ),
                 ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 16),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
+              ),
+              const SizedBox(height: 32),
             ],
           ),
         ),
@@ -506,7 +583,8 @@ class _TodayMealPageState extends State<TodayMealPage>
   }
 
   void _showCafeteriaInfo(BuildContext context) {
-    final isDorm = _source == MealSource.a;
+    // a = 사도교육원 식당(관리동 1층, 의무입사생 무료), b = 교직원 식당(학생회관 1층 느티헌).
+    final isSado = _source == MealSource.a;
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -546,21 +624,21 @@ class _TodayMealPageState extends State<TodayMealPage>
                       _buildInfoRow(
                         Icons.place,
                         "위치",
-                        isDorm ? "관리동 1층" : "학생회관 1층",
+                        isSado ? "관리동 1층" : "학생회관 1층",
                       ),
                       const SizedBox(height: 12),
                       _buildInfoRow(
                         Icons.attach_money,
                         "가격",
-                        isDorm ? "의무입사생 무료" : "5,500원 (느티헌)",
+                        isSado ? "의무입사생 무료" : "5,500원 (느티헌)",
                       ),
                       const SizedBox(height: 12),
                       _buildInfoRow(
                         Icons.access_time,
                         "운영",
-                        isDorm ? "연중무휴" : "주말/공휴일 휴무",
+                        isSado ? "연중무휴" : "주말/공휴일 휴무",
                       ),
-                      if (!isDorm) ...[
+                      if (!isSado) ...[
                         const SizedBox(height: 24),
                         const SizedBox(
                           width: double.infinity,
@@ -838,7 +916,8 @@ class _DateSwitcher extends StatelessWidget {
 // 3. 월간 식단 페이지
 // =============================================================================
 class MonthlyMealPage extends StatefulWidget {
-  const MonthlyMealPage({super.key});
+  final ValueChanged<int>? onSwitchTab;
+  const MonthlyMealPage({super.key, this.onSwitchTab});
   @override
   State<MonthlyMealPage> createState() => _MonthlyMealPageState();
 }
@@ -920,7 +999,11 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
     final primaryColor = themeColor.value;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: primaryColor,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: AppleAppBarFlexibleSpace(
+          themeColor: primaryColor,
+          isDark: Theme.of(context).brightness == Brightness.dark,
+        ),
         centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
@@ -932,6 +1015,12 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
           ),
         ),
         actions: [
+          _buildMealModeSegment(
+            context: context,
+            selectedIndex: 1,
+            onSwitchTab: widget.onSwitchTab,
+          ),
+          const SizedBox(width: 6),
           GestureDetector(
             onTap: () {
               final nextSource = _source == MealSource.a
@@ -947,21 +1036,21 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
               _fetchForSelectedDate();
             },
             child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              margin: const EdgeInsets.only(right: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.swap_horiz, size: 16, color: Colors.white),
-                  const SizedBox(width: 6),
+                  const Icon(Icons.swap_horiz, size: 15, color: Colors.white),
+                  const SizedBox(width: 4),
                   Text(
-                    _source == MealSource.a ? "기숙사 식당" : "학생회관 식당",
+                    _source.shortLabel,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
@@ -1104,7 +1193,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
                       child: Text(
-                        "* 학생회관 식당은 이번 주(월~금) 식단만 제공합니다.",
+                        "* ${MealSource.b.label}은 이번 주 식단만 제공합니다.",
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade500,
@@ -1144,6 +1233,12 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
                 isToday: DateUtils.isSameDay(_selectedDate, DateTime.now()),
                 date: _selectedDate,
               ),
+            const SizedBox(height: 16),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
+            ),
+            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -1424,17 +1519,38 @@ class _SettingsPageState extends State<SettingsPage> {
                         borderRadius: BorderRadius.circular(16),
                         border: boxBorder,
                       ),
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: kColorPalette
-                            .map(
-                              (c) => _ColorPickerItem(
-                                color: c,
-                                isSelected: c.value == currentColor.value,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: rainbowModeNotifier,
+                        builder: (context, rainbowOn, _) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 무지개 모드가 켜져 있으면 색을 직접 고를 수 없다는
+                            // 걸 흐리게 해서 보여준다(탭은 아래에서 막는다).
+                            Opacity(
+                              opacity: rainbowOn ? 0.4 : 1.0,
+                              child: IgnorePointer(
+                                ignoring: rainbowOn,
+                                child: Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: kColorPalette
+                                      .map(
+                                        (c) => _ColorPickerItem(
+                                          color: c,
+                                          isSelected: !rainbowOn &&
+                                              c.value == currentColor.value,
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
                               ),
-                            )
-                            .toList(),
+                            ),
+                            const SizedBox(height: 16),
+                            const Divider(height: 1),
+                            const SizedBox(height: 8),
+                            _RainbowModeTile(isOn: rainbowOn),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -1498,7 +1614,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        src == MealSource.a ? "기숙사 식당" : "학생회관",
+                                        src.label,
                                         style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.bold,
@@ -1569,7 +1685,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             builder: (context, src, _) => Row(
                               children: [
                                 _WidgetOption(
-                                  label: "기숙사",
+                                  label: MealSource.a.shortLabel,
                                   isSelected: src == MealSource.a,
                                   onTap: () async {
                                     await saveWidgetSettingsAndUpdate(
@@ -1582,7 +1698,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ),
                                 const SizedBox(width: 10),
                                 _WidgetOption(
-                                  label: "학생회관",
+                                  label: MealSource.b.shortLabel,
                                   isSelected: src == MealSource.b,
                                   onTap: () async {
                                     await saveWidgetSettingsAndUpdate(
@@ -1797,7 +1913,11 @@ class _SettingsPageState extends State<SettingsPage> {
                       },
                     ),
 
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
+                    _buildSectionTitle("스폰서 & 제휴"),
+                    const KnueNativeAdCard(isCompact: true, placement: 'settings'),
+                    const SizedBox(height: 18),
+
                     Center(
                       child: GestureDetector(
                         onTap: _onVersionTap,
@@ -2387,6 +2507,73 @@ class _WidgetOption extends StatelessWidget {
   );
 }
 
+/// 무지개 모드 토글 한 줄. 오늘 배정된 색을 미리 보여줘서, 켜면 무슨 일이
+/// 벌어지는지 켜기 전에 알 수 있게 한다.
+class _RainbowModeTile extends StatelessWidget {
+  final bool isOn;
+  const _RainbowModeTile({required this.isOn});
+
+  @override
+  Widget build(BuildContext context) {
+    final today = colorOfDay(DateTime.now());
+    return Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            // 무지개 팔레트 전체를 원 하나에 담아 무슨 모드인지 보여준다.
+            gradient: SweepGradient(colors: [
+              ...kRainbowPalette,
+              kRainbowPalette.first,
+            ]),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "무지개 모드",
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Text(
+                    isOn ? "오늘의 색 · " : "매일 색이 바뀌어요",
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white54
+                          : Colors.black54,
+                    ),
+                  ),
+                  if (isOn)
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: KnuePearl.swatchGradient(today),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Switch.adaptive(
+          value: isOn,
+          onChanged: (v) => PreferencesService.setRainbowMode(v),
+        ),
+      ],
+    );
+  }
+}
+
 class _ColorPickerItem extends StatelessWidget {
   final Color color;
   final bool isSelected;
@@ -2401,9 +2588,24 @@ class _ColorPickerItem extends StatelessWidget {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: color,
+        // 펄 그라데이션 + 위에 겹치는 반사광. 저장되는 값은 여전히 단색
+        // [color] 하나이고, 여기서는 보여주기만 한다.
+        gradient: KnuePearl.swatchGradient(color),
         shape: BoxShape.circle,
         border: isSelected ? Border.all(width: 3, color: Colors.white) : null,
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.35),
+            blurRadius: isSelected ? 10 : 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: KnuePearl.sheen(),
+        ),
       ),
     ),
   );
@@ -2484,6 +2686,58 @@ class _MealTabs extends StatelessWidget {
   }
 }
 
+/// 식단 카드 로딩 자리표시자. 실제 카드와 같은 여백·라운드를 써서
+/// 데이터가 도착해도 레이아웃이 튀지 않는다.
+class _MealCardSkeleton extends StatelessWidget {
+  final bool isDark;
+  const _MealCardSkeleton({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E22) : Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              KnueSkeleton(width: 110, height: 24, radius: 8, isDark: isDark),
+              const Spacer(),
+              KnueSkeleton(width: 76, height: 24, radius: 8, isDark: isDark),
+            ],
+          ),
+          const SizedBox(height: 22),
+          KnueSkeleton(width: 130, height: 14, radius: 6, isDark: isDark),
+          const SizedBox(height: 20),
+          for (int i = 0; i < 5; i++) ...[
+            Row(
+              children: [
+                KnueSkeleton(width: 6, height: 6, radius: 3, isDark: isDark),
+                const SizedBox(width: 12),
+                KnueSkeleton(
+                  width: 150.0 + (i.isEven ? 60 : 0),
+                  height: 15,
+                  radius: 6,
+                  isDark: isDark,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _ErrorCard extends StatelessWidget {
   final String message;
   const _ErrorCard({required this.message});
@@ -2552,7 +2806,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     int startHour, startMinute, endHour, endMinute;
 
     if (widget.source == MealSource.a) {
-      // 기숙사 식당
+      // 사도교육원 식당
       switch (widget.type) {
         case MealType.breakfast:
           startHour = 7;
@@ -2574,7 +2828,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
           break;
       }
     } else {
-      // 학생회관 식당 (조식은 운영 안함)
+      // 교직원 식당 (조식은 운영 안함)
       if (widget.type == MealType.breakfast) return false;
 
       switch (widget.type) {
@@ -2619,13 +2873,15 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     if (!widget.isToday) return "오늘만 평가할 수 있습니다";
 
     if (widget.source == MealSource.b && widget.type == MealType.breakfast) {
-      return "학생회관 아침은 운영하지 않습니다";
+      return "${MealSource.b.shortLabel} 식당 아침은 운영하지 않습니다";
     }
 
     return "운영 시간에 평가해주세요";
   }
 
-  Future<void> _submitRating(double rating) async {
+  /// 별점과 배식 방식을 한 문서로 제출한다.
+  /// [style]이 null이면 배식 방식 투표는 하지 않은 것으로 남긴다.
+  Future<void> _submitRating(double rating, {ServingStyle? style}) async {
     // 평가 가능 시간인지 다시 확인
     if (!_isRatingAllowed()) {
       if (mounted) showToast(context, _getRatingTimeMessage());
@@ -2675,18 +2931,67 @@ class _MealDetailCardState extends State<_MealDetailCard> {
         'source': widget.source.name,
         'mealType': widget.type.stdKey,
         'rating': rating,
+        // 고르지 않았으면 필드 자체를 넣지 않는다 — 집계에서 "무응답"과
+        // "빈 문자열 응답"을 구분할 필요가 없어진다.
+        if (style != null) 'servingStyle': style.key,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       await prefs.setBool(localKey, true);
       if (mounted) {
-        showToast(context, "별점 ${rating}점이 반영되었습니다! 감사합니다. ❤️");
+        final styleMsg = style == null ? '' : ' (${style.label})';
+        showToast(context, "별점 $rating점$styleMsg 반영되었습니다. 감사합니다 ❤️");
       }
     } catch (e) {
       if (mounted) showToast(context, "별점 저장 중 오류가 발생했어요.");
     } finally {
       if (mounted) setState(() => _isRatingSubmitting = false);
     }
+  }
+
+  /// 배식 방식 투표 결과. 어느 쪽이 우세한지와 표 차이를 한 줄로 보여준다.
+  Widget _buildServingStyleBar(MealRatingSummary summary, Color warm) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final majority = summary.majorityStyle;
+    final label = majority == null
+        ? "배식 방식 의견이 갈려요"
+        : "${majority.label} (${(summary.majorityRatio * 100).round()}%)";
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              majority == ServingStyle.self
+                  ? Icons.restaurant_rounded
+                  : Icons.set_meal_rounded,
+              size: 15,
+              color: isDark ? Colors.white70 : Colors.black54,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white70 : Colors.black87,
+                fontFeatures: KnueTokens.tabularFigures,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(
+          "자율 ${summary.selfVotes} · 정량 ${summary.fixedVotes}",
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark ? Colors.white38 : Colors.black38,
+            fontFeatures: KnueTokens.tabularFigures,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildStarRatingBar(double rating, Function(double) onRatingChanged) {
@@ -2726,6 +3031,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     }
 
     double currentRating = 4.0;
+    ServingStyle? currentStyle;
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -2754,18 +3060,15 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                       .where('mealType', isEqualTo: widget.type.stdKey)
                       .snapshots(),
                   builder: (context, snapshot) {
-                    double avg = 0.0;
-                    int count = 0;
-                    if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                      count = snapshot.data!.docs.length;
-                      double sum = 0.0;
-                      for (var doc in snapshot.data!.docs) {
-                        sum +=
-                            (doc.data() as Map<String, dynamic>)['rating'] ??
-                            0.0;
-                      }
-                      avg = sum / count;
-                    }
+                    // 집계 규칙은 MealRatingSummary 한 곳에만 둔다 —
+                    // 화면마다 따로 세면 값이 어긋난다.
+                    final summary = snapshot.hasData
+                        ? MealRatingSummary.fromDocs(snapshot.data!.docs
+                            .map((d) => d.data() as Map<String, dynamic>))
+                        : MealRatingSummary.empty;
+                    final warm = KnueTokens.warm(
+                      Theme.of(context).brightness == Brightness.dark,
+                    );
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 16),
@@ -2774,32 +3077,38 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                         vertical: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.08),
+                        color: warm.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: Colors.amber.withOpacity(0.2),
+                          color: warm.withValues(alpha: 0.2),
                           width: 1,
                         ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
-                            Icons.star_rounded,
-                            color: Colors.amber,
-                            size: 24,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.star_rounded, color: warm, size: 24),
+                              const SizedBox(width: 8),
+                              Text(
+                                summary.hasRatings
+                                    ? "${summary.average.toStringAsFixed(1)}점 (${summary.count}명 참여 중)"
+                                    : "아직 평가가 없습니다",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: warm,
+                                  fontFeatures: KnueTokens.tabularFigures,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            count > 0
-                                ? "${avg.toStringAsFixed(1)}점 ($count명 참여 중)"
-                                : "아직 평가가 없습니다",
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.amber,
-                            ),
-                          ),
+                          if (summary.styleVotes > 0) ...[
+                            const SizedBox(height: 8),
+                            _buildServingStyleBar(summary, warm),
+                          ],
                         ],
                       ),
                     );
@@ -2817,11 +3126,58 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                 const SizedBox(height: 10),
                 Text(
                   "$currentRating 점",
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
-                    color: Colors.amber,
+                    color: KnueTokens.warm(
+                      Theme.of(context).brightness == Brightness.dark,
+                    ),
                   ),
+                ),
+                const SizedBox(height: 18),
+                const Divider(height: 1),
+                const SizedBox(height: 14),
+                // 배식 방식 투표 — 식당에 가기 전 가장 궁금해하는 정보다.
+                // 별점과 같은 문서에 담아 한 번의 제출로 끝낸다.
+                const Text(
+                  "메인 반찬은 어떻게 나왔나요?",
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "직접 드신 분만 골라주세요 (선택)",
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white38
+                        : Colors.black38,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: ServingStyle.values.map((style) {
+                    final selected = currentStyle == style;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        label: Text(style.label),
+                        selected: selected,
+                        // 다시 누르면 선택 해제 — "잘 모르겠다"를 따로 두지 않고
+                        // 고르지 않은 상태로 되돌릴 수 있게 한다.
+                        onSelected: (_) => setDialogState(
+                          () => currentStyle = selected ? null : style,
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                        showCheckmark: false,
+                      ),
+                    );
+                  }).toList(),
                 ),
               ],
             ),
@@ -2835,7 +3191,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
               FilledButton(
                 onPressed: () {
                   Navigator.pop(ctx);
-                  _submitRating(currentRating);
+                  _submitRating(currentRating, style: currentStyle);
                 },
                 style: FilledButton.styleFrom(
                   shape: RoundedRectangleBorder(
@@ -2917,32 +3273,35 @@ class _MealDetailCardState extends State<_MealDetailCard> {
             width: widget.isToday ? 2 : 1,
           );
 
-    Color statusColor = const Color(0xFF2E7D32);
+    // 2색 체계: "지금 배식 중"만 보조색(앰버)으로 띄우고 나머지는 그레이스케일.
+    // 초록/파랑을 함께 쓰면 카드마다 신호등이 켜져 시선이 분산된다.
+    final mutedStatus = KnueTokens.caption(isDark);
+    Color statusColor = KnueTokens.warm(isDark);
     String statusText = "운영 중";
     IconData statusIcon = Icons.soup_kitchen;
 
     if (isStudentHallBreakfast) {
-      statusColor = isDark ? Colors.grey.shade600 : Colors.grey.shade500;
+      statusColor = mutedStatus;
       statusText = "운영 안함";
       statusIcon = Icons.block;
     } else {
       switch (widget.status) {
         case ServeStatus.open:
-          statusColor = const Color(0xFF2E7D32);
+          statusColor = KnueTokens.warm(isDark);
           statusText = "식당 운영 중";
           break;
         case ServeStatus.waiting:
-          statusColor = const Color(0xFF1976D2);
+          statusColor = mutedStatus;
           statusText = "식사 준비 중";
           statusIcon = Icons.access_time;
           break;
         case ServeStatus.closed:
-          statusColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
+          statusColor = mutedStatus;
           statusText = "운영 종료";
           statusIcon = Icons.block;
           break;
         case ServeStatus.notToday:
-          statusColor = isDark ? Colors.grey.shade600 : Colors.grey.shade500;
+          statusColor = mutedStatus;
           statusText = "식당 운영시간 아님";
           statusIcon = Icons.calendar_today_rounded;
           break;
@@ -3086,21 +3445,21 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.star_rounded,
                                           size: 16,
-                                          color: Colors.amber,
+                                          color: KnueTokens.warm(isDark),
                                         ),
                                         if (count > 0) ...[
                                           const SizedBox(width: 4),
                                           Text(
                                             avg.toStringAsFixed(1),
                                             style: TextStyle(
-                                              color: isDark
-                                                  ? Colors.amber.shade300
-                                                  : Colors.amber.shade800,
+                                              color: KnueTokens.warm(isDark),
                                               fontWeight: FontWeight.w900,
                                               fontSize: 12,
+                                              fontFeatures:
+                                                  KnueTokens.tabularFigures,
                                             ),
                                           ),
                                         ],
@@ -3125,27 +3484,29 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.1),
+                      // 마감 임박은 시간 신호이므로 보조색(앰버).
+                      color: KnueTokens.warm(isDark).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Colors.redAccent.withOpacity(0.2),
+                        color: KnueTokens.warm(isDark).withValues(alpha: 0.24),
                       ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.bolt,
                           size: 12,
-                          color: Colors.redAccent,
+                          color: KnueTokens.warm(isDark),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           timeLeft,
-                          style: const TextStyle(
-                            color: Colors.redAccent,
+                          style: TextStyle(
+                            color: KnueTokens.warm(isDark),
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
+                            fontFeatures: KnueTokens.tabularFigures,
                           ),
                         ),
                       ],
@@ -3155,20 +3516,53 @@ class _MealDetailCardState extends State<_MealDetailCard> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 4),
+            padding: unavailable
+                ? const EdgeInsets.fromLTRB(24, 40, 24, 56)
+                : const EdgeInsets.fromLTRB(24, 24, 24, 4),
             child: unavailable
-                ? const Center(
+                ? Center(
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.no_meals, size: 40, color: Colors.grey),
-                        SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.no_meals_rounded,
+                            size: 38,
+                            color: isDark
+                                ? Colors.white38
+                                : Colors.grey.shade400,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         Text(
                           "운영하지 않거나 메뉴 정보가 없습니다.",
                           style: TextStyle(
-                            color: Colors.grey,
+                            color: isDark
+                                ? Colors.white70
+                                : Colors.grey.shade700,
                             fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            letterSpacing: -0.2,
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        Text(
+                          "다른 날짜나 식당 탭을 확인해보세요.",
+                          style: TextStyle(
+                            color: isDark
+                                ? Colors.white30
+                                : Colors.grey.shade400,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   )
@@ -3186,11 +3580,12 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              "${_getTimeRangeText()}",
+                              _getTimeRangeText(),
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
                                 color: isDark ? Colors.grey : Colors.black45,
+                                fontFeatures: KnueTokens.tabularFigures,
                               ),
                             ),
                           ],
@@ -3218,13 +3613,15 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Container(
-                                  margin: const EdgeInsets.only(top: 7),
-                                  width: 6,
-                                  height: 6,
+                                  // 첫 줄(그날의 메인)만 점을 진하게 — 목록이
+                                  // 평평하게 늘어서지 않고 읽는 순서가 생긴다.
+                                  margin: EdgeInsets.only(top: idx == 0 ? 8 : 7),
+                                  width: idx == 0 ? 7 : 6,
+                                  height: idx == 0 ? 7 : 6,
                                   decoration: BoxDecoration(
-                                    color: isBold
+                                    color: isBold || idx == 0
                                         ? primary
-                                        : primary.withOpacity(0.5),
+                                        : primary.withOpacity(0.4),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -3233,16 +3630,24 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                                   child: AnimatedDefaultTextStyle(
                                     duration: const Duration(milliseconds: 150),
                                     style: TextStyle(
-                                      fontSize: 16,
-                                      height: 1.4,
+                                      fontSize: idx == 0 ? 16.5 : 15.5,
+                                      height: 1.5,
+                                      letterSpacing: -0.2,
                                       fontWeight: isBold
                                           ? FontWeight.w900
-                                          : FontWeight.normal,
+                                          : (idx == 0
+                                                ? FontWeight.w700
+                                                : FontWeight.w500),
                                       color: isBold
                                           ? primary
                                           : (isDark
-                                                ? Colors.white
-                                                : Colors.black87),
+                                                ? (idx == 0
+                                                      ? Colors.white
+                                                      : Colors.white70)
+                                                : (idx == 0
+                                                      ? Colors.black87
+                                                      : Colors.black.withValues(
+                                                          alpha: 0.66))),
                                     ),
                                     child: Text(
                                       e,

@@ -405,3 +405,199 @@ const List<AdminStaff> kAdminStaff = [
   AdminStaff(category: '주무관', dept: '평생교육원', duties: '교육연구원 예산편성 집행 및 행정업무', phone: '043-230-3254'),
   AdminStaff(category: '연구원', dept: '평생교육원', duties: '국립대학육성사업(연구기획센터, 평생교육원)', phone: '043-230-3256'),
 ];
+class DeptOffice {
+  final String dept;
+  final String college;
+  final String building;
+  final String room;
+  final String phone;
+  const DeptOffice({
+    required this.dept,
+    required this.college,
+    required this.building,
+    required this.room,
+    required this.phone,
+  });
+}
+
+const List<DeptOffice> kDeptOffices = [
+  // 제 1대학
+  DeptOffice(
+    dept: '교육학과',
+    college: '제1대학',
+    building: '인문과학관',
+    room: '337호',
+    phone: '043-230-3410',
+  ),
+  DeptOffice(
+    dept: '유아교육과',
+    college: '제1대학',
+    building: '종합교육관',
+    room: '401호',
+    phone: '043-230-3411',
+  ),
+  DeptOffice(
+    dept: '초등교육과',
+    college: '제1대학',
+    building: '종합교육관',
+    room: '303호',
+    phone: '043-230-3417, 043-230-3418',
+  ),
+  DeptOffice(
+    dept: '특수교육과',
+    college: '제1대학',
+    building: '교양학관',
+    room: '216호',
+    phone: '043-230-3440',
+  ),
+  // 제 2대학
+  DeptOffice(
+    dept: '국어교육과',
+    college: '제2대학',
+    building: '인문과학관',
+    room: '223호',
+    phone: '043-230-3500',
+  ),
+  DeptOffice(
+    dept: '영어교육과',
+    college: '제2대학',
+    building: '인문과학관',
+    room: '227-1호',
+    phone: '043-230-3502',
+  ),
+  DeptOffice(
+    dept: '독어교육과',
+    college: '제2대학',
+    building: '인문과학관',
+    room: '330호',
+    phone: '043-230-3503',
+  ),
+  DeptOffice(
+    dept: '불어교육과',
+    college: '제2대학',
+    building: '인문과학관',
+    room: '331호',
+    phone: '043-230-3504',
+  ),
+  DeptOffice(
+    dept: '중국어교육과',
+    college: '제2대학',
+    building: '인문과학관',
+    room: '120-1호',
+    phone: '043-230-3580',
+  ),
+  DeptOffice(
+    dept: '윤리교육과',
+    college: '제2대학',
+    building: '종합교육관',
+    room: '622호',
+    phone: '043-230-3506',
+  ),
+  DeptOffice(
+    dept: '일반사회교육과',
+    college: '제2대학',
+    building: '종합교육관',
+    room: '516호',
+    phone: '043-230-3507',
+  ),
+  DeptOffice(
+    dept: '지리교육과',
+    college: '제2대학',
+    building: '종합교육관',
+    room: '108호',
+    phone: '043-230-3508',
+  ),
+  DeptOffice(
+    dept: '역사교육과',
+    college: '제2대학',
+    building: '종합교육관',
+    room: '415호',
+    phone: '043-230-3509',
+  ),
+  // 제 3대학
+  DeptOffice(
+    dept: '수학교육과',
+    college: '제3대학',
+    building: '응용과학관',
+    room: '406호',
+    phone: '043-230-3601',
+  ),
+  DeptOffice(
+    dept: '물리교육과',
+    college: '제3대학',
+    building: '자연과학관',
+    room: '417호',
+    phone: '043-230-3602',
+  ),
+  DeptOffice(
+    dept: '화학교육과',
+    college: '제3대학',
+    building: '자연과학관',
+    room: '318호',
+    phone: '043-230-3604',
+  ),
+  DeptOffice(
+    dept: '생물교육과',
+    college: '제3대학',
+    building: '자연과학관',
+    room: '101호',
+    phone: '043-230-3605',
+  ),
+  DeptOffice(
+    dept: '지구과학교육과',
+    college: '제3대학',
+    building: '자연과학관',
+    room: '204호',
+    phone: '043-230-3606',
+  ),
+  DeptOffice(
+    dept: '가정교육과',
+    college: '제3대학',
+    building: '응용과학관',
+    room: '301호',
+    phone: '043-230-3607',
+  ),
+  DeptOffice(
+    dept: '환경교육과',
+    college: '제3대학',
+    building: '융합과학관',
+    room: '407호',
+    phone: '043-230-3608',
+  ),
+  DeptOffice(
+    dept: '기술교육과',
+    college: '제3대학',
+    building: '융합과학관',
+    room: '311호',
+    phone: '043-230-3610',
+  ),
+  DeptOffice(
+    dept: '컴퓨터교육과',
+    college: '제3대학',
+    building: '융합과학관',
+    room: '508호',
+    phone: '043-230-3611',
+  ),
+  // 제 4대학
+  DeptOffice(
+    dept: '음악교육과',
+    college: '제4대학',
+    building: '음악관',
+    room: '202호',
+    phone: '043-230-3700',
+  ),
+  DeptOffice(
+    dept: '미술교육과',
+    college: '제4대학',
+    building: '미술관',
+    room: '201호',
+    phone: '043-230-3701',
+  ),
+  DeptOffice(
+    dept: '체육교육과',
+    college: '제4대학',
+    building: '체육관',
+    room: '206호',
+    phone: '043-230-3702',
+  ),
+];

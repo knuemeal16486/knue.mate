@@ -1,4 +1,26 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "//": "홈 식단 카드와 식단 화면이 한 끼니의 평가를 모을 때 쓰는 쿼리. date+source+mealType 3중 equality라 복합 인덱스가 필요하다.",
+      "collectionGroup": "meal_ratings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "source", "order": "ASCENDING" },
+        { "fieldPath": "mealType", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "중복 투표 방지용 조회 — 위 3개에 fingerPrint가 더 붙는다.",
+      "collectionGroup": "meal_ratings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fingerPrint", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "source", "order": "ASCENDING" },
+        { "fieldPath": "mealType", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

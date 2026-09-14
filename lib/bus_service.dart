@@ -47,7 +47,10 @@ class BusService {
     513: 42,
     514: 45,
     518: 35,
-    913: 31, // 교내 순환 타겟
+    // TODO(913): 2024-08-10 노선 개정(평동↔미호종점) 뒤 정류장 순서가 바뀌었다.
+    // 이 번호는 개정 전 기준이라 실시간 도착정보가 엉뚱한 정류장을 가리킬 수 있다.
+    // 새 정류장 순서를 확인해 다시 잡아야 한다.
+    913: 31,
     // 탑연삼거리 경유 (탑연삼거리 정류장)
     500: 45,
     502: 42,
@@ -417,7 +420,11 @@ class BusService {
   Map<String, String> _getRouteMeta(int routeNumber, bool isDirect) {
     if (routeNumber == 747) return {'type': 'red', 'direction': '급행 (탑연 경유)'};
     if (routeNumber == 509) return {'type': 'red', 'direction': '조치원/오송'};
-    if (routeNumber == 913) return {'type': 'green', 'direction': '교내 순환'};
+    // 913은 교내 셔틀이 아니다. 2024-08-10 개정으로 평동↔미호종점 노선이 됐고
+    // 교원대는 그 사이를 지나는 경유지다. '교내 순환'은 잘못된 표기였다.
+    if (routeNumber == 913) {
+      return {'type': 'green', 'direction': '평동↔미호종점'};
+    }
 
     // 직행 vs 경유 표시 명확화
     if (isDirect) {

@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 import 'building_data.dart';
+import 'offline_cache.dart';
+import 'meal_rating.dart';
 import 'constants.dart';
 import 'bus_model.dart';
 
@@ -13,20 +16,27 @@ class FirebaseSyncService {
   /// [건물 정보] 로컬 JSON 데이터를 Firestore로 업로드합니다.
   static Future<void> uploadBuildingsToFirestore() async {
     try {
+      if (Firebase.apps.isEmpty) {
+        debugPrint('FirebaseSyncService: Firebase가 초기화되지 않았습니다.');
+        return;
+      }
       final String jsonString = await rootBundle.loadString(
         'assets/buildings/knue_buildings.json',
       );
       final dynamic decoded = json.decode(jsonString);
       final Map<String, dynamic> jsonData = Map<String, dynamic>.from(decoded);
-      final List<dynamic> buildingsJson = jsonData['buildings'];
+      final List<dynamic> buildingsJson = jsonData['buildings'] ?? [];
 
       final batch = _firestore.batch();
       final collection = _firestore.collection('knue_buildings');
 
       for (var bJson in buildingsJson) {
+        if (bJson is! Map) continue;
         final Map<String, dynamic> buildingData = Map<String, dynamic>.from(bJson);
-        final String name = buildingData['name'];
-        final docRef = collection.doc(name);
+        final String? name = buildingData['name'];
+        if (name == null || name.isEmpty) continue;
+        final safeDocId = name.replaceAll('/', '_');
+        final docRef = collection.doc(safeDocId);
         batch.set(docRef, {
           ...buildingData,
           'lastUpdated': FieldValue.serverTimestamp(),
@@ -43,37 +53,47 @@ class FirebaseSyncService {
   /// [건물 정보] Firestore에서 데이터를 가져와 BuildingData 리스트를 반환합니다.
   static Future<List<BuildingData>?> fetchBuildingsFromFirestore() async {
     try {
+      if (Firebase.apps.isEmpty) return null;
       final snapshot = await _firestore.collection('knue_buildings').get();
       if (snapshot.docs.isEmpty) return null;
 
       List<BuildingData> firestoreBuildings = [];
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        final String name = data['name'];
-        final List<dynamic> floorsJson = data['floors'] ?? [];
+        final String name = (data['name'] as String?) ?? doc.id;
+        final dynamic floorsRaw = data['floors'];
+        if (floorsRaw is! List) continue;
 
-        final List<FloorData> floors = floorsJson.map((fJson) {
-          final List<String> rooms = (fJson['facilities'] as List)
-              .map((fac) {
-                final String? roomNum = fac['room'];
-                final String facName = fac['name'] ?? '';
+        final List<FloorData> floors = [];
+        for (var fJson in floorsRaw) {
+          if (fJson is! Map) continue;
+          final dynamic facList = fJson['facilities'];
+          final List<String> rooms = [];
+          if (facList is List) {
+            for (var fac in facList) {
+              if (fac is Map) {
+                final String? roomNum = fac['room']?.toString();
+                final String facName = fac['name']?.toString() ?? '';
                 if (roomNum != null && roomNum.isNotEmpty) {
-                  return '$roomNum $facName'.trim();
+                  rooms.add('$roomNum $facName'.trim());
+                } else if (facName.isNotEmpty) {
+                  rooms.add(facName.trim());
                 }
-                return facName.trim();
-              })
-              .where((s) => s.isNotEmpty)
-              .toList();
+              } else if (fac is String && fac.isNotEmpty) {
+                rooms.add(fac.trim());
+              }
+            }
+          }
 
-          return FloorData(floor: fJson['floor'], rooms: rooms);
-        }).toList();
+          floors.add(FloorData(floor: fJson['floor'] ?? '1F', rooms: rooms));
+        }
 
         firestoreBuildings.add(
           BuildingData(
             name: name,
             shortName: '',
             description: '',
-            position: LatLng(36.61, 127.35),
+            position: const LatLng(36.61, 127.35),
             color: Colors.grey,
             floors: floors,
           ),
@@ -93,6 +113,7 @@ class FirebaseSyncService {
     Map<String, dynamic> mealData,
   ) async {
     try {
+      if (Firebase.apps.isEmpty) return;
       final dateStr =
           "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
       final docId = "${dateStr}_${source.name}";
@@ -109,42 +130,44 @@ class FirebaseSyncService {
     }
   }
 
+  /// 공용 식단 문서를 그대로 믿어도 되는지.
+  ///
+  /// 지난 날짜의 식단은 더 바뀌지 않으니 언제 저장됐든 그대로 쓴다. 문제는
+  /// 오늘 이후다 — 이 문서는 그 날짜를 처음 열어본 사람이 한 번 쓰면 아무도
+  /// 다시 쓰지 않는다. 실제로 8월 31일에 저장된 교직원 식당 메뉴가 9월 중순까지
+  /// 모든 사용자에게 내려가고 있었다. lastUpdated는 줄곧 저장만 하고 아무도
+  /// 읽지 않았다.
+  static bool _isMealDocStale(DateTime date, Map<String, dynamic>? data) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(date.year, date.month, date.day);
+    if (target.isBefore(today)) return false;
+
+    final ts = data?['lastUpdated'];
+    if (ts is! Timestamp) return true; // 언제 쓴 값인지 모르면 새로 긁는다
+    return now.difference(ts.toDate()) > const Duration(hours: 12);
+  }
+
   /// [식단 정보] Firestore에서 특정 날짜의 식단을 가져옵니다.
   static Future<Map<String, dynamic>?> getMealFromFirestore(
     DateTime date,
     MealSource source,
   ) async {
     try {
+      if (Firebase.apps.isEmpty) return null;
       final dateStr =
           "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
       final docId = "${dateStr}_${source.name}";
 
       final doc = await _firestore.collection('daily_meals').doc(docId).get();
       if (doc.exists) {
-        final data = doc.data()!;
-
-        // MealSource.b (학생회관): URL이 www.knue.ac.kr 로 변경됨 (v2)
-        // cacheVersion < 2 이거나, 이번 주 월요일 이전 캐시는 삭제 후 재스크래핑
-        if (source == MealSource.b) {
-          final cacheVersion = (data['cacheVersion'] as int?) ?? 1;
-          final lastUpdated = (data['lastUpdated'] as Timestamp?)?.toDate();
-          final now = DateTime.now();
-          final thisMonday = now.subtract(Duration(days: now.weekday - 1));
-          final mondayStart = DateTime(thisMonday.year, thisMonday.month, thisMonday.day);
-          final isStale = lastUpdated == null || lastUpdated.isBefore(mondayStart);
-
-          if (cacheVersion < 2 || isStale) {
-            print(
-              'FirebaseSyncService: 학생회관 캐시 무효 (v$cacheVersion, 저장=$lastUpdated) → 삭제 후 재스크래핑',
-            );
-            _firestore.collection('daily_meals').doc(docId).delete().catchError((_) {});
-            return null;
-          }
-        }
-
+        final data = doc.data();
+        if (_isMealDocStale(date, data)) return null; // 새로 긁어오게 둔다
         return data;
       }
     } catch (e) {
+      // 규칙 미배포·네트워크 문제 — 잠시 Firestore를 건너뛰도록 표시한다.
+      FirestoreHealth.reportFailure();
       debugPrint('FirebaseSyncService: 식단 가져오기 실패: $e');
     }
     return null;
@@ -160,6 +183,7 @@ class FirebaseSyncService {
     List<String> departureTimes,
   ) async {
     try {
+      if (Firebase.apps.isEmpty) return;
       final docId =
           "${routeNumber}_${isOutgoing ? 'outgoing' : 'incoming'}_${isWeekday ? 'weekday' : 'holiday'}";
 
@@ -182,6 +206,7 @@ class FirebaseSyncService {
     Map<String, Map<String, Map<String, List<String>>>> timetables,
   ) async {
     try {
+      if (Firebase.apps.isEmpty) return;
       final batch = _firestore.batch();
       final collection = _firestore.collection('bus_timetables');
 
@@ -223,6 +248,7 @@ class FirebaseSyncService {
     bool isWeekday = true,
   }) async {
     try {
+      if (Firebase.apps.isEmpty) return null;
       final docId =
           "${routeNumber}_${isOutgoing ? 'outgoing' : 'incoming'}_${isWeekday ? 'weekday' : 'holiday'}";
 
@@ -244,6 +270,7 @@ class FirebaseSyncService {
   /// [버스 시간표] Firestore에서 전체 시간표 가져오기
   static Future<Map<String, List<BusTimetable>>> fetchAllBusTimetables() async {
     try {
+      if (Firebase.apps.isEmpty) return {};
       final snapshot = await _firestore.collection('bus_timetables').get();
 
       final Map<String, List<BusTimetable>> timetables = {};
@@ -270,6 +297,7 @@ class FirebaseSyncService {
   /// [실시간 버스] 버스 위치/도착 정보 Firestore에 저장
   static Future<void> saveBusRealtimeData(List<BusSummary> busSummaries) async {
     try {
+      if (Firebase.apps.isEmpty) return;
       final summariesJson = busSummaries.map((b) => b.toJson()).toList();
 
       await _firestore.collection('realtime').doc('bus_locations').set({
@@ -288,6 +316,7 @@ class FirebaseSyncService {
   /// [실시간 버스] Firestore에서 실시간 버스 데이터 가져오기
   static Future<List<BusSummary>?> fetchBusRealtimeData() async {
     try {
+      if (Firebase.apps.isEmpty) return null;
       final doc = await _firestore
           .collection('realtime')
           .doc('bus_locations')
@@ -311,6 +340,7 @@ class FirebaseSyncService {
 
   /// [실시간 버스] 실시간 버스 데이터 스트림 구독
   static Stream<List<BusSummary>?> subscribeBusRealtimeData() {
+    if (Firebase.apps.isEmpty) return const Stream.empty();
     return _firestore
         .collection('realtime')
         .doc('bus_locations')
@@ -333,6 +363,7 @@ class FirebaseSyncService {
   /// [실시간 버스] 마지막 업데이트 시간 가져오기
   static Future<DateTime?> getLastBusUpdateTime() async {
     try {
+      if (Firebase.apps.isEmpty) return null;
       final doc = await _firestore
           .collection('realtime')
           .doc('bus_locations')
@@ -351,12 +382,13 @@ class FirebaseSyncService {
 
   // ==================== 버스 정류장 정보 Firebase 연동 ====================
 
-  /// [버]정류장] Firestore에 정류장 정보 저장
+  /// [버스 정류장] Firestore에 정류장 정보 저장
   static Future<void> uploadBusStopsToFirestore(
     List<BusStop> stops,
     String routeNumber,
   ) async {
     try {
+      if (Firebase.apps.isEmpty) return;
       final batch = _firestore.batch();
       final collection = _firestore.collection('bus_stops');
 
@@ -379,6 +411,7 @@ class FirebaseSyncService {
   /// [버스 정류장] Firestore에서 특정 노선의 정류장 정보 가져오기
   static Future<List<BusStop>> fetchBusStops(String routeNumber) async {
     try {
+      if (Firebase.apps.isEmpty) return [];
       final snapshot = await _firestore
           .collection('bus_stops')
           .where('routeNumber', isEqualTo: routeNumber)
@@ -403,6 +436,7 @@ class FirebaseSyncService {
     required double rating,
   }) async {
     try {
+      if (Firebase.apps.isEmpty) return;
       final dateStr =
           "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
       final docId = "${dateStr}_${source.name}_${mealType.name}";
@@ -421,6 +455,34 @@ class FirebaseSyncService {
     }
   }
 
+  /// [식단 별점] 한 끼니의 평균 별점·참여자 수·배식 방식 투표를 한 번에 가져온다.
+  /// 홈 카드처럼 화면을 막으면 안 되는 곳에서 쓰므로 짧은 타임아웃을 걸고,
+  /// Firestore가 이미 실패한 상태면 아예 건너뛴다.
+  static Future<MealRatingSummary?> getMealRatingSummary({
+    required DateTime date,
+    required MealSource source,
+    required MealType mealType,
+  }) async {
+    if (Firebase.apps.isEmpty || !FirestoreHealth.isAvailable) return null;
+    try {
+      final dateStr =
+          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      final snap = await _firestore
+          .collection('meal_ratings')
+          .where('date', isEqualTo: dateStr)
+          .where('source', isEqualTo: source.name)
+          .where('mealType', isEqualTo: mealType.stdKey)
+          .get()
+          .timeout(const Duration(seconds: 3));
+      FirestoreHealth.reportSuccess();
+      return MealRatingSummary.fromDocs(snap.docs.map((d) => d.data()));
+    } catch (e) {
+      FirestoreHealth.reportFailure();
+      debugPrint('FirebaseSyncService: 별점 집계 실패: $e');
+      return null;
+    }
+  }
+
   /// [식단 별점] Firestore에서 특정 식단의 별점을 가져옵니다.
   static Future<double?> getMealRating({
     required DateTime date,
@@ -428,6 +490,7 @@ class FirebaseSyncService {
     required MealType mealType,
   }) async {
     try {
+      if (Firebase.apps.isEmpty) return null;
       final dateStr =
           "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
       final docId = "${dateStr}_${source.name}_${mealType.name}";

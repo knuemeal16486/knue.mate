@@ -76,6 +76,15 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        // home_widget이 가져오는 glance 1.3.0-alpha02는 AGP 9.1.0을 요구하므로
+        // AGP 8.11.1과 호환되는 1.1.1로 강제 고정
+        force("androidx.glance:glance:1.1.1")
+        force("androidx.glance:glance-appwidget:1.1.1")
+    }
+}
+
 dependencies {
     // [여기에 추가하세요]
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")

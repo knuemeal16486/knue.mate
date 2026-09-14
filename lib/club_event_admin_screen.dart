@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'club_event_model.dart';
 import 'club_event_service.dart';
 import 'constants.dart';
+import 'ui_utils.dart';
 
 /// 동아리 행사 관리자 화면. 비밀번호로 보호되며, 통과 후 행사 목록을
 /// 조회·추가·수정·삭제하고 녹출(isFeatured) 여부를 토글할 수 있다.
@@ -82,7 +83,10 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
   Future<void> _loadEvents({bool showSavedToast = false}) async {
     if (mounted) setState(() => _loadingList = true);
     try {
-      final list = await ClubEventService.fetchAll(forceRefresh: true);
+      final list = await ClubEventService.fetchAll(
+        forceRefresh: true,
+        includeEnded: true,
+      );
       if (!mounted) return;
       setState(() {
         _events = list..sort((a, b) => a.startDate.compareTo(b.startDate));
@@ -123,18 +127,19 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
   }
 
   ClubEvent _withFeatured(ClubEvent e, bool featured) => ClubEvent(
-        id: e.id,
-        title: e.title,
-        clubName: e.clubName,
-        startDate: e.startDate,
-        endDate: e.endDate,
-        location: e.location,
-        description: e.description,
-        posterUrl: e.posterUrl,
-        externalLink: e.externalLink,
-        isFeatured: featured,
-        createdAt: e.createdAt,
-      );
+    category: e.category,
+    id: e.id,
+    title: e.title,
+    clubName: e.clubName,
+    startDate: e.startDate,
+    endDate: e.endDate,
+    location: e.location,
+    description: e.description,
+    posterUrl: e.posterUrl,
+    externalLink: e.externalLink,
+    isFeatured: featured,
+    createdAt: e.createdAt,
+  );
 
   Future<void> _confirmDelete(ClubEvent event) async {
     final confirmed = await showDialog<bool>(
@@ -165,6 +170,45 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
     }
   }
 
+  /// 끝난 지 일주일이 지난 행사를 Firestore에서 지운다.
+  ///
+  /// 목록에서 감추는 것은 모든 기기가 알아서 하지만(ClubEventService.fetchAll),
+  /// 실제로 지우는 것은 코드를 아는 사람이 여기서만 한다 — 시계가 앞서 있는
+  /// 기기 하나가 아직 열리지도 않은 행사를 지워버리면 되돌릴 수 없다.
+  Future<void> _purgeEnded() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("지난 행사 정리"),
+        content: const Text(
+          "끝난 지 일주일이 지난 행사를 삭제합니다.\n"
+          "되돌릴 수 없습니다.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text("취소"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text("정리", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _loadingList = true);
+    try {
+      final removed = await ClubEventService.purgeEnded();
+      if (mounted) {
+        showToast(context, removed == 0 ? "정리할 행사가 없습니다" : "$removed건 삭제했습니다");
+      }
+    } catch (e) {
+      if (mounted) showToast(context, "정리 실패");
+    }
+    await _loadEvents();
+  }
+
   Future<void> _openForm({ClubEvent? existing}) async {
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => _EventFormPage(existing: existing)),
@@ -182,10 +226,16 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
           appBar: AppBar(
-            title: const Text("동아리 행사 관리"),
+            title: const Text("공연·행사 관리"),
             backgroundColor: color,
             iconTheme: const IconThemeData(color: Colors.white),
             actions: [
+              if (_granted)
+                IconButton(
+                  onPressed: _purgeEnded,
+                  icon: const Icon(Icons.auto_delete_outlined),
+                  tooltip: "지난 행사 정리",
+                ),
               if (_granted)
                 IconButton(
                   onPressed: () => _openForm(),
@@ -211,8 +261,11 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.lock_outline,
-                  size: 40, color: isDark ? Colors.white38 : Colors.black38),
+              Icon(
+                Icons.lock_outline,
+                size: 40,
+                color: isDark ? Colors.white38 : Colors.black38,
+              ),
               const SizedBox(height: 12),
               const Text("관리자 설정이 없습니다"),
             ],
@@ -249,9 +302,11 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
                 hintText: "비밀번호",
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscurePassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined),
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
                   onPressed: () =>
                       setState(() => _obscurePassword = !_obscurePassword),
                 ),
@@ -318,7 +373,9 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
                       child: Text(
                         event.title,
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 15),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                     Switch(
@@ -354,10 +411,15 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
                     ),
                     TextButton.icon(
                       onPressed: () => _confirmDelete(event),
-                      icon: const Icon(Icons.delete_outline,
-                          size: 18, color: Colors.red),
-                      label: const Text("삭제",
-                          style: TextStyle(color: Colors.red)),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: 18,
+                        color: Colors.red,
+                      ),
+                      label: const Text(
+                        "삭제",
+                        style: TextStyle(color: Colors.red),
+                      ),
                     ),
                   ],
                 ),
@@ -380,6 +442,7 @@ class _EventFormPage extends StatefulWidget {
 }
 
 class _EventFormPageState extends State<_EventFormPage> {
+  ClubEventCategory _category = ClubEventCategory.etc;
   late final TextEditingController _titleController;
   late final TextEditingController _clubNameController;
   late final TextEditingController _locationController;
@@ -398,6 +461,7 @@ class _EventFormPageState extends State<_EventFormPage> {
   void initState() {
     super.initState();
     final e = widget.existing;
+    _category = e?.category ?? ClubEventCategory.etc;
     _titleController = TextEditingController(text: e?.title ?? '');
     _clubNameController = TextEditingController(text: e?.clubName ?? '');
     _locationController = TextEditingController(text: e?.location ?? '');
@@ -420,8 +484,7 @@ class _EventFormPageState extends State<_EventFormPage> {
 
   Future<void> _pickPoster() async {
     try {
-      final picked =
-          await ImagePicker().pickImage(source: ImageSource.gallery);
+      final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (picked != null) {
         setState(() => _localPoster = File(picked.path));
       }
@@ -443,8 +506,13 @@ class _EventFormPageState extends State<_EventFormPage> {
       initialTime: TimeOfDay.fromDateTime(_startDate),
     );
     setState(() {
-      _startDate = DateTime(date.year, date.month, date.day,
-          time?.hour ?? _startDate.hour, time?.minute ?? _startDate.minute);
+      _startDate = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time?.hour ?? _startDate.hour,
+        time?.minute ?? _startDate.minute,
+      );
     });
   }
 
@@ -461,8 +529,13 @@ class _EventFormPageState extends State<_EventFormPage> {
       initialTime: TimeOfDay.fromDateTime(_endDate ?? _startDate),
     );
     setState(() {
-      _endDate = DateTime(date.year, date.month, date.day, time?.hour ?? 0,
-          time?.minute ?? 0);
+      _endDate = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time?.hour ?? 0,
+        time?.minute ?? 0,
+      );
     });
   }
 
@@ -470,14 +543,16 @@ class _EventFormPageState extends State<_EventFormPage> {
     final title = _titleController.text.trim();
     final clubName = _clubNameController.text.trim();
     if (title.isEmpty || clubName.isEmpty) {
-      showToast(context, "제목과 동아리명을 입력하세요");
+      showToast(context, "제목과 주최/단체명을 입력하세요");
       return;
     }
     setState(() => _saving = true);
     try {
       var posterUrl = _posterUrl;
       if (_localPoster != null) {
-        final uploaded = await ClubEventService.uploadPoster(_localPoster!.path);
+        final uploaded = await ClubEventService.uploadPoster(
+          _localPoster!.path,
+        );
         if (uploaded != null) {
           posterUrl = uploaded;
         } else if (mounted) {
@@ -492,6 +567,7 @@ class _EventFormPageState extends State<_EventFormPage> {
         endDate: _endDate,
         location: _locationController.text.trim(),
         description: _descriptionController.text.trim(),
+        category: _category,
         posterUrl: posterUrl,
         externalLink: _linkController.text.trim().isEmpty
             ? null
@@ -531,15 +607,54 @@ class _EventFormPageState extends State<_EventFormPage> {
                 TextField(
                   controller: _titleController,
                   decoration: const InputDecoration(
-                      labelText: "제목", border: OutlineInputBorder()),
+                    labelText: "제목",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _clubNameController,
                   decoration: const InputDecoration(
-                      labelText: "동아리명", border: OutlineInputBorder()),
+                    labelText: "주최/단체명 (예: 교육학과, 밴드동아리)",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    "행사 종류",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final c in ClubEventCategory.values)
+                      ChoiceChip(
+                        label: Text(c.label),
+                        selected: _category == c,
+                        onSelected: (_) => setState(() => _category = c),
+                        selectedColor: KnueTokens.inkAt(
+                          c.inkIndex,
+                          isDark,
+                        ).withValues(alpha: isDark ? 0.32 : 0.18),
+                        labelStyle: TextStyle(
+                          fontSize: 13,
+                          fontWeight: _category == c
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 14),
                 _buildDateRow(
                   label: "시작일시",
                   value: _formatDateTime(_startDate),
@@ -549,7 +664,9 @@ class _EventFormPageState extends State<_EventFormPage> {
                 const SizedBox(height: 12),
                 _buildDateRow(
                   label: "종료일시 (선택)",
-                  value: _endDate == null ? "설정 안 함" : _formatDateTime(_endDate!),
+                  value: _endDate == null
+                      ? "설정 안 함"
+                      : _formatDateTime(_endDate!),
                   onTap: _pickEndDate,
                   isDark: isDark,
                   onClear: _endDate == null
@@ -560,20 +677,26 @@ class _EventFormPageState extends State<_EventFormPage> {
                 TextField(
                   controller: _locationController,
                   decoration: const InputDecoration(
-                      labelText: "장소", border: OutlineInputBorder()),
+                    labelText: "장소",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _descriptionController,
                   maxLines: 4,
                   decoration: const InputDecoration(
-                      labelText: "설명", border: OutlineInputBorder()),
+                    labelText: "설명",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _linkController,
                   decoration: const InputDecoration(
-                      labelText: "외부 링크 (선택)", border: OutlineInputBorder()),
+                    labelText: "외부 링크 (선택)",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -591,8 +714,7 @@ class _EventFormPageState extends State<_EventFormPage> {
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation(Colors.white),
+                              valueColor: AlwaysStoppedAnimation(Colors.white),
                             ),
                           )
                         : const Text("저장"),
