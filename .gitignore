@@ -60,3 +60,10 @@ tool/mapsrc/iso_*.png
 tool/mapsrc/crop*.png
 tool/mapsrc/traced_raw.json
 tool/mapsrc/outline.json
+
+# 릴리스 서명 키 — 절대 커밋 금지
+android/key.properties
+android/*.jks
+android/*.keystore
+android/app/*.jks
+android/app/*.keystore
