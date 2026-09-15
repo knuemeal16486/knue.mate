@@ -12,6 +12,7 @@ import 'root_screen.dart';
 import 'ui_utils.dart';
 import 'meal_rating.dart';
 import 'club_event_admin_screen.dart';
+import 'sponsor_admin_screen.dart';
 import 'native_ad_card.dart';
 
 // [개편] 식단 탭 전용 페이지 (기존 MealMainScreen)
@@ -1300,16 +1301,62 @@ class _SettingsPageState extends State<SettingsPage> {
     _localTransparency = widgetTransparency.value;
   }
 
-  // 더보기 화면이 없어지면서 옮겨온 숨김 진입로 — 버전 텍스트 7번 탭하면 동아리 행사 관리 화면.
+  // 더보기 화면이 없어지면서 옮겨온 숨김 진입로 — 버전 텍스트 7번 탭하면 관리 화면 선택 시트.
   void _onVersionTap() {
     _versionTapCount++;
     if (_versionTapCount >= 7) {
       _versionTapCount = 0;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ClubEventAdminScreen()),
-      );
+      _showAdminMenu();
     }
+  }
+
+  void _showAdminMenu() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "관리자 메뉴",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_calendar_outlined),
+              title: const Text("공연·행사 관리"),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ClubEventAdminScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.campaign_outlined),
+              title: const Text("제휴·광고 관리"),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SponsorAdminScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _forceUpdateWidget(BuildContext context) async {

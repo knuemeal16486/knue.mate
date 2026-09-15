@@ -31,6 +31,16 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // ── 제휴 / 네이티브 광고 ───────────────────────────────────
+    // club_events와 같은 사정: 인앱 관리 화면이 아직 없어(현재는
+    // tool/seed_sponsor.dart로 직접 write) 무인증 write가 불가피하다.
+    // ⚠️ 광고는 외부 링크로 연결되므로 club_events보다 악용 시 피해가 크다
+    // (피싱 링크 주입 가능). Phase 3에서 Auth 붙이면 가장 먼저 잠글 것.
+    match /sponsors/{doc} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // ── 기존 앱 데이터 (동작 유지) ──────────────────────────────
     // 모두 무인증 클라이언트가 읽고 쓴다. 하위 문서까지 포함(=**).
     match /daily_meals/{doc=**}    { allow read, write: if true; }

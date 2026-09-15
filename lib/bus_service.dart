@@ -200,6 +200,13 @@ class BusService {
           (e) => e.routeNumber == r.routeNumber,
         );
         final meta = _getRouteMeta(r.routeNumber, config.isDirect);
+        // 다음 도착 차량의 실시간 혼잡도가 있으면 그것을 쓰고, 없을 때만 시간대 추정치로 폴백.
+        // ⚠️ 국토교통부 버스위치정보 API(getRouteAcctoBusLcList)는 혼잡도 필드를
+        // 응답 자체에 포함하지 않는다 — 노선을 가리지 않고 항상 그렇다. 그래서
+        // realCongestion은 사실상 항상 null이고, 아래 값은 사실상 항상 추정치다.
+        final realCongestion = congestionLevelLabel(
+          _nextArrival(r.arrivals)?.congestion,
+        );
 
         final summary = BusSummary(
           id: r.routeNumber,
@@ -207,10 +214,9 @@ class BusService {
           type: meta['type']!,
           direction: meta['direction']!,
           arrivals: r.arrivals,
-          // 다음 도착 차량의 실시간 혼잡도가 있으면 그것을 쓰고, 없을 때만 시간대 추정치로 폴백.
-          congestion: congestionLevelLabel(_nextArrival(r.arrivals)?.congestion) ??
-              _calculateCongestion(now, r.routeNumber),
+          congestion: realCongestion ?? _calculateCongestion(now, r.routeNumber),
           isDirect: config.isDirect,
+          isCongestionEstimated: realCongestion == null,
         );
         totalArrivals += r.arrivals.length;
         summariesJson.add(summary.toJson());

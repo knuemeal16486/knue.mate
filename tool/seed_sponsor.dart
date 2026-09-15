@@ -17,6 +17,7 @@ void main() async {
     'callToAction': "위치 & 메뉴 보기",
     'targetUrl': "https://map.naver.com",
     'icon': "restaurant", // restaurant, cafe, bus, school, event, game, discount 등
+    // 'imageUrl': "https://...",  // 있으면 아이콘 대신 이 이미지를 정사각으로 보여준다
     'placement': "meal",  // meal, bus, home, settings, all
     'priority': 10,
     'isActive': true,

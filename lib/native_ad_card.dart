@@ -193,6 +193,7 @@ class KnueNativeAdCard extends StatelessWidget {
         cardSubtitle: subtitle ?? "KNUE MATE와 함께하는 유용한 정보와 제휴 혜택을 확인해보세요.",
         cardCta: callToAction ?? "자세히 보기",
         cardIcon: icon ?? Icons.campaign_rounded,
+        cardImageUrl: imageUrl,
         cardTargetUrl: targetUrl,
       );
     }
@@ -206,6 +207,14 @@ class KnueNativeAdCard extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('sponsors').snapshots(),
       builder: (context, snapshot) {
+        // 규칙 미배포·권한 오류는 hasData가 false로만 나타나 조용히
+        // fallback으로 넘어간다. 그 자체는 맞는 동작(광고 하나 때문에 화면이
+        // 깨지면 안 된다)이지만, 로그가 없으면 "광고가 계속 안 뜬다"는 문제를
+        // 진단할 길이 없다 — 실제로 sponsors 컬렉션에 규칙이 없어 전부
+        // PERMISSION_DENIED였던 적이 있다.
+        if (snapshot.hasError) {
+          debugPrint('KnueNativeAdCard: sponsors 구독 실패: ${snapshot.error}');
+        }
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
           final now = DateTime.now();
           final validDocs = snapshot.data!.docs.map((doc) {
@@ -226,6 +235,7 @@ class KnueNativeAdCard extends StatelessWidget {
             final sponsorSubtitle = sponsor['subtitle']?.toString() ?? "KNUE MATE 제휴 혜택을 확인해보세요.";
             final sponsorCta = sponsor['callToAction']?.toString() ?? "자세히 보기";
             final sponsorIcon = _parseIcon(sponsor['icon']);
+            final sponsorImageUrl = sponsor['imageUrl']?.toString();
             final sponsorUrl = sponsor['targetUrl']?.toString();
 
             return _buildCardContent(
@@ -234,6 +244,7 @@ class KnueNativeAdCard extends StatelessWidget {
               cardSubtitle: sponsorSubtitle,
               cardCta: sponsorCta,
               cardIcon: sponsorIcon,
+              cardImageUrl: sponsorImageUrl,
               cardTargetUrl: sponsorUrl,
             );
           }
@@ -252,6 +263,7 @@ class KnueNativeAdCard extends StatelessWidget {
       cardSubtitle: "KNUE MATE와 함께하는 유용한 정보와 제휴 혜택을 확인해보세요.",
       cardCta: "자세히 보기",
       cardIcon: Icons.campaign_rounded,
+      cardImageUrl: null,
       cardTargetUrl: null,
     );
   }
@@ -262,10 +274,45 @@ class KnueNativeAdCard extends StatelessWidget {
     required String cardSubtitle,
     required String cardCta,
     required IconData cardIcon,
+    required String? cardImageUrl,
     required String? cardTargetUrl,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).primaryColor;
+
+    // 스폰서가 로고/사진(imageUrl)을 넣었으면 그걸, 아니면 아이콘을 담는
+    // 정사각 박스. 예전에는 imageUrl을 받기만 하고 그리는 코드가 없어서
+    // 제휴처가 이미지를 등록해도 항상 기본 아이콘만 나왔다.
+    Widget mediaBox({
+      required double size,
+      required double radius,
+      required double iconSize,
+    }) {
+      final iconBox = Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+          borderRadius: BorderRadius.circular(radius),
+        ),
+        child: Center(child: Icon(cardIcon, size: iconSize, color: primaryColor)),
+      );
+      if (cardImageUrl == null || cardImageUrl.isEmpty) return iconBox;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image.network(
+          cardImageUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          // 잘못된 URL이거나 오프라인이면 조용히 아이콘으로 돌아간다 —
+          // 광고 하나 때문에 깨진 이미지 아이콘이 보이면 안 된다.
+          errorBuilder: (_, _, _) => iconBox,
+          loadingBuilder: (context, child, progress) =>
+              progress == null ? child : iconBox,
+        ),
+      );
+    }
 
     if (isCompact) {
       // 슬림형 인셋 스타일 (식단, 버스, 설정 탭 등)
@@ -287,17 +334,7 @@ class KnueNativeAdCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Icon(cardIcon, size: 20, color: primaryColor),
-                    ),
-                  ),
+                  mediaBox(size: 36, radius: 10, iconSize: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -447,21 +484,7 @@ class KnueNativeAdCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.08),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          cardIcon,
-                          size: 24,
-                          color: primaryColor,
-                        ),
-                      ),
-                    ),
+                    mediaBox(size: 44, radius: 14, iconSize: 24),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(

@@ -827,7 +827,6 @@ class _BusAppScreenState extends State<BusAppScreen>
             _buildInfoItem("주말 영향", "주말 +10%"),
             _buildInfoItem("계절/날씨", "겨울 +10%, 한여름 +5%"),
             _buildInfoItem("근접 보정", "3정거장 이하 남으면 +1분"),
-            _buildInfoItem("실시간 혼잡도", "혼잡 +15%, 매우혼잡 +30%"),
             const SizedBox(height: 12),
             const Text(
               "이 정보는 참고용이며 실제 도착 시간과 다를 수 있습니다.",

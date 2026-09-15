@@ -647,14 +647,9 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
 
     if (response.statusCode == 200) {
       final html = utf8.decode(response.bodyBytes, allowMalformed: true);
-<<<<<<< HEAD
-      // 두 소스 모두 www.knue.ac.kr 의 동일한 HTML 구조 사용
-      final result = _parseSadoHtml(html, date);
-=======
       final result = source == MealSource.a
           ? parseSadoHtml(html, date)
           : parseCafeHtml(html, date);
->>>>>>> f969b7b (feat: 913 버스 노선 3개 탭 개편, 캠퍼스런 명칭 수정, 식단 카드 여백 개선 및 Firestore 원격 제휴/광고 시스템 구축)
 
       // 3. 크롤링 결과 저장 (사용자를 기다리게 하지 않음)
       final meals = result['meals'] as Map<String, dynamic>;

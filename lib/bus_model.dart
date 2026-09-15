@@ -19,6 +19,20 @@ String? congestionLevelLabel(int? level) {
   }
 }
 
+/// remainStops 부호로 상행/하행을 가른다.
+///
+/// remainStops(bus_service.dart가 "기준 정류장(교원대/탑연삼거리) nodeOrd -
+/// 현재 nodeOrd"로 계산)가 0 이상이면 기준 정류장을 향해 다가오는 중(상행),
+/// 음수면 이미 지나쳐 반대 방향으로 멀어지는 중(하행)이다.
+///
+/// 예전에는 직전 폴링 때의 nodeOrd와 비교해 "늘었으면 상행"으로 추정했는데,
+/// 왕복 노선의 nodeOrd는 상행·하행을 합쳐 하나로 이어져 있어서 버스가 전진하는
+/// 한 방향에 상관없이 거의 항상 늘어난다 — 그래서 사실상 늘 "상행"으로만
+/// 판정됐고, 처음 보는 차량(과거 기록 없음)은 아예 걸러내지도 못해 상행 탭에
+/// 하행 버스가 섞여 나왔다. 이 함수는 과거 기록 없이 nodeOrd 하나만으로
+/// 매 순간 정확하다.
+String busDirectionLabel(int remainStops) => remainStops >= 0 ? "상행" : "하행";
+
 class BusRouteConfig {
   final int routeNumber;
   final String routeId;
@@ -137,6 +151,15 @@ class BusSummary {
   final String congestion;
   final bool isDirect;
 
+  /// [congestion]이 실제 차량 센서값이 아니라 시간대 기준 추정치인지.
+  ///
+  /// 국토교통부 버스위치정보 API(getRouteAcctoBusLcList)는 혼잡도 필드를
+  /// 아예 응답에 포함하지 않는다 — 청주 노선뿐 아니라 이 API 자체가 그렇다.
+  /// 그래서 지금은 사실상 항상 true다. 그래도 필드를 남겨두는 이유는, 나중에
+  /// 다른 API나 노선에서 실제 값이 들어오면(`BusArrival.congestion`이 채워지면)
+  /// 코드를 다시 안 고쳐도 자동으로 false가 되게 하기 위해서다.
+  final bool isCongestionEstimated;
+
   const BusSummary({
     required this.id,
     required this.number,
@@ -145,6 +168,7 @@ class BusSummary {
     required this.arrivals,
     required this.congestion,
     required this.isDirect,
+    this.isCongestionEstimated = true,
   });
 
   // 가장 빨리 도착하는 버스 정보
@@ -236,6 +260,7 @@ class BusSummary {
           .toList(),
       'congestion': congestion,
       'isDirect': isDirect,
+      'isCongestionEstimated': isCongestionEstimated,
     };
   }
 
@@ -261,6 +286,9 @@ class BusSummary {
           .toList(),
       congestion: json['congestion'] as String,
       isDirect: json['isDirect'] as bool,
+      // 예전 캐시(필드 추가 전)에는 이 키가 없다 — 없으면 추정치로 본다.
+      // 실제로 그때도 늘 추정치였으니 안전한 기본값이다.
+      isCongestionEstimated: json['isCongestionEstimated'] as bool? ?? true,
     );
   }
 
@@ -274,7 +302,8 @@ class BusSummary {
         other.direction == direction &&
         listEquals(other.arrivals, arrivals) &&
         other.congestion == congestion &&
-        other.isDirect == isDirect;
+        other.isDirect == isDirect &&
+        other.isCongestionEstimated == isCongestionEstimated;
   }
 
   @override
@@ -285,7 +314,8 @@ class BusSummary {
       direction.hashCode ^
       arrivals.hashCode ^
       congestion.hashCode ^
-      isDirect.hashCode;
+      isDirect.hashCode ^
+      isCongestionEstimated.hashCode;
 }
 
 @immutable

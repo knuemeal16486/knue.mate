@@ -34,7 +34,7 @@ class BusCard extends StatelessWidget {
     "청주대학교": [36.6491, 127.4913],
     "도청": [36.6348, 127.4919],
     "육거리": [36.6264, 127.4912],
-    "지하상가": [36.6361, 127.4878],
+    "청년창업지원센터": [36.6361, 127.4878],
     "동부종점": [36.6247, 127.5342],
     "조치원역": [36.5983, 127.3001],
     "청주공항": [36.7218, 127.4912],
@@ -236,7 +236,10 @@ class BusCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                          CongestionIndicator(bus.congestion),
+                          CongestionIndicator(
+                            bus.congestion,
+                            isEstimated: bus.isCongestionEstimated,
+                          ),
                         if (arrivals.length > 1)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -478,8 +481,6 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
   String _congestion = "normal";
   Set<String> _favStops = {}; // 즐겨찾기(주요) 정류장
   Map<String, int> _lastVehicleStopIndex = {};
-  final Map<String, int> _lastVehicleNodeOrd = {};
-  final Map<String, String> _lastVehicleDirection = {}; // "상행"/"하행"
 
   @override
   void initState() {
@@ -544,19 +545,12 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     return "${widget.bus.number}:${arrival.nodeOrd ?? -1}:${_normalize(arrival.currentStopName)}";
   }
 
-  String? _inferDirectionFromNodeOrd(BusArrival arrival) {
-    final nodeOrd = arrival.nodeOrd;
-    if (nodeOrd == null) return null;
-    final key = _vehicleKey(arrival);
-    final prevOrd = _lastVehicleNodeOrd[key];
-    _lastVehicleNodeOrd[key] = nodeOrd;
-
-    if (prevOrd == null || prevOrd == nodeOrd) {
-      return _lastVehicleDirection[key];
-    }
-    final dir = nodeOrd > prevOrd ? "상행" : "하행";
-    _lastVehicleDirection[key] = dir;
-    return dir;
+  /// nodeOrd가 있는(=위치를 신뢰할 수 있는) 차량만 방향을 판정한다.
+  /// 왕복 노선(상행·하행이 같은 정류장 이름을 공유)은 이름 매칭만으로 두
+  /// 방향을 못 가르므로, 상행/하행 탭 필터링에 이 판정이 반드시 필요하다.
+  String? _inferDirection(BusArrival arrival) {
+    if (arrival.nodeOrd == null) return null;
+    return busDirectionLabel(arrival.remainStops);
   }
 
   void _determineInitialDirection() {
@@ -628,9 +622,10 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
           final congestionSuffix = b.congestion != null
               ? " [${b.formattedCongestion}]"
               : "";
-          if (b.remainStops == 0) return "곧 도착$congestionSuffix";
-          if (b.remainStops < 0) return "진행 중$congestionSuffix";
-          return "${b.remainStops}전$congestionSuffix";
+          final dirTag = "[${busDirectionLabel(b.remainStops)}] ";
+          if (b.remainStops == 0) return "$dirTag곧 도착$congestionSuffix";
+          if (b.remainStops < 0) return "$dirTag진행 중$congestionSuffix";
+          return "$dirTag${b.remainStops}전$congestionSuffix";
         })
         .join(", ");
 
@@ -639,7 +634,11 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
       final congestionSuffix = first.congestion != null
           ? " [${first.formattedCongestion}]"
           : "";
-      return "${first.remainStops >= 0 ? '${first.remainStops}전' : '진행 중'}$congestionSuffix 외 ${busesAtStop.length - 1}대";
+      final dirTag = "[${busDirectionLabel(first.remainStops)}] ";
+      final firstText = first.remainStops >= 0
+          ? "${first.remainStops}전"
+          : "진행 중";
+      return "$dirTag$firstText$congestionSuffix 외 ${busesAtStop.length - 1}대";
     }
     return info;
   }
@@ -861,7 +860,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
             );
             if (!nameMatched) return false;
 
-            final inferred = _inferDirectionFromNodeOrd(a);
+            final inferred = _inferDirection(a);
             if (inferred == null) return true; // 초기에 방향 추정 불가하면 일단 표시
             return inferred == _selectedDirection;
           }).toList();
