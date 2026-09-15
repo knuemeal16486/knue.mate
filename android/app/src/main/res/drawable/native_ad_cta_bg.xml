@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 앱 기본 테마색(#2563EB, lib/constants.dart의 themeColor 기본값)과 맞춘
+     알약 버튼. 사용자가 테마색을 바꿔도 광고 버튼까지 따라가진 않지만,
+     기본 배색과는 어긋나지 않는다. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#1A2563EB" />
+    <corners android:radius="12dp" />
+</shape>

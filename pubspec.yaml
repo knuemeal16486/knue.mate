@@ -61,6 +61,7 @@ dependencies:
   euc: ^1.0.6+8
   firebase_storage: ^13.0.0
   image_picker: ^1.1.2
+  google_mobile_ads: ^9.1.0
 
 dev_dependencies:
   flutter_test:

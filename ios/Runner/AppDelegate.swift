@@ -2,6 +2,7 @@ import Flutter
 import UIKit
 import flutter_local_notifications // [추가 1]
 import workmanager_apple // [수정]
+import google_mobile_ads
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -9,7 +10,15 @@ import workmanager_apple // [수정]
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    
+
+    // 스폰서(Firestore sponsors 컬렉션)가 없을 때 대체로 보여줄 네이티브 광고 팩토리.
+    // Dart 쪽 lib/ad_service.dart의 NativeAd(factoryId: "listTile")와 짝이다.
+    FLTGoogleMobileAdsPlugin.registerNativeAdFactory(
+      self,
+      factoryId: "listTile",
+      nativeAdFactory: NativeAdFactoryImpl()
+    )
+
     // [추가 2] 포그라운드에서도 알림 배너 표시 설정
     FlutterLocalNotificationsPlugin.setPluginRegistrantCallback { (registry) in
         GeneratedPluginRegistrant.register(with: registry)

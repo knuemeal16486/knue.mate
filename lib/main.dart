@@ -6,6 +6,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'ad_service.dart';
 import 'constants.dart';
 import 'building_data.dart';
 import 'package:workmanager/workmanager.dart';
@@ -133,6 +134,9 @@ void main() async {
       if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
         await _initializeHomeWidget();
         await NotificationService().init();
+        // 스폰서가 없을 때 KnueNativeAdCard가 대체로 띄우는 AdMob 광고 —
+        // 광고를 요청하기 전에 반드시 끝나 있어야 하므로 runApp보다 앞에 둔다.
+        await AdService.initialize();
       }
     } catch (e) {
       debugPrint("Plugin initialization error: $e");

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'ad_service.dart';
 import 'ui_utils.dart';
 
 /// 앱 디자인(Apple Inset Grouped & Squircle)에 완벽하게 일치하는
@@ -198,9 +200,10 @@ class KnueNativeAdCard extends StatelessWidget {
       );
     }
 
-    // 2. Firebase 미초기화 시 기본 fallback 렌더링
+    // 2. Firebase 미초기화 시 — Firestore는 못 쓰지만 AdMob은 Firebase와
+    //    무관하니 그쪽부터 시도한다.
     if (Firebase.apps.isEmpty) {
-      return _buildDefaultFallback(context);
+      return _DefaultFallbackWithAdMob(isCompact: isCompact);
     }
 
     // 3. Firestore 'sponsors' 컬렉션 실시간 구독
@@ -250,8 +253,9 @@ class KnueNativeAdCard extends StatelessWidget {
           }
         }
 
-        // 제휴 스폰서가 없거나 기간 만료 시 기본 fallback 카드 노출
-        return _buildDefaultFallback(context);
+        // 제휴 스폰서가 없거나 기간 만료 시 — AdMob으로 먼저 채워보고,
+        // 그것도 안 되면 기본 안내 카드.
+        return _DefaultFallbackWithAdMob(isCompact: isCompact);
       },
     );
   }
@@ -552,5 +556,83 @@ class KnueNativeAdCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 스폰서(Firestore `sponsors` 컬렉션)가 없을 때 마지막 대체 수단.
+/// AdMob 네이티브 광고를 먼저 띄워보고, 못 띄우면(웹·데스크톱, 미지원 플랫폼,
+/// 노 필, 로드 실패) 기존 기본 안내 카드로 조용히 물러난다 — 광고 하나
+/// 때문에 화면에 빈 공간이나 깨진 모습이 남으면 안 된다.
+///
+/// 처음부터 기본 안내 카드를 그려두고, AdMob이 로드에 성공했을 때만 그
+/// 자리를 native 광고로 바꿔치기한다. 로딩 중 빈 화면이 잠깐 보이는 것보다
+/// 이쪽이 덜 어색하다.
+///
+/// ⚠️ 컴팩트(isCompact) 자리는 아직 AdMob을 시도하지 않는다 — 지금 네이티브
+/// 레이아웃(android/.../native_ad_layout.xml, ios/.../NativeAdFactoryImpl.swift)은
+/// 미디어 뷰가 포함된 전체 크기 카드 전용이라, 압축 카드 자리(식단·버스·설정
+/// 탭)에 그대로 넣으면 주변 카드보다 훨씬 커져 어색하다. 압축 전용 레이아웃은
+/// 다음 작업으로 남겨둔다.
+class _DefaultFallbackWithAdMob extends StatefulWidget {
+  final bool isCompact;
+  const _DefaultFallbackWithAdMob({required this.isCompact});
+
+  @override
+  State<_DefaultFallbackWithAdMob> createState() =>
+      _DefaultFallbackWithAdMobState();
+}
+
+class _DefaultFallbackWithAdMobState extends State<_DefaultFallbackWithAdMob> {
+  NativeAd? _ad;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.isCompact) _loadAd();
+  }
+
+  void _loadAd() {
+    final adUnitId = AdService.nativeAdUnitId;
+    if (adUnitId == null) return; // 웹·데스크톱 등 미지원 플랫폼
+
+    NativeAd(
+      adUnitId: adUnitId,
+      factoryId: AdService.nativeAdFactoryId,
+      request: const AdRequest(),
+      listener: NativeAdListener(
+        onAdLoaded: (ad) {
+          if (!mounted) {
+            ad.dispose();
+            return;
+          }
+          setState(() => _ad = ad as NativeAd);
+        },
+        onAdFailedToLoad: (ad, error) {
+          debugPrint('KnueNativeAdCard: AdMob 대체 광고 로드 실패: $error');
+          ad.dispose();
+          // 실패해도 이미 그려져 있는 기본 안내 카드가 그대로 남는다.
+        },
+      ),
+    ).load();
+  }
+
+  @override
+  void dispose() {
+    _ad?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ad = _ad;
+    if (ad != null) {
+      // native_ad_layout.xml/NativeAdFactoryImpl.swift의 실제 렌더 높이에 맞춘
+      // 고정 높이 — 플랫폼 뷰는 Flutter가 내재 크기를 알 수 없어 반드시 필요하다.
+      return SizedBox(height: 300, child: AdWidget(ad: ad));
+    }
+    // 같은 파일(라이브러리) 안이라 private 메서드를 직접 호출할 수 있다.
+    return KnueNativeAdCard(
+      isCompact: widget.isCompact,
+    )._buildDefaultFallback(context);
   }
 }

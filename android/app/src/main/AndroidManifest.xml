@@ -81,5 +81,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- AdMob 앱 ID. 스폰서(sponsors 컬렉션)가 없을 때 대체로 보여줄
+             네이티브 광고용 — lib/ad_service.dart의 광고 단위 ID와 짝. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-8400037761673359~8348064467"/>
     </application>
 </manifest>
