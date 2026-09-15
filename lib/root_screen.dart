@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'club_event_model.dart';
 import 'club_event_service.dart';
-import 'club_events_screen.dart';
 import 'constants.dart';
 import 'meal_screen.dart';
 import 'bus_screen.dart';
@@ -36,10 +35,25 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
   int _currentIndex = 0;
   late PageController _pageController;
 
-  /// 행사 홍보 팝업을 띄운 날짜(yyyy-M-d). 하루에 한 번만 띄운다.
-  static const _promoKey = 'eventPromoShownDate';
+  /// 마지막으로 뒤로가기를 누른 시각. 2초 안에 다시 누르면 진짜로 종료한다.
   DateTime? _lastBackPress;
-  bool _promoOpen = false;
+
+  /// 광고주 문의 연락처. 종료 팝업 하단에 항상 노출된다.
+  static const _sponsorPhone = "010-8032-8088";
+
+  /// 무료 프로모션 종료 시점. 이 날짜까지는 무료, 이후로는 주당 과금.
+  /// 값을 여기 한 곳만 고치면 팝업 문구가 자동으로 맞춰진다 — 9월 30일이
+  /// 지났는데도 "무료"라고 잘못 보여주는 일이 없게, 문구 자체를 날짜로
+  /// 판단한다(사람이 그날 기억했다가 따로 문구를 바꿔줄 필요가 없다).
+  static final _freePromoEnds = DateTime(2026, 9, 30, 23, 59, 59);
+
+  /// 광고 단가 문구. 프로모션 기간이면 무료 안내를, 지났으면 주당 단가를 보여준다.
+  String get _sponsorPriceText {
+    if (DateTime.now().isBefore(_freePromoEnds)) {
+      return "9월 30일까지 무료 · 이후 주당 10,000원";
+    }
+    return "주당 10,000원";
+  }
 
   @override
   void initState() {
@@ -76,9 +90,11 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
 
   // ── 뒤로가기 ──────────────────────────────────────────────────────────
   //
-  // 홈에서 뒤로가기를 누르면 그대로 앱이 꺼졌다. 그 한 번을 빌려 지금 열리고
-  // 있는 행사를 알린다. 매번 띄우면 앱을 못 끄게 막는 셈이라 하루 한 번으로
-  // 제한하고, 그 뒤로는 흔한 "한 번 더 누르면 종료"로 돌아간다.
+  // 홈에서 뒤로가기를 누르면 그대로 앱이 꺼졌다. 그 한 번을 빌려 동아리·학과
+  // 행사를 알리고, 광고주(행사 주최 측)를 모집하는 문구를 보여준다 — 이
+  // 팝업은 오직 그 용도로만 쓴다(다른 스폰서·애드몹 광고는 안 섞는다).
+  // 매번 뜨긴 하지만 "한 번 더 누르면 종료"를 팝업 안에 같이 적어 두므로,
+  // 종료 자체를 막지는 않는다: 2초 안에 다시 누르면 그대로 꺼진다.
   Future<void> _handleBack() async {
     final tabs = PreferencesService.tabOrder.value;
     final homeIndex = tabs.indexOf(AppTab.home);
@@ -86,56 +102,71 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
       _onTabTapped(homeIndex);
       return;
     }
-    if (await _maybeShowEventPromo()) return;
 
     final now = DateTime.now();
-    if (_lastBackPress != null &&
-        now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
+    final isSecondPress =
+        _lastBackPress != null &&
+        now.difference(_lastBackPress!) < const Duration(seconds: 2);
+    if (isSecondPress) {
       SystemNavigator.pop();
       return;
     }
     _lastBackPress = now;
-    if (mounted) showToast(context, "뒤로 한 번 더 누르면 종료됩니다");
+    await _showExitPromo();
   }
 
-  /// 진행중인 행사가 있고 오늘 아직 안 띄웠으면 팝업을 띄운다.
-  /// 띄웠으면 true — 이번 뒤로가기는 여기서 끝난다.
-  Future<bool> _maybeShowEventPromo() async {
-    if (_promoOpen) return true;
-    final now = DateTime.now();
-    final todayKey = "${now.year}-${now.month}-${now.day}";
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getString(_promoKey) == todayKey) return false;
-
-    List<ClubEvent> events;
+  /// 지금 진행중인 동아리·학과 행사 중 하나. 캐시를 먼저 돌려주므로
+  /// 뒤로가기가 네트워크를 기다리지 않는다. 실패해도 팝업 자체는 뜬다 —
+  /// 행사 소개가 빠질 뿐, 광고주 모집 문구와 종료 안내는 항상 나와야 한다.
+  Future<ClubEvent?> _currentOngoingEvent(DateTime now) async {
     try {
-      // 캐시를 먼저 돌려주므로 뒤로가기가 네트워크를 기다리지 않는다.
-      events = await ClubEventService.fetchAll();
+      final events = await ClubEventService.fetchAll();
+      final ongoing = events.where((e) => e.isOngoing(now)).toList()
+        ..sort((a, b) => ClubEvent.compareForList(a, b, now));
+      return ongoing.isEmpty ? null : ongoing.first;
     } catch (_) {
-      return false;
+      return null;
     }
-    final ongoing = events.where((e) => e.isOngoing(now)).toList()
-      ..sort((a, b) => ClubEvent.compareForList(a, b, now));
-    if (ongoing.isEmpty || !mounted) return false;
-
-    await prefs.setString(_promoKey, todayKey);
-    _promoOpen = true;
-    await _showEventPromo(ongoing.first);
-    _promoOpen = false;
-    return true;
   }
 
-  Future<void> _showEventPromo(ClubEvent event) async {
+  /// 광고주 모집 문구의 연락처를 눌렀을 때 전화 앱을 연다.
+  /// 광고주 모집 문구의 연락처를 눌렀을 때 문자 앱을 연다(전화 걸기 아님).
+  Future<void> _messageSponsorContact(BuildContext context) async {
+    final uri = Uri(
+      scheme: 'sms',
+      path: _sponsorPhone.replaceAll('-', ''),
+      queryParameters: {
+        'body': '[KNUE Mate 광고 문의] 행사/제휴 광고 게재 문의드립니다. ',
+      },
+    );
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else if (context.mounted) {
+        showToast(context, "문자 앱을 열 수 없습니다. $_sponsorPhone로 연락해 주세요");
+      }
+    } catch (_) {
+      if (context.mounted) {
+        showToast(context, "문자 앱을 열 수 없습니다. $_sponsorPhone로 연락해 주세요");
+      }
+    }
+  }
+
+  Future<void> _showExitPromo() async {
+    final now = DateTime.now();
+    final event = await _currentOngoingEvent(now);
+    if (!mounted) return;
+
     final color = Theme.of(context).primaryColor;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final sub = isDark ? Colors.white60 : Colors.black54;
 
-    String when() {
-      final s = event.startDate;
-      final e = event.endDate;
+    String when(ClubEvent e) {
+      final s = e.startDate;
+      final end = e.endDate;
       final start = "${s.month}월 ${s.day}일";
-      if (e == null || DateUtils.isSameDay(s, e)) return start;
-      return "$start ~ ${e.month}월 ${e.day}일";
+      if (end == null || DateUtils.isSameDay(s, end)) return start;
+      return "$start ~ ${end.month}월 ${end.day}일";
     }
 
     await showDialog<void>(
@@ -147,97 +178,158 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (event.posterUrl != null && event.posterUrl!.isNotEmpty)
+            if (event != null &&
+                event.posterUrl != null &&
+                event.posterUrl!.isNotEmpty)
               Image.network(
                 event.posterUrl!,
                 height: 170,
                 width: double.infinity,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: isDark ? 0.28 : 0.14),
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: Text(
-                      "지금 진행중 · ${event.category.label}",
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                  if (event != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: isDark ? 0.28 : 0.14),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(
+                        "지금 진행중 · ${event.category.label}",
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    event.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      height: 1.25,
+                    const SizedBox(height: 10),
+                    Text(
+                      event.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        height: 1.25,
+                      ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      event.location.isEmpty
+                          ? when(event)
+                          : "${when(event)} · ${event.location}",
+                      style: TextStyle(fontSize: 13, color: sub),
+                    ),
+                  ] else ...[
+                    Text(
+                      "지금 진행중인 동아리·학과 행사",
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: sub,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      "아직 등록된 행사가 없어요",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 15, color: sub),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          "뒤로 한 번 더 누르면 종료됩니다",
+                          style: TextStyle(fontSize: 12.5, color: sub),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    event.location.isEmpty
-                        ? when()
-                        : "${when()} · ${event.location}",
-                    style: TextStyle(fontSize: 13, color: sub),
+                  const SizedBox(height: 14),
+                  // 광고주(행사 주최 측) 모집 — 이 팝업이 존재하는 진짜
+                  // 이유다. 연락처를 누르면 문자 앱으로 연결한다(전화 아님).
+                  InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => _messageSponsorContact(context),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : const Color(0xFFF5F5F7),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          const Text("📣", style: TextStyle(fontSize: 20)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  "우리 동아리·학과 행사도 여기 올리고 싶다면?",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _sponsorPriceText,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: sub,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  "광고 문의 · $_sponsorPhone (문자)",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.sms_rounded, size: 16, color: color),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: Text("닫기", style: TextStyle(color: sub)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.pop(dialogContext);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ClubEventsScreen(),
-                          ),
-                        );
-                      },
-                      style: FilledButton.styleFrom(backgroundColor: color),
-                      child: const Text("보러 가기"),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
             Text(
-              "교원대 메이트가 오늘의 캠퍼스 소식을 전해드려요",
+              "KNUE Mate가 오늘의 캠퍼스 소식을 전해드려요",
               style: TextStyle(
                 fontSize: 10.5,
                 color: sub.withValues(alpha: 0.7),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
           ],
         ),
       ),

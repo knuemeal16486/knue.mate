@@ -1144,7 +1144,9 @@ class _BusAppScreenState extends State<BusAppScreen>
           final trips = BusTimetableData.route913PyeongdongToMiho;
           timeList = trips.map((t) => t.knueTime).toList();
           subInfoList = trips
-              .map((t) => "평동 ${t.originTime} 출발 · 미호종점 ${t.destinationTime} 도착")
+              .map(
+                (t) => "평동 ${t.originTime} 출발 · 미호종점 ${t.destinationTime} 도착",
+              )
               .toList();
         } else {
           // 하행 (평동 방면 / 미호발)
@@ -1218,102 +1220,108 @@ class _BusAppScreenState extends State<BusAppScreen>
           ),
           child: Column(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ...["513", "514", "518", "913"].map((busNo) {
-                    final isSelected = _selectedBus == busNo;
-                    return GestureDetector(
-                      onTap: () => setState(() {
-                        _selectedBus = busNo;
-                        _selectedStopOffset = 0;
-                      }),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected ? primary : Colors.transparent,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: isSelected
-                                ? primary
-                                : Colors.grey.withOpacity(0.3),
-                            width: isSelected ? 2 : 1,
+              // 노선 4개 + 구분선 + 콜버스 버튼이 좁은 화면에서는 한 줄에
+              // 다 안 들어가 오른쪽으로 넘쳤다("RIGHT OVERFLOWED"). 가로
+              // 스크롤로 감싸 넘치는 대신 옆으로 밀리게 한다.
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ...["513", "514", "518", "913"].map((busNo) {
+                      final isSelected = _selectedBus == busNo;
+                      return GestureDetector(
+                        onTap: () => setState(() {
+                          _selectedBus = busNo;
+                          _selectedStopOffset = 0;
+                        }),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 10,
                           ),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: primary.withOpacity(
-                                      isDark ? 0.15 : 0.08,
+                          decoration: BoxDecoration(
+                            color: isSelected ? primary : Colors.transparent,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: isSelected
+                                  ? primary
+                                  : Colors.grey.withOpacity(0.3),
+                              width: isSelected ? 2 : 1,
+                            ),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: primary.withOpacity(
+                                        isDark ? 0.15 : 0.08,
+                                      ),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 4),
                                     ),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Text(
-                          "$busNo번",
-                          style: TextStyle(
-                            color: isSelected
-                                ? Colors.white
-                                : (isDark ? Colors.white : Colors.black87),
-                            fontWeight: FontWeight.bold,
+                                  ]
+                                : null,
                           ),
-                        ),
-                      ),
-                    );
-                  }),
-                  const SizedBox(width: 4),
-                  Container(
-                    width: 1,
-                    height: 20,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    color: isDark ? Colors.white12 : Colors.grey.shade300,
-                  ),
-                  GestureDetector(
-                    onTap: () => CallBusBottomSheet.show(context),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
-                      ),
-                      decoration: BoxDecoration(
-                        color: primary.withOpacity(isDark ? 0.15 : 0.08),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: primary.withOpacity(isDark ? 0.4 : 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.directions_bus_outlined,
-                            size: 14,
-                            color: isDark ? Colors.white70 : primary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            "콜버스",
+                          child: Text(
+                            "$busNo번",
                             style: TextStyle(
-                              color: isDark ? Colors.white70 : primary,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark ? Colors.white : Colors.black87),
                               fontWeight: FontWeight.bold,
-                              fontSize: 13,
                             ),
                           ),
-                        ],
+                        ),
+                      );
+                    }),
+                    const SizedBox(width: 4),
+                    Container(
+                      width: 1,
+                      height: 20,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      color: isDark ? Colors.white12 : Colors.grey.shade300,
+                    ),
+                    GestureDetector(
+                      onTap: () => CallBusBottomSheet.show(context),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: primary.withOpacity(isDark ? 0.15 : 0.08),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: primary.withOpacity(isDark ? 0.4 : 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.directions_bus_outlined,
+                              size: 14,
+                              color: isDark ? Colors.white70 : primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "콜버스",
+                              style: TextStyle(
+                                color: isDark ? Colors.white70 : primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               Row(
@@ -1451,10 +1459,10 @@ class _BusAppScreenState extends State<BusAppScreen>
                           _selected913Tab == 0
                               ? "미호종점에서 평동 방면으로 출발하는 시간표입니다. (교원대까지 약 13분)"
                               : (_selected913Tab == 1
-                                  ? (_is913KnueUpbound
-                                      ? "교원대 정류장 통과/도착 시간표입니다. (평동 출발 ➔ 교원대 ➔ 미호종점)"
-                                      : "교원대 정류장 통과/도착 시간표입니다. (미호종점 출발 ➔ 교원대 ➔ 가경터미널/평동)")
-                                  : "평동에서 미호종점 방면으로 출발하는 시간표입니다. (교원대까지 약 50분)"),
+                                    ? (_is913KnueUpbound
+                                          ? "교원대 정류장 통과/도착 시간표입니다. (평동 출발 ➔ 교원대 ➔ 미호종점)"
+                                          : "교원대 정류장 통과/도착 시간표입니다. (미호종점 출발 ➔ 교원대 ➔ 가경터미널/평동)")
+                                    : "평동에서 미호종점 방면으로 출발하는 시간표입니다. (교원대까지 약 50분)"),
                           style: TextStyle(
                             fontSize: 12,
                             height: 1.4,
@@ -1649,10 +1657,12 @@ class _BusAppScreenState extends State<BusAppScreen>
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
+                  // "다음 버스" 카드 배경. 8%는 실제 폰 화면에서 거의
+                  // 흰 배경과 구분이 안 갈 만큼 옅어서("물 빠진" 느낌) 14%로 올렸다.
                   color: isNext
                       ? (isDark
                             ? primary.withOpacity(0.2)
-                            : primary.withOpacity(0.08))
+                            : primary.withOpacity(0.14))
                       : Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(20),
                   border: isNext
@@ -1708,15 +1718,15 @@ class _BusAppScreenState extends State<BusAppScreen>
                                     color: passed
                                         ? Colors.grey
                                         : isNext
-                                            ? (isDark
-                                                ? Colors.white
-                                                : Colors.black87)
-                                            // 다음 차 외에는 한 단계 물려 위계를 만든다.
-                                            : (isDark
-                                                ? Colors.white70
-                                                : Colors.black.withValues(
-                                                    alpha: 0.62,
-                                                  )),
+                                        ? (isDark
+                                              ? Colors.white
+                                              : Colors.black87)
+                                        // 다음 차 외에는 한 단계 물려 위계를 만든다.
+                                        : (isDark
+                                              ? Colors.white70
+                                              : Colors.black.withValues(
+                                                  alpha: 0.62,
+                                                )),
                                     decoration: passed
                                         ? TextDecoration.lineThrough
                                         : null,
@@ -1728,10 +1738,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                                     builder: (context) {
                                       final alarmKey =
                                           "${_selectedBus}:$directionKey:${_isWeekend ? 'hol' : 'wkd'}:$time";
-                                      final isAlarmSet =
-                                          _scheduledAlarms.containsKey(
-                                            alarmKey,
-                                          );
+                                      final isAlarmSet = _scheduledAlarms
+                                          .containsKey(alarmKey);
 
                                       return GestureDetector(
                                         onTap: () => _showAlarmDialog(
@@ -1742,8 +1750,9 @@ class _BusAppScreenState extends State<BusAppScreen>
                                         child: Icon(
                                           isAlarmSet
                                               ? Icons
-                                                  .notifications_active_rounded
-                                              : Icons.notifications_none_rounded,
+                                                    .notifications_active_rounded
+                                              : Icons
+                                                    .notifications_none_rounded,
                                           size: 20,
                                           color: isAlarmSet
                                               ? KnueTokens.warm(isDark)
@@ -1756,8 +1765,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                                                     : (isDark
                                                           ? Colors.white38
                                                           : Colors
-                                                              .grey
-                                                              .shade400)),
+                                                                .grey
+                                                                .shade400)),
                                         ),
                                       );
                                     },
@@ -1777,10 +1786,10 @@ class _BusAppScreenState extends State<BusAppScreen>
                                   color: passed
                                       ? Colors.grey.shade500
                                       : isNext
-                                          ? (isDark ? Colors.white70 : primary)
-                                          : (isDark
-                                              ? Colors.white54
-                                              : Colors.grey.shade600),
+                                      ? (isDark ? Colors.white70 : primary)
+                                      : (isDark
+                                            ? Colors.white54
+                                            : Colors.grey.shade600),
                                 ),
                               ),
                             ],

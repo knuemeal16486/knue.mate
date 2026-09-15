@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'constants.dart';
@@ -94,22 +95,30 @@ class GlassContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: borderRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: opacity),
-            borderRadius: borderRadius,
-            border: border ??
-                Border.all(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  width: 1.0,
-                ),
+    // RepaintBoundary로 감싼다 — BackdropFilter를 스크롤되는 리스트 안에서
+    // 그대로 쓰면(감싸지 않으면) 안드로이드 실기기에서 스크롤할 때 컴포지터가
+    // 블러의 저장 레이어 경계를 못 따라가 그 아래 내용이 빈 사각형으로 남는
+    // 고질적인 문제가 있다(Chrome/데스크톱에선 재현 안 됨 — 렌더링 경로가
+    // 다르다). RepaintBoundary가 이 레이어를 형제 위젯의 리페인트와 분리해
+    // 그 오염을 막는다.
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: opacity),
+              borderRadius: borderRadius,
+              border: border ??
+                  Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 1.0,
+                  ),
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );
@@ -579,6 +588,236 @@ class KnueWeatherAtmosphere {
       ],
     );
   }
+}
+
+enum _WeatherParticleKind { rain, snow, wind }
+
+/// 입자 하나의 초기 상태. 애니메이션은 [WeatherParticlesOverlay]가 컨트롤러
+/// 하나로 전부 몰아 돌리고(입자마다 AnimationController를 두면 무겁다),
+/// 각 입자는 [phase]로 서로 어긋난 시작점을 가진다.
+class _WeatherParticle {
+  final double x; // 0..1, 가로 위치(비·눈) 또는 세로 위치(바람)
+  final double phase; // 0..1, 루프 안에서 어디서 시작하는지
+  final double speed; // 클수록 빨리 떨어짐/지나감
+  final double size; // 길이(비) 또는 반지름(눈) 또는 길이(바람), 논리 픽셀
+  final double opacity;
+  final double drift; // 눈이 좌우로 흔들리는 폭, 비/바람은 0
+
+  const _WeatherParticle({
+    required this.x,
+    required this.phase,
+    required this.speed,
+    required this.size,
+    required this.opacity,
+    this.drift = 0,
+  });
+
+  factory _WeatherParticle.random(math.Random rng, _WeatherParticleKind kind) {
+    switch (kind) {
+      case _WeatherParticleKind.rain:
+        return _WeatherParticle(
+          x: rng.nextDouble(),
+          phase: rng.nextDouble(),
+          speed: 0.8 + rng.nextDouble() * 0.6,
+          size: 10 + rng.nextDouble() * 8,
+          opacity: 0.12 + rng.nextDouble() * 0.16,
+        );
+      case _WeatherParticleKind.snow:
+        return _WeatherParticle(
+          x: rng.nextDouble(),
+          phase: rng.nextDouble(),
+          speed: 0.18 + rng.nextDouble() * 0.16,
+          size: 1.4 + rng.nextDouble() * 2.0,
+          opacity: 0.25 + rng.nextDouble() * 0.35,
+          drift: 6 + rng.nextDouble() * 10,
+        );
+      case _WeatherParticleKind.wind:
+        return _WeatherParticle(
+          x: rng.nextDouble(), // 바람은 세로 위치로 씀
+          phase: rng.nextDouble(),
+          speed: 0.5 + rng.nextDouble() * 0.4,
+          size: 40 + rng.nextDouble() * 50,
+          opacity: 0.08 + rng.nextDouble() * 0.08,
+        );
+    }
+  }
+}
+
+/// 날씨에 맞춰 헤더 위에 은은하게 얹는 파티클(비/눈/바람) 애니메이션.
+/// [KnueWeatherAtmosphere]가 이미 배경 색·그라디언트를 날씨에 맞게 조색하는데,
+/// 그 위에 살짝 움직이는 결을 더해 "은은하게 비/눈/바람이 부는" 느낌을 낸다.
+///
+/// 입자 하나하나를 위젯으로 만들지 않고 CustomPainter 하나로 직접 그린다 —
+/// 개수가 적어도(20~30개) 위젯 트리 방식보다 훨씬 가볍다. 눈에 잘 안 띄는
+/// 헤더 배경 연출이라 실패해도 안전하게 아무것도 안 그리는 쪽을 택한다
+/// (날씨가 없거나 맑음/흐림이면 SizedBox.shrink).
+class WeatherParticlesOverlay extends StatefulWidget {
+  final KnueWeatherInfo? weather;
+  const WeatherParticlesOverlay({super.key, required this.weather});
+
+  @override
+  State<WeatherParticlesOverlay> createState() =>
+      _WeatherParticlesOverlayState();
+}
+
+class _WeatherParticlesOverlayState extends State<WeatherParticlesOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  final _rng = math.Random();
+  _WeatherParticleKind? _kind;
+  List<_WeatherParticle> _particles = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    // 긴 주기로 반복시키고(실제 낙하 속도는 입자별 speed가 결정) 진행률만
+    // 0→1로 계속 순환시킨다 — 배터리를 아끼려고 입자마다 컨트롤러를 두지 않는다.
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20),
+    )..repeat();
+    _rebuild();
+  }
+
+  @override
+  void didUpdateWidget(covariant WeatherParticlesOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final newKind = _kindFor(widget.weather);
+    if (newKind != _kind) _rebuild();
+  }
+
+  _WeatherParticleKind? _kindFor(KnueWeatherInfo? w) {
+    if (w == null) return null;
+    if (w.isSnowing) return _WeatherParticleKind.snow;
+    if (w.isRaining) return _WeatherParticleKind.rain;
+    if (w.isColdOrWindy) return _WeatherParticleKind.wind;
+    return null; // 맑음/흐림/더위는 굳이 입자를 안 더한다 — 은은해야 하니까.
+  }
+
+  void _rebuild() {
+    final kind = _kindFor(widget.weather);
+    setState(() {
+      _kind = kind;
+      if (kind == null) {
+        _particles = const [];
+        return;
+      }
+      final count = kind == _WeatherParticleKind.wind ? 5 : 24;
+      _particles = List.generate(
+        count,
+        (_) => _WeatherParticle.random(_rng, kind),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = _kind;
+    if (kind == null || _particles.isEmpty) return const SizedBox.shrink();
+    // 헤더 콘텐츠(텍스트·버튼)의 탭을 가로채면 안 되고, 자주 다시 그리는
+    // 레이어라 RepaintBoundary로 나머지 트리와 리페인트를 분리한다.
+    return IgnorePointer(
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) => CustomPaint(
+            painter: _WeatherParticlePainter(
+              particles: _particles,
+              progress: _controller.value,
+              kind: kind,
+            ),
+            size: Size.infinite,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WeatherParticlePainter extends CustomPainter {
+  final List<_WeatherParticle> particles;
+  final double progress;
+  final _WeatherParticleKind kind;
+
+  _WeatherParticlePainter({
+    required this.particles,
+    required this.progress,
+    required this.kind,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    switch (kind) {
+      case _WeatherParticleKind.rain:
+        _paintRain(canvas, size);
+        break;
+      case _WeatherParticleKind.snow:
+        _paintSnow(canvas, size);
+        break;
+      case _WeatherParticleKind.wind:
+        _paintWind(canvas, size);
+        break;
+    }
+  }
+
+  void _paintRain(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round;
+    const slant = 0.18; // 살짝 비스듬히 떨어지는 빗줄기
+    for (final p in particles) {
+      final t = (progress * p.speed + p.phase) % 1.0;
+      final travel = size.height + p.size * 2;
+      final headY = t * travel - p.size;
+      final headX = p.x * size.width + headY * slant;
+      paint.color = Colors.white.withValues(alpha: p.opacity);
+      canvas.drawLine(
+        Offset(headX, headY),
+        Offset(headX - p.size * slant, headY - p.size),
+        paint,
+      );
+    }
+  }
+
+  void _paintSnow(Canvas canvas, Size size) {
+    final paint = Paint()..style = PaintingStyle.fill;
+    for (final p in particles) {
+      final t = (progress * p.speed + p.phase) % 1.0;
+      final y = t * (size.height + p.size * 2) - p.size;
+      final x = p.x * size.width +
+          math.sin(t * 2 * math.pi + p.phase * 10) * p.drift;
+      paint.color = Colors.white.withValues(alpha: p.opacity);
+      canvas.drawCircle(Offset(x, y), p.size, paint);
+    }
+  }
+
+  void _paintWind(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+    for (final p in particles) {
+      final t = (progress * p.speed + p.phase) % 1.0;
+      final travel = size.width + p.size * 2;
+      final headX = t * travel - p.size;
+      final y = p.x * size.height; // x를 세로 위치로 재사용
+      paint.color = Colors.white.withValues(alpha: p.opacity);
+      canvas.drawLine(
+        Offset(headX - p.size, y),
+        Offset(headX, y),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WeatherParticlePainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.kind != kind;
 }
 
 /// 섹션 캡션 헤더. 좌측 타이틀 + 우측 선택적 액션("전체보기" 등).

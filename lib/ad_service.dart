@@ -16,8 +16,10 @@ class AdService {
   AdService._();
 
   /// 네이티브 광고 팩토리 ID. android/.../MainActivity.kt와
-  /// ios/Runner/AppDelegate.swift가 이 이름으로 등록해 둔 레이아웃과 짝이다.
-  static const String nativeAdFactoryId = 'listTile';
+  /// ios/Runner/AppDelegate.swift가 이 이름들로 등록해 둔 레이아웃과 짝이다.
+  /// isCompact:false → 홈 탭 전체 크기, true → 식단·버스·설정 탭 압축형.
+  static String nativeAdFactoryId(bool isCompact) =>
+      isCompact ? 'listTile_compact' : 'listTile';
 
   static const String _androidRealNativeId =
       'ca-app-pub-8400037761673359/6109981845';

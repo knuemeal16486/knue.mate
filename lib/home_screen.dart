@@ -185,7 +185,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadMealRating(
-      DateTime date, MealSource source, MealType type) async {
+    DateTime date,
+    MealSource source,
+    MealType type,
+  ) async {
     final summary = await FirebaseSyncService.getMealRatingSummary(
       date: date,
       source: source,
@@ -298,9 +301,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       // 2. 최신 공지 스크래핑
-      final fetched = await _scraper.fetchAllNotices(
-        onlyCategories: favBoards,
-      );
+      final fetched = await _scraper.fetchAllNotices(onlyCategories: favBoards);
       final filtered = fetched
           .where((n) => favBoards.contains(n.category))
           .take(4)
@@ -397,174 +398,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _greeting = pickGreeting(DateTime.now(), weather: info);
       });
     } catch (_) {}
-  }
-
-  /// 임시 날씨 시뮬레이터 (비, 바람, 눈, 맑음 등 테스트용)
-  void _showWeatherSimulatorDialog() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    void applyWeather(KnueWeatherInfo? simulated, String label) {
-      Navigator.pop(context);
-      if (simulated == null) {
-        _loadWeather();
-        showToast(context, "실시간 날씨로 복구했습니다.");
-      } else {
-        setState(() {
-          _weather = simulated;
-          _greeting = pickGreeting(DateTime.now(), weather: simulated);
-        });
-        showToast(context, "$label 모드를 적용했습니다.");
-      }
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.tune_rounded, size: 20),
-            const SizedBox(width: 8),
-            const Text(
-              "날씨 시뮬레이터 (테스트)",
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              "날씨별 멘트와 컬러 카드 앰비언트 효과를 테스트해보세요.",
-              style: TextStyle(
-                fontSize: 12.5,
-                color: isDark ? Colors.white60 : Colors.grey.shade600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildWeatherOption(
-              emoji: "🌧️",
-              title: "비 / 소나기",
-              subtitle: "16°C · 비 멘트 & 물빛 아쿠아 틴트",
-              onTap: () => applyWeather(
-                const KnueWeatherInfo(temp: 16, weatherCode: 61, windSpeed: 8),
-                "🌧️ 비 / 소나기",
-              ),
-            ),
-            _buildWeatherOption(
-              emoji: "💨",
-              title: "강풍 / 쌀쌀함",
-              subtitle: "4°C (풍속 25km/h) · 겉옷 멘트 & 쿨 실버",
-              onTap: () => applyWeather(
-                const KnueWeatherInfo(temp: 4, weatherCode: 2, windSpeed: 25),
-                "💨 강풍 / 쌀쌀함",
-              ),
-            ),
-            _buildWeatherOption(
-              emoji: "❄️",
-              title: "눈 / 한파",
-              subtitle: "-3°C · 눈 멘트 & 스노우 프로스트 글로우",
-              onTap: () => applyWeather(
-                const KnueWeatherInfo(temp: -3, weatherCode: 71, windSpeed: 10),
-                "❄️ 눈 / 한파",
-              ),
-            ),
-            _buildWeatherOption(
-              emoji: "☀️",
-              title: "화창한 맑음",
-              subtitle: "21°C · 맑은 날 멘트 & 골든 틴트",
-              onTap: () => applyWeather(
-                const KnueWeatherInfo(temp: 21, weatherCode: 0, windSpeed: 5),
-                "☀️ 화창한 맑음",
-              ),
-            ),
-            _buildWeatherOption(
-              emoji: "🔥",
-              title: "무더위 / 폭염",
-              subtitle: "33°C · 더위 케어 멘트 & 앰버 펄",
-              onTap: () => applyWeather(
-                const KnueWeatherInfo(temp: 33, weatherCode: 0, windSpeed: 4),
-                "🔥 무더위 / 폭염",
-              ),
-            ),
-            const Divider(height: 20),
-            _buildWeatherOption(
-              emoji: "🔄",
-              title: "실시간 강내면 날씨",
-              subtitle: "Open-Meteo 실제 측정값으로 되돌리기",
-              isReset: true,
-              onTap: () => applyWeather(null, "실시간 강내면 날씨"),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("닫기"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeatherOption({
-    required String emoji,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    bool isReset = false,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: isReset
-                ? (isDark
-                    ? Colors.blue.withValues(alpha: 0.15)
-                    : Colors.blue.shade50)
-                : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 20)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: isReset
-                            ? Colors.blue
-                            : (isDark ? Colors.white : Colors.black87),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: isDark ? Colors.white54 : Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   // ---------------------------------------------------------------------
@@ -669,156 +502,153 @@ class _HomeScreenState extends State<HomeScreen> {
   // ---------------------------------------------------------------------
 
   Widget _buildHeroHeader(Color color, bool isDark) {
-    final now = DateTime.now();
-    final dateStr = DateFormat('M월 d일 EEEE', 'ko_KR').format(now);
-
     return Container(
       width: double.infinity,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         // 청람밥상 앱바와 같은 펄 공식 + 날씨 앰비언트(비, 바람, 눈 등) 미세 조색
         gradient: KnueWeatherAtmosphere.headerGradient(color, isDark, _weather),
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
-      child: SafeArea(
-        bottom: false,
-        // 헤더 안의 모든 흰 글씨·아이콘에 그림자를 한 번에 건다. 개별 Text가
-        // shadows를 지정하지 않으면 이 값이 상속되므로, 색을 밝은 노랑으로
-        // 바꿔도 글씨가 묻히지 않는다.
-        child: DefaultTextStyle.merge(
-          style: TextStyle(shadows: KnueTokens.headerTextShadow),
-          child: IconTheme.merge(
-            data: IconThemeData(shadows: KnueTokens.headerTextShadow),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            dateStr,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.1,
-                              color: Colors.white.withValues(alpha: 0.9),
-                              shadows: KnueTokens.headerTextShadow,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () => _showWeatherSimulatorDialog(),
-                            child: Container(
-                              margin: const EdgeInsets.only(left: 8),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2.5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.3),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    _weather != null
-                                        ? "${_weather!.emoji} ${_weather!.temp.round()}°"
-                                        : "🌤️ 날씨",
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white.withValues(alpha: 0.95),
-                                      fontFeatures: KnueTokens.tabularFigures,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Icon(
-                                    Icons.tune_rounded,
-                                    size: 11,
-                                    color: Colors.white.withValues(alpha: 0.75),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          "KNUE MATE",
+      child: Stack(
+        children: [
+          // 날씨에 맞춰 은은하게 떠다니는 비/눈/바람 결. 배경색은 이미
+          // KnueWeatherAtmosphere가 날씨별로 조색해 두므로, 여기서는 움직임만
+          // 더한다.
+          Positioned.fill(child: WeatherParticlesOverlay(weather: _weather)),
+          _buildHeroHeaderContent(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroHeaderContent() {
+    final now = DateTime.now();
+    final dateStr = DateFormat('M월 d일 EEEE', 'ko_KR').format(now);
+    return SafeArea(
+      bottom: false,
+      // 헤더 안의 모든 흰 글씨·아이콘에 그림자를 한 번에 건다. 개별 Text가
+      // shadows를 지정하지 않으면 이 값이 상속되므로, 색을 밝은 노랑으로
+      // 바꿔도 글씨가 묻히지 않는다.
+      child: DefaultTextStyle.merge(
+        style: TextStyle(shadows: KnueTokens.headerTextShadow),
+        child: IconTheme.merge(
+          data: IconThemeData(shadows: KnueTokens.headerTextShadow),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          dateStr,
                           style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.6,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.1,
                             color: Colors.white.withValues(alpha: 0.9),
+                            shadows: KnueTokens.headerTextShadow,
                           ),
+                        ),
+                        if (_weather != null)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.3),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              "${_weather!.emoji} ${_weather!.temp.round()}°",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white.withValues(alpha: 0.95),
+                                fontFeatures: KnueTokens.tabularFigures,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        "KNUE Mate",
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _greeting,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.6,
+                    color: Colors.white,
+                    shadows: KnueTokens.headerTextShadow,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // 오늘의 브리핑 — 식단/버스 요약을 반투명 타일로 헤더 안에 담는다.
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _buildHeroTile(
+                          icon: Icons.restaurant_menu_rounded,
+                          title: "오늘의 식단",
+                          chip:
+                              "${_nextMealType.label} · ${_currentMealSource.shortLabel}",
+                          footer: "식단 상세",
+                          extra: _buildHeroMealRating(),
+                          onTap: () =>
+                              RootNavigationScreen.switchTab(AppTab.meal),
+                          body: _buildHeroMealBody(),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildHeroTile(
+                          icon: Icons.directions_bus_rounded,
+                          title: "다음 버스",
+                          chip: "조치원·청주",
+                          footer: "실시간 위치",
+                          onTap: () =>
+                              RootNavigationScreen.switchTab(AppTab.bus),
+                          body: _buildHeroBusBody(),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _greeting,
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.6,
-                      color: Colors.white,
-                      shadows: KnueTokens.headerTextShadow,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 오늘의 브리핑 — 식단/버스 요약을 반투명 타일로 헤더 안에 담는다.
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: _buildHeroTile(
-                            icon: Icons.restaurant_menu_rounded,
-                            title: "오늘의 식단",
-                            chip:
-                                "${_nextMealType.label} · ${_currentMealSource.shortLabel}",
-                            footer: "식단 상세",
-                            extra: _buildHeroMealRating(),
-                            onTap: () =>
-                                RootNavigationScreen.switchTab(AppTab.meal),
-                            body: _buildHeroMealBody(),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _buildHeroTile(
-                            icon: Icons.directions_bus_rounded,
-                            title: "다음 버스",
-                            chip: "조치원·청주",
-                            footer: "실시간 위치",
-                            onTap: () =>
-                                RootNavigationScreen.switchTab(AppTab.bus),
-                            body: _buildHeroBusBody(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -839,6 +669,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required String footer,
     required VoidCallback onTap,
     required Widget body,
+
     /// 하단 링크 줄 위에 덧붙일 한 줄(식단 타일의 별점 등).
     Widget? extra,
   }) {
@@ -895,10 +726,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 5),
             body,
             const Spacer(),
-            if (extra != null) ...[
-              const SizedBox(height: 6),
-              extra,
-            ],
+            if (extra != null) ...[const SizedBox(height: 6), extra],
             const SizedBox(height: 6),
             Row(
               children: [
@@ -1473,14 +1301,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? InkWell(
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const NoticeScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const NoticeScreen()),
                     ),
                     borderRadius: BorderRadius.circular(16),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          vertical: 18, horizontal: 16),
+                        vertical: 18,
+                        horizontal: 16,
+                      ),
                       child: Row(
                         children: [
                           _TintSquircle(

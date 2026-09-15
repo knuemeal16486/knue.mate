@@ -647,9 +647,11 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
 
     if (response.statusCode == 200) {
       final html = utf8.decode(response.bodyBytes, allowMalformed: true);
-      final result = source == MealSource.a
-          ? parseSadoHtml(html, date)
-          : parseCafeHtml(html, date);
+      // 교직원 식당(b)의 출처가 pot.knue.ac.kr(mon_list/tbl_4 구조)에서
+      // 학교 자체 페이지(key=1960&siteSe=cafe)로 바뀌었는데, 이 페이지는
+      // 사도교육원식당(a)과 똑같은 p-calendar-list 구조를 쓴다 — 그래서
+      // parseCafeHtml이 아무것도 못 찾고 항상 빈 값만 냈다(2026-09-16 확인).
+      final result = parseSadoHtml(html, date);
 
       // 3. 크롤링 결과 저장 (사용자를 기다리게 하지 않음)
       final meals = result['meals'] as Map<String, dynamic>;
@@ -718,7 +720,7 @@ Map<String, dynamic> parseSadoHtml(String html, DateTime date) {
       final items = li.text
           .split(RegExp(r'[\n\r]'))
           .map((s) => s.trim().replaceAll('&amp;', '&'))
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && !_isCafeNoiseLine(s))
           .toList();
       meals[mealKeys[i]]!.addAll(items);
     }

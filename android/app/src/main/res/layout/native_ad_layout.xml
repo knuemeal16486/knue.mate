@@ -74,19 +74,22 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- 구글 네이티브 광고 정책: 비디오를 정상 표시하려면 최소 120x120dp가
+             필요하다. 너비는 match_parent라 항상 충분하지만 높이가 부족하면
+             "MediaView is too small to display video" 경고가 뜬다. -->
         <com.google.android.gms.ads.nativead.MediaView
             android:id="@+id/ad_media"
             android:layout_width="match_parent"
-            android:layout_height="140dp"
-            android:layout_marginTop="12dp" />
+            android:layout_height="130dp"
+            android:layout_marginTop="10dp" />
 
         <Button
             android:id="@+id/ad_call_to_action"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
+            android:layout_marginTop="10dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
             android:textSize="13sp"
             android:textStyle="bold"
             android:textColor="#2563EB"

@@ -78,9 +78,9 @@ class KnueNativeAdCard extends StatelessWidget {
           ],
         ),
         content: Text(
-          "KNUE MATE는 한국교원대학교 학생들을 위한 비영리 올인원 서비스입니다.\n\n"
+          "KNUE Mate는 한국교원대학교 학생들을 위한 비영리 서비스입니다.\n\n"
           "쾌적한 서버 운영 및 서비스 유지를 위한 제휴/광고 영역입니다.\n"
-          "제휴 및 광고 문의: 교원대 KNUE MATE 운영팀",
+          "제휴 및 광고 문의: KNUE Mate 운영팀",
           style: TextStyle(
             fontSize: 13.5,
             height: 1.45,
@@ -192,7 +192,7 @@ class KnueNativeAdCard extends StatelessWidget {
       return _buildCardContent(
         context: context,
         cardTitle: title ?? "교원대생 맞춤 혜택 & 캠퍼스 소식",
-        cardSubtitle: subtitle ?? "KNUE MATE와 함께하는 유용한 정보와 제휴 혜택을 확인해보세요.",
+        cardSubtitle: subtitle ?? "KNUE Mate와 함께하는 유용한 정보와 제휴 혜택을 확인해보세요.",
         cardCta: callToAction ?? "자세히 보기",
         cardIcon: icon ?? Icons.campaign_rounded,
         cardImageUrl: imageUrl,
@@ -235,7 +235,7 @@ class KnueNativeAdCard extends StatelessWidget {
 
             final sponsor = validDocs.first;
             final sponsorTitle = sponsor['title']?.toString() ?? "교원대 제휴 스폰서";
-            final sponsorSubtitle = sponsor['subtitle']?.toString() ?? "KNUE MATE 제휴 혜택을 확인해보세요.";
+            final sponsorSubtitle = sponsor['subtitle']?.toString() ?? "KNUE Mate 제휴 혜택을 확인해보세요.";
             final sponsorCta = sponsor['callToAction']?.toString() ?? "자세히 보기";
             final sponsorIcon = _parseIcon(sponsor['icon']);
             final sponsorImageUrl = sponsor['imageUrl']?.toString();
@@ -264,7 +264,7 @@ class KnueNativeAdCard extends StatelessWidget {
     return _buildCardContent(
       context: context,
       cardTitle: "교원대생 맞춤 혜택 & 캠퍼스 소식",
-      cardSubtitle: "KNUE MATE와 함께하는 유용한 정보와 제휴 혜택을 확인해보세요.",
+      cardSubtitle: "KNUE Mate와 함께하는 유용한 정보와 제휴 혜택을 확인해보세요.",
       cardCta: "자세히 보기",
       cardIcon: Icons.campaign_rounded,
       cardImageUrl: null,
@@ -568,11 +568,10 @@ class KnueNativeAdCard extends StatelessWidget {
 /// 자리를 native 광고로 바꿔치기한다. 로딩 중 빈 화면이 잠깐 보이는 것보다
 /// 이쪽이 덜 어색하다.
 ///
-/// ⚠️ 컴팩트(isCompact) 자리는 아직 AdMob을 시도하지 않는다 — 지금 네이티브
-/// 레이아웃(android/.../native_ad_layout.xml, ios/.../NativeAdFactoryImpl.swift)은
-/// 미디어 뷰가 포함된 전체 크기 카드 전용이라, 압축 카드 자리(식단·버스·설정
-/// 탭)에 그대로 넣으면 주변 카드보다 훨씬 커져 어색하다. 압축 전용 레이아웃은
-/// 다음 작업으로 남겨둔다.
+/// 컴팩트(isCompact) 자리(식단·버스·설정 탭)는 전용 압축 레이아웃
+/// (native_ad_layout_compact.xml, NativeAdFactoryImpl(isCompact: true))을 쓴다
+/// — KnueNativeAdCard의 압축 스폰서 카드와 같은 한 줄짜리 모양으로, 이미지
+/// 없이 아이콘+제목/설명+버튼만 있다.
 class _DefaultFallbackWithAdMob extends StatefulWidget {
   final bool isCompact;
   const _DefaultFallbackWithAdMob({required this.isCompact});
@@ -588,7 +587,7 @@ class _DefaultFallbackWithAdMobState extends State<_DefaultFallbackWithAdMob> {
   @override
   void initState() {
     super.initState();
-    if (!widget.isCompact) _loadAd();
+    _loadAd();
   }
 
   void _loadAd() {
@@ -597,7 +596,7 @@ class _DefaultFallbackWithAdMobState extends State<_DefaultFallbackWithAdMob> {
 
     NativeAd(
       adUnitId: adUnitId,
-      factoryId: AdService.nativeAdFactoryId,
+      factoryId: AdService.nativeAdFactoryId(widget.isCompact),
       request: const AdRequest(),
       listener: NativeAdListener(
         onAdLoaded: (ad) {
@@ -626,9 +625,10 @@ class _DefaultFallbackWithAdMobState extends State<_DefaultFallbackWithAdMob> {
   Widget build(BuildContext context) {
     final ad = _ad;
     if (ad != null) {
-      // native_ad_layout.xml/NativeAdFactoryImpl.swift의 실제 렌더 높이에 맞춘
-      // 고정 높이 — 플랫폼 뷰는 Flutter가 내재 크기를 알 수 없어 반드시 필요하다.
-      return SizedBox(height: 300, child: AdWidget(ad: ad));
+      // 네이티브 레이아웃의 실제 렌더 높이에 맞춘 고정 높이 — 플랫폼 뷰는
+      // Flutter가 내재 크기를 알 수 없어 반드시 필요하다.
+      final height = widget.isCompact ? 80.0 : 290.0;
+      return SizedBox(height: height, child: AdWidget(ad: ad));
     }
     // 같은 파일(라이브러리) 안이라 private 메서드를 직접 호출할 수 있다.
     return KnueNativeAdCard(

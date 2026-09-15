@@ -108,5 +108,25 @@ void main() {
           monday.add(const Duration(days: 30)))['meals'] as Map;
       expect(meals['breakfast'], isEmpty);
     });
+
+    test('대괄호 안내 문구는 메뉴로 세지 않는다', () {
+      // 교직원 식당(b) 출처가 pot.knue.ac.kr에서 학교 자체 페이지로 바뀌면서
+      // 사도교육원식당(a)과 같은 p-calendar-list 구조를 쓰게 됐다(2026-09-16
+      // 확인) — 그런데 그 페이지에도 "[11:30~13:00][메화헌추가메뉴]",
+      // "[셀프코너]" 같은 대괄호 안내가 메뉴 항목 사이에 섞여 있다.
+      // parseCafeHtml에만 있던 필터를 parseSadoHtml에도 넣었다.
+      final withNoise =
+          '<table class="p-calendar-list">'
+          '<thead><tr><th data-day="0"><span>${monday.month.toString().padLeft(2, '0')}/'
+          '${monday.day.toString().padLeft(2, '0')}</span></th></tr></thead>'
+          '<tbody><tr><td data-day="0"><ul class="menu_list"><li>백미밥\n'
+          '온도토리묵국\n[11:30~13:00][메화헌추가메뉴]\n상추쌈&amp;쌈장\n'
+          '[셀프코너]\n식빵&amp;딸기쨈</li></ul></td></tr></tbody></table>';
+      final meals = parseSadoHtml(withNoise, monday)['meals'] as Map;
+      expect(
+        meals['breakfast'],
+        ['백미밥', '온도토리묵국', '상추쌈&쌈장', '식빵&딸기쨈'],
+      );
+    });
   });
 }

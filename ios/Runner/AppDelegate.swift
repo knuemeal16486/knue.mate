@@ -12,11 +12,17 @@ import google_mobile_ads
   ) -> Bool {
 
     // 스폰서(Firestore sponsors 컬렉션)가 없을 때 대체로 보여줄 네이티브 광고 팩토리.
-    // Dart 쪽 lib/ad_service.dart의 NativeAd(factoryId: "listTile")와 짝이다.
+    // Dart 쪽 lib/ad_service.dart의 NativeAd(factoryId: ...)와 짝이다 —
+    // 전체 크기(홈 탭)와 압축형(식단·버스·설정 탭) 둘 다 등록한다.
     FLTGoogleMobileAdsPlugin.registerNativeAdFactory(
       self,
       factoryId: "listTile",
-      nativeAdFactory: NativeAdFactoryImpl()
+      nativeAdFactory: NativeAdFactoryImpl(isCompact: false)
+    )
+    FLTGoogleMobileAdsPlugin.registerNativeAdFactory(
+      self,
+      factoryId: "listTile_compact",
+      nativeAdFactory: NativeAdFactoryImpl(isCompact: true)
     )
 
     // [추가 2] 포그라운드에서도 알림 배너 표시 설정
