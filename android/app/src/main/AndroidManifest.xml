@@ -82,6 +82,12 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- 상태바 알림 아이콘. 지정 안 하면 FCM 백그라운드 푸시가
+             런처 아이콘(풀컬러)을 그대로 써서 상태바에서 깨져 보임. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_stat_notify" />
+
         <!-- AdMob 앱 ID. 스폰서(sponsors 컬렉션)가 없을 때 대체로 보여줄
              네이티브 광고용 — lib/ad_service.dart의 광고 단위 ID와 짝. -->
         <meta-data

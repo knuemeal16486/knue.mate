@@ -172,7 +172,7 @@ Widget _buildLoadingScreen(BuildContext context, Widget? child) {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Image.asset('assets/icons/knuesquare.png', width: 100, height: 100, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
+          Image.asset('assets/icons/knue_icon.png', width: 100, height: 100, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
           const SizedBox(height: 24),
           const CircularProgressIndicator(strokeWidth: 3),
           const SizedBox(height: 16),
@@ -386,7 +386,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     shadows: KnueTokens.headerTextShadow,
                   ),
                 ),
-                pageTransitionsTheme: const PageTransitionsTheme(
+                pageTransitionsTheme: PageTransitionsTheme(
                   builders: {
                     TargetPlatform.android: CupertinoPageTransitionsBuilder(),
                     TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
@@ -433,7 +433,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     shadows: KnueTokens.headerTextShadow,
                   ),
                 ),
-                pageTransitionsTheme: const PageTransitionsTheme(
+                pageTransitionsTheme: PageTransitionsTheme(
                   builders: {
                     TargetPlatform.android: CupertinoPageTransitionsBuilder(),
                     TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),

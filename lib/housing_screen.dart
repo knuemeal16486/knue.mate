@@ -320,36 +320,63 @@ class _HousingScreenState extends State<HousingScreen>
           ),
           body: _loading
               ? const Center(child: CircularProgressIndicator())
-              : Stack(
+              : Column(
                   children: [
-                    // 메인 지도
-                    Positioned.fill(
-                      child: Column(
+                    _buildDevNoticeBanner(isDark),
+                    Expanded(
+                      child: Stack(
                         children: [
-                          Expanded(child: _buildMap(isDark)),
-                          _buildFooter(isDark),
+                          // 메인 지도
+                          Positioned.fill(
+                            child: Column(
+                              children: [
+                                Expanded(child: _buildMap(isDark)),
+                                _buildFooter(isDark),
+                              ],
+                            ),
+                          ),
+
+                          // 상단 검색 & 구역 필터 바
+                          Positioned(
+                            top: 10,
+                            left: 12,
+                            right: 12,
+                            child: _buildSearchBar(isDark),
+                          ),
+
+                          // 360도 회전 나침반 & 방위각 컨트롤러 HUD (우측 하단)
+                          Positioned(
+                            bottom: 42,
+                            right: 14,
+                            child: _buildRotationControls(isDark, color),
+                          ),
                         ],
                       ),
-                    ),
-
-                    // 상단 검색 & 구역 필터 바
-                    Positioned(
-                      top: 10,
-                      left: 12,
-                      right: 12,
-                      child: _buildSearchBar(isDark),
-                    ),
-
-                    // 360도 회전 나침반 & 방위각 컨트롤러 HUD (우측 하단)
-                    Positioned(
-                      bottom: 42,
-                      right: 14,
-                      child: _buildRotationControls(isDark, color),
                     ),
                   ],
                 ),
         );
       },
+    );
+  }
+
+  Widget _buildDevNoticeBanner(bool isDark) {
+    return Container(
+      width: double.infinity,
+      color: Colors.blue.withValues(alpha: isDark ? 0.15 : 0.1),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.construction_rounded, color: Colors.blue, size: 18),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              "자취방 구하기는 지속적으로 개발 중이에요. 건물 정보가 정확하지 않을 수 있어요",
+              style: TextStyle(color: Colors.blue, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -1261,7 +1261,7 @@ class NotificationService {
       tz.setLocalLocation(tz.getLocation('Asia/Seoul'));
     } catch (_) {}
 
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const android = AndroidInitializationSettings('@mipmap/ic_stat_notify');
     // [수정] 초기화 시점에 자동으로 권한을 요청하지 않음.
     // 권한이 거부된 상태에서 requestAlert/Badge/SoundPermission: true(기본값)이면
     // initialize() 자체가 PlatformException을 던집니다.
