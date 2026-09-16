@@ -40,6 +40,11 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      # google_mobile_ads(FLTAd_Internal.h 등)가 GoogleMobileAds의 비공개 헤더
+      # (GoogleMobileAds_Beta.h)를 non-modular하게 include해서, Podfile의
+      # use_modular_headers!와 충돌해 아카이브가 실패함. 이 헤더 자체를 고칠 수
+      # 없으니(서드파티 pod 소스) 모듈 검사를 완화한다.
+      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
     end
   end
 end
