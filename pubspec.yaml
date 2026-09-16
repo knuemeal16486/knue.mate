@@ -99,6 +99,9 @@ flutter_launcher_icons:
 flutter:
   uses-material-design: true
 
+  config:
+    enable-swift-package-manager: false
+
   # 주석(#)을 지우고 아래와 같이 정확한 간격으로 맞춰주세요.
   assets:
     - .env
