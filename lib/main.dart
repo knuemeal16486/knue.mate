@@ -386,12 +386,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     shadows: KnueTokens.headerTextShadow,
                   ),
                 ),
-                pageTransitionsTheme: PageTransitionsTheme(
-                  builders: {
-                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-                  },
-                ),
               ),
               darkTheme: ThemeData(
                 useMaterial3: true,
@@ -432,12 +426,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     fontWeight: FontWeight.w700,
                     shadows: KnueTokens.headerTextShadow,
                   ),
-                ),
-                pageTransitionsTheme: PageTransitionsTheme(
-                  builders: {
-                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-                  },
                 ),
               ),
               themeMode: mode,
