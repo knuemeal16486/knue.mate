@@ -7,9 +7,10 @@ import google_mobile_ads
 /// 스폰서 카드와 같은 한 줄짜리 모양 — 그 카드도 이미지가 없어서 압축형도
 /// 미디어뷰를 안 쓴다).
 ///
-/// 타입 이름(GADNativeAd 등)은 googleads-mobile-flutter 공식 저장소의
-/// packages/google_mobile_ads/example/ios/Runner/AppDelegate.m을 그대로 따른다
-/// (2026-09-15 확인). Interface Builder(xib) 없이 코드로 직접 짰다 — 이 프로젝트는
+/// 타입 이름(NativeAd, NativeAdView, MediaView)은 GAD 접두사가 없는
+/// 최신 google_mobile_ads Swift API다 — Codemagic 실제 빌드에서
+/// "'GADNativeAd' has been renamed to 'NativeAd'" 컴파일 에러로 확인했다
+/// (2026-09-16). Interface Builder(xib) 없이 코드로 직접 짰다 — 이 프로젝트는
 /// Windows에서 개발하고 Codemagic(macOS 클라우드)에서 빌드하므로, 여기서 xib를
 /// 시각적으로 편집·검증할 방법이 없다.
 ///
@@ -22,15 +23,15 @@ class NativeAdFactoryImpl: NSObject, FLTNativeAdFactory {
     }
 
     func createNativeAd(
-        _ nativeAd: GADNativeAd,
+        _ nativeAd: NativeAd,
         customOptions: [AnyHashable: Any]? = nil
-    ) -> GADNativeAdView? {
+    ) -> NativeAdView? {
         return isCompact ? buildCompact(nativeAd) : buildFull(nativeAd)
     }
 
     // MARK: - 전체 크기 (홈 탭)
 
-    private func buildFull(_ nativeAd: GADNativeAd) -> GADNativeAdView {
+    private func buildFull(_ nativeAd: NativeAd) -> NativeAdView {
         let adView = baseAdView()
 
         let badge = badgeLabel()
@@ -38,7 +39,7 @@ class NativeAdFactoryImpl: NSObject, FLTNativeAdFactory {
         let headlineView = headlineLabel(size: 13.5)
         let bodyView = bodyLabel(size: 11.5)
 
-        let mediaView = GADMediaView()
+        let mediaView = MediaView()
         mediaView.layer.cornerRadius = 10
         mediaView.clipsToBounds = true
 
@@ -89,7 +90,7 @@ class NativeAdFactoryImpl: NSObject, FLTNativeAdFactory {
 
     // MARK: - 압축형 (식단·버스·설정 탭)
 
-    private func buildCompact(_ nativeAd: GADNativeAd) -> GADNativeAdView {
+    private func buildCompact(_ nativeAd: NativeAd) -> NativeAdView {
         let adView = baseAdView()
 
         let badge = badgeLabel(fontSize: 8.5)
@@ -140,8 +141,8 @@ class NativeAdFactoryImpl: NSObject, FLTNativeAdFactory {
 
     // MARK: - 공용 조각
 
-    private func baseAdView() -> GADNativeAdView {
-        let adView = GADNativeAdView()
+    private func baseAdView() -> NativeAdView {
+        let adView = NativeAdView()
         adView.backgroundColor = .white
         adView.layer.cornerRadius = 18
         adView.layer.borderWidth = 0.8
@@ -200,8 +201,8 @@ class NativeAdFactoryImpl: NSObject, FLTNativeAdFactory {
     /// 본문·아이콘·CTA는 광고에 따라 없을 수 있어 null 체크 후에만 채운다.
     /// (헤드라인·mediaContent와 달리 Google이 항상 보장하지 않는다.)
     private func bindOptionalAssets(
-        adView: GADNativeAdView,
-        nativeAd: GADNativeAd,
+        adView: NativeAdView,
+        nativeAd: NativeAd,
         bodyView: UILabel,
         iconView: UIImageView,
         ctaButton: UIButton
