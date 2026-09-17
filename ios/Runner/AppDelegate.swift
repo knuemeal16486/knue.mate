@@ -11,6 +11,16 @@ import google_mobile_ads
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
 
+    // GeneratedPluginRegistrant.register(with:)가 먼저 돌아야 FLTGoogleMobileAdsPlugin
+    // 인스턴스가 registry에 publish된다. registerNativeAdFactory는 그 인스턴스를
+    // valuePublishedByPlugin:으로 찾는데, 아직 없으면 조용히 아무 일도 안 하고 YES를
+    // 반환한다(플러그인 내부의 NSException이 raise가 아니라 그냥 생성만 되고 버려짐 —
+    // 실제 google_mobile_ads-9.0.0 소스로 확인). 그래서 이 순서를 지켜야 한다:
+    // register(with:) → registerNativeAdFactory. 원래 코드가 순서를 반대로 해서
+    // iOS에서 네이티브 광고가 항상 조용히 실패하고 있었다(Android MainActivity.kt는
+    // super.configureFlutterEngine이 먼저라 문제 없었음).
+    GeneratedPluginRegistrant.register(with: self)
+
     // 스폰서(Firestore sponsors 컬렉션)가 없을 때 대체로 보여줄 네이티브 광고 팩토리.
     // Dart 쪽 lib/ad_service.dart의 NativeAd(factoryId: ...)와 짝이다 —
     // 전체 크기(홈 탭)와 압축형(식단·버스·설정 탭) 둘 다 등록한다.
@@ -52,7 +62,6 @@ import google_mobile_ads
       UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     }
 
-    GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }

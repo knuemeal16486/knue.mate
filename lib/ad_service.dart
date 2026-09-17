@@ -54,7 +54,9 @@ class AdService {
     if (_initialized || !_isSupportedPlatform) return;
     _initialized = true;
     try {
-      await MobileAds.instance.initialize();
+      // 타임아웃이 없으면 네트워크가 느릴 때 이 await가 끝없이 걸려
+      // main()의 runApp() 호출 자체가 막힌다 — 앱이 흰 로딩 화면에 멈춘다.
+      await MobileAds.instance.initialize().timeout(const Duration(seconds: 5));
     } catch (e) {
       debugPrint('AdService: 초기화 실패: $e');
     }
