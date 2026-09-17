@@ -40,4 +40,51 @@ void main() {
     );
     expect(result, hasLength(1));
   });
+
+  group('isDigestDue (하루 N번 지정 시각 알림)', () {
+    test('아직 아무 것도 안 보냈고 지정 시각을 지났으면 보낼 때', () {
+      final due = KeywordAlertService.isDigestDue(
+        now: DateTime(2026, 9, 17, 10, 0),
+        targetHours: [9, 18],
+        lastDigestSentAt: null,
+      );
+      expect(due, isTrue); // 9시는 지났고 아직 한 번도 안 보냈다
+    });
+
+    test('오늘 지정 시각을 아직 하나도 안 지났으면 안 보낼 때', () {
+      final due = KeywordAlertService.isDigestDue(
+        now: DateTime(2026, 9, 17, 8, 0),
+        targetHours: [9, 18],
+        lastDigestSentAt: null,
+      );
+      expect(due, isFalse);
+    });
+
+    test('그 시각 이후로 이미 한 번 보냈으면 다시 안 보낸다', () {
+      final due = KeywordAlertService.isDigestDue(
+        now: DateTime(2026, 9, 17, 10, 0),
+        targetHours: [9, 18],
+        lastDigestSentAt: DateTime(2026, 9, 17, 9, 30), // 9시 이후에 이미 보냄
+      );
+      expect(due, isFalse);
+    });
+
+    test('다음 지정 시각(18시)이 지나면 그날 두 번째로 다시 보낸다', () {
+      final due = KeywordAlertService.isDigestDue(
+        now: DateTime(2026, 9, 17, 19, 0),
+        targetHours: [9, 18],
+        lastDigestSentAt: DateTime(2026, 9, 17, 9, 30), // 9시치는 이미 보냄
+      );
+      expect(due, isTrue); // 18시치는 아직 안 보냄
+    });
+
+    test('점검이 며칠 건너뛰어도 날짜가 바뀌면 다시 보낼 때로 판단한다', () {
+      final due = KeywordAlertService.isDigestDue(
+        now: DateTime(2026, 9, 19, 10, 0),
+        targetHours: [9, 18],
+        lastDigestSentAt: DateTime(2026, 9, 17, 18, 30), // 이틀 전 마지막 발송
+      );
+      expect(due, isTrue);
+    });
+  });
 }

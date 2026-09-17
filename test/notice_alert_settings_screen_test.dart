@@ -9,6 +9,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     PreferencesService.noticeAlarmOn.value = true;
     PreferencesService.noticeKeywords.value = ['장학', '수강', '졸업'];
+    PreferencesService.noticeAlertMode.value = NoticeAlertMode.instant;
+    PreferencesService.noticeAlertHours.value = [9, 18];
   });
 
   testWidgets('렌더링되고 알림 스위치가 켜진 상태로 시작한다', (tester) async {
@@ -48,5 +50,50 @@ void main() {
     PreferencesService.noticeKeywords.value = [];
     await tester.pump();
     expect(find.textContaining("등록된 키워드 없음"), findsOneWidget);
+  });
+
+  testWidgets('기본값은 즉시 모드라 시각 편집 UI가 안 보인다', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: NoticeAlertSettingsScreen()),
+    );
+    await tester.pump();
+
+    expect(find.text("올라오는 즉시"), findsOneWidget);
+    expect(find.text("하루 중 지정한 시각에 모아서"), findsOneWidget);
+    expect(find.text("시각 추가"), findsNothing);
+  });
+
+  testWidgets('"하루 중 지정한 시각에 모아서"를 고르면 시각 칩이 보인다', (tester) async {
+    PreferencesService.noticeKeywords.value = []; // 키워드 칩과 안 섞이게
+    await tester.pumpWidget(
+      const MaterialApp(home: NoticeAlertSettingsScreen()),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text("하루 중 지정한 시각에 모아서"));
+    await tester.pump();
+    await tester.pump(); // saveNoticeAlertMode의 await 완료까지
+
+    expect(
+      PreferencesService.noticeAlertMode.value,
+      NoticeAlertMode.scheduled,
+    );
+    expect(find.text("시각 추가"), findsOneWidget);
+    // 기본 시각(9, 18시)이 칩으로 보이는지 — 로케일에 따라 표기가 다를 수
+    // 있어 정확한 문자열 대신 칩 개수로 확인.
+    expect(find.byType(Chip), findsNWidgets(2));
+  });
+
+  testWidgets('시각이 1개뿐이면 삭제 버튼이 없다(0개 방지)', (tester) async {
+    PreferencesService.noticeAlertMode.value = NoticeAlertMode.scheduled;
+    PreferencesService.noticeAlertHours.value = [9];
+    PreferencesService.noticeKeywords.value = []; // 키워드 칩과 안 섞이게
+    await tester.pumpWidget(
+      const MaterialApp(home: NoticeAlertSettingsScreen()),
+    );
+    await tester.pump();
+
+    final chip = tester.widget<Chip>(find.byType(Chip));
+    expect(chip.onDeleted, isNull);
   });
 }

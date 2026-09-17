@@ -142,6 +142,9 @@ enum MealType {
 
 enum ServeStatus { open, waiting, closed, notToday }
 
+/// 공지 알림을 올라오는 즉시 받을지, 하루 중 정해둔 시각에 모아서 받을지.
+enum NoticeAlertMode { instant, scheduled }
+
 enum AppTab {
   home("홈", Icons.home_rounded, Colors.indigo),
   meal("식단", Icons.restaurant_menu_rounded, Colors.orange),
@@ -1000,6 +1003,8 @@ class PreferencesService {
   static const String keyNoticeKeywords = 'notice_keywords';
   static const String keyFavBoards = 'fav_boards';
   static const String keyNoticeAlarm = 'notice_alarm_on';
+  static const String keyNoticeAlertMode = 'notice_alert_mode';
+  static const String keyNoticeAlertHours = 'notice_alert_hours';
   static const String keyDdayItems = 'dday_items';
   static const String keyPersonalEvents = 'personal_events';
 
@@ -1021,6 +1026,11 @@ class PreferencesService {
     '학사공지',
   ]);
   static final ValueNotifier<bool> noticeAlarmOn = ValueNotifier(true);
+  static final ValueNotifier<NoticeAlertMode> noticeAlertMode =
+      ValueNotifier(NoticeAlertMode.instant);
+  /// scheduled 모드일 때 알림을 모아 보낼 시각(0~23시, 정렬됨).
+  static final ValueNotifier<List<int>> noticeAlertHours =
+      ValueNotifier([9, 18]);
   static final ValueNotifier<List<DdayItem>> ddayItems = ValueNotifier([]);
   static final ValueNotifier<List<PersonalEvent>> personalEvents =
       ValueNotifier([]);
@@ -1099,6 +1109,20 @@ class PreferencesService {
     favoriteBoards.value =
         prefs.getStringList(keyFavBoards) ?? ['대학소식', '학사공지'];
     noticeAlarmOn.value = prefs.getBool(keyNoticeAlarm) ?? true;
+    final savedMode = prefs.getString(keyNoticeAlertMode);
+    noticeAlertMode.value = savedMode == NoticeAlertMode.scheduled.name
+        ? NoticeAlertMode.scheduled
+        : NoticeAlertMode.instant;
+    final savedHours = prefs.getStringList(keyNoticeAlertHours);
+    if (savedHours != null && savedHours.isNotEmpty) {
+      noticeAlertHours.value = savedHours
+          .map((s) => int.tryParse(s))
+          .whereType<int>()
+          .where((h) => h >= 0 && h <= 23)
+          .toSet()
+          .toList()
+        ..sort();
+    }
 
     // 별도 try/catch — 한쪽 JSON이 손상되어도 다른 쪽까지 조용히 날아가지 않도록.
     try {
@@ -1145,6 +1169,22 @@ class PreferencesService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(keyNoticeAlarm, on);
     noticeAlarmOn.value = on;
+  }
+
+  static Future<void> saveNoticeAlertMode(NoticeAlertMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(keyNoticeAlertMode, mode.name);
+    noticeAlertMode.value = mode;
+  }
+
+  static Future<void> saveNoticeAlertHours(List<int> hours) async {
+    final sorted = hours.toSet().toList()..sort();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      keyNoticeAlertHours,
+      sorted.map((h) => h.toString()).toList(),
+    );
+    noticeAlertHours.value = sorted;
   }
 
   static Future<void> saveDdayItems(List<DdayItem> items) async {
@@ -1239,6 +1279,8 @@ class PreferencesService {
     noticeKeywords.value = ['장학', '수강', '졸업'];
     favoriteBoards.value = ['대학소식', '학사공지'];
     noticeAlarmOn.value = true;
+    noticeAlertMode.value = NoticeAlertMode.instant;
+    noticeAlertHours.value = [9, 18];
     ddayItems.value = [];
     personalEvents.value = [];
   }
