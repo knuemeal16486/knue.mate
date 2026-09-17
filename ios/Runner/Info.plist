@@ -72,6 +72,8 @@
 		<array>
 			<string>widget_update</string>
 			<string>meal_widget_update_task</string>
+			<string>knue_club_event_check_task</string>
+			<string>knue_notice_check_task</string>
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
