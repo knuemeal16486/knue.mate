@@ -3,6 +3,6 @@
      알약 버튼. 사용자가 테마색을 바꿔도 광고 버튼까지 따라가진 않지만,
      기본 배색과는 어긋나지 않는다. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#1A2563EB" />
+    <solid android:color="@color/knue_ad_brand_blue_10pct" />
     <corners android:radius="12dp" />
 </shape>

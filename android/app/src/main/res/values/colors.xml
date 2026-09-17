@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 네이티브 광고 레이아웃(native_ad_layout.xml, native_ad_layout_compact.xml,
+     native_ad_cta_bg.xml)에서 공유하는 색. 앱 기본 테마색(lib/constants.dart의
+     themeColor 기본값 #2563EB)과 맞췄다. 예전엔 이 hex 값들이 파일마다
+     따로 타이핑돼 있어서 하나만 바뀌면 나머지가 조용히 어긋날 수 있었다 —
+     여기 한 곳만 고치면 전부 같이 바뀌도록 리소스로 뽑았다. -->
+<resources>
+    <color name="knue_ad_muted_text">#6B7280</color>
+    <color name="knue_ad_brand_blue">#2563EB</color>
+    <color name="knue_ad_brand_blue_10pct">#1A2563EB</color>
+</resources>

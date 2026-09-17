@@ -16,6 +16,12 @@ import google_mobile_ads
 ///
 /// android/app/.../NativeAdFactoryImpl.kt와 같은 배치로 맞췄다.
 class NativeAdFactoryImpl: NSObject, FLTNativeAdFactory {
+    // 이 파일 안에서만 두 번씩 반복 타이핑되던 색을 상수로 뽑았다
+    // (android/.../native_ad_layout*.xml 쪽 knue_ad_muted_text / knue_ad_brand_blue와
+    // 같은 색이지만, Swift와 Kotlin/XML이 색을 공유할 방법은 없어 값만 맞춰둔다).
+    private static let mutedTextColor = UIColor(red: 0.42, green: 0.45, blue: 0.5, alpha: 1)
+    private static let brandBlue = UIColor(red: 0.145, green: 0.388, blue: 0.922, alpha: 1)
+
     private let isCompact: Bool
 
     init(isCompact: Bool) {
@@ -155,7 +161,7 @@ class NativeAdFactoryImpl: NSObject, FLTNativeAdFactory {
         let badge = UILabel()
         badge.text = "  AD  "
         badge.font = .boldSystemFont(ofSize: fontSize)
-        badge.textColor = UIColor(red: 0.42, green: 0.45, blue: 0.5, alpha: 1)
+        badge.textColor = Self.mutedTextColor
         badge.backgroundColor = UIColor(white: 0.95, alpha: 1)
         badge.layer.cornerRadius = 4
         badge.clipsToBounds = true
@@ -181,7 +187,7 @@ class NativeAdFactoryImpl: NSObject, FLTNativeAdFactory {
     private func bodyLabel(size: CGFloat) -> UILabel {
         let label = UILabel()
         label.font = .systemFont(ofSize: size)
-        label.textColor = UIColor(red: 0.42, green: 0.45, blue: 0.5, alpha: 1)
+        label.textColor = Self.mutedTextColor
         label.numberOfLines = 1
         return label
     }
@@ -189,8 +195,8 @@ class NativeAdFactoryImpl: NSObject, FLTNativeAdFactory {
     private func ctaButtonView(fontSize: CGFloat) -> UIButton {
         let button = UIButton(type: .system)
         button.titleLabel?.font = .boldSystemFont(ofSize: fontSize)
-        button.setTitleColor(UIColor(red: 0.145, green: 0.388, blue: 0.922, alpha: 1), for: .normal)
-        button.backgroundColor = UIColor(red: 0.145, green: 0.388, blue: 0.922, alpha: 0.1)
+        button.setTitleColor(Self.brandBlue, for: .normal)
+        button.backgroundColor = Self.brandBlue.withAlphaComponent(0.1)
         button.layer.cornerRadius = 10
         button.contentEdgeInsets = UIEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
         // 이 뷰가 직접 터치를 먹으면 SDK가 탭을 못 받는다. 반드시 꺼야 한다.
