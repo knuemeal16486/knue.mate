@@ -35,6 +35,13 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
   int _currentIndex = 0;
   late PageController _pageController;
 
+  /// 탭 전환 애니메이션(400ms) 도중에는 방금 떠난 탭도 화면에 걸쳐 보인다.
+  /// TickerMode(enabled: i == _currentIndex)만 쓰면 탭을 누른 그 순간
+  /// _currentIndex가 바로 바뀌어서, 아직 슬라이드 중인 이전 탭의 애니메이션이
+  /// (예: 홈 탭 날씨 파티클) 화면에 남아있는 채로 뚝 멈춰버린다. 애니메이션이
+  /// 끝날 때까지는 이 인덱스도 같이 티커를 켜둔다.
+  int? _previousIndexAnimating;
+
   /// 마지막으로 뒤로가기를 누른 시각. 2초 안에 다시 누르면 진짜로 종료한다.
   DateTime? _lastBackPress;
 
@@ -78,14 +85,21 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
   void _onTabTapped(int index) {
     if (index == _currentIndex) return;
     HapticFeedback.selectionClick();
+    final leaving = _currentIndex;
     setState(() {
+      _previousIndexAnimating = leaving;
       _currentIndex = index;
     });
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
-    );
+    _pageController
+        .animateToPage(
+          index,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        )
+        .then((_) {
+      if (!mounted) return;
+      setState(() => _previousIndexAnimating = null);
+    });
   }
 
   // ── 뒤로가기 ──────────────────────────────────────────────────────────
@@ -375,10 +389,13 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
           // 쓰는 화면은 다른 탭을 보고 있어도 계속 돌아 배터리를 먹는다.
           // TickerMode(enabled: false)를 씌우면 안 보이는 탭의 티커를
           // 자동으로 멈춰준다(위젯마다 직접 가시성을 체크할 필요 없음).
+          // 전환 애니메이션(400ms) 도중엔 방금 떠난 탭도 같이 켜둔다 —
+          // 안 그러면 탭을 누른 순간 이전 탭 애니메이션이 화면에 남아있는
+          // 채로 뚝 멈춰버린다.
           children: List.generate(
             tabs.length,
             (i) => TickerMode(
-              enabled: i == _currentIndex,
+              enabled: i == _currentIndex || i == _previousIndexAnimating,
               child: _getScreenForTab(tabs[i]),
             ),
           ),

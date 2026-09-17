@@ -103,10 +103,19 @@ class KeywordAlertService {
     final scheduled = modeRaw == NoticeAlertMode.scheduled.name;
 
     if (!scheduled) {
-      if (newItems.isEmpty) return;
-      await _sendDigest(
-        newItems.map((n) => '[${n.category}] ${n.title}').toList(),
-      );
+      // scheduled 모드였다가 방금 instant로 바꿨을 수 있다 — 그때 쌓여 있던
+      // 항목을 여기서 안 비우면, instant 모드는 이 목록을 아예 안 쳐다보니
+      // 영영 안 보내지고 다음에 scheduled로 되돌릴 때까지 방치된다.
+      final strandedPending = prefs.getStringList(_kPendingTitlesKey) ?? [];
+      final toSend = [
+        ...strandedPending,
+        ...newItems.map((n) => '[${n.category}] ${n.title}'),
+      ];
+      if (strandedPending.isNotEmpty) {
+        await prefs.setStringList(_kPendingTitlesKey, []);
+      }
+      if (toSend.isEmpty) return;
+      await _sendDigest(toSend);
       return;
     }
 

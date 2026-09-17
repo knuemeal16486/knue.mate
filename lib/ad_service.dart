@@ -47,20 +47,27 @@ class AdService {
     return useTest ? _iosTestNativeId : _iosRealNativeId;
   }
 
-  static bool _initialized = false;
+  static Future<void>? _initFuture;
 
   /// 앱 시작 시 한 번 호출. 광고를 요청하기 전에 반드시 끝나 있어야 한다.
-  static Future<void> initialize() async {
-    if (_initialized || !_isSupportedPlatform) return;
-    _initialized = true;
+  ///
+  /// 진행 중인 초기화가 있으면 그 Future를 그대로 돌려준다(불리언 플래그
+  /// 대신 Future 자체를 캐싱) — 여러 화면이 거의 동시에 이 함수를 부르더라도
+  /// MobileAds.instance.initialize()가 실제로는 딱 한 번만 실행된다.
+  static Future<void> initialize() {
+    if (!_isSupportedPlatform) return Future.value();
+    return _initFuture ??= _doInitialize();
+  }
+
+  static Future<void> _doInitialize() async {
     try {
       // 타임아웃이 없으면 네트워크가 느릴 때 이 await가 끝없이 걸려
       // main()의 runApp() 호출 자체가 막힌다 — 앱이 흰 로딩 화면에 멈춘다.
       await MobileAds.instance.initialize().timeout(const Duration(seconds: 5));
     } catch (e) {
-      // 여기서 실패하면 다음에 다시 시도할 수 있게 플래그를 되돌린다.
-      // 되돌리지 않으면 일시적 네트워크 오류 한 번으로 그 세션 내내 광고가 영구히 꺼진다.
-      _initialized = false;
+      // 여기서 실패하면 다음에 다시 시도할 수 있게 캐시를 비운다.
+      // 안 비우면 일시적 네트워크 오류 한 번으로 그 세션 내내 광고가 영구히 꺼진다.
+      _initFuture = null;
       debugPrint('AdService: 초기화 실패: $e');
     }
   }

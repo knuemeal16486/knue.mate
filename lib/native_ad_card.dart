@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -39,9 +41,32 @@ class KnueNativeAdCard extends StatelessWidget {
   // .snapshots()를 새로 부르면 StreamBuilder가 "스트림이 바뀌었다"고 보고
   // 기존 구독을 버리고 새로 구독하는데, 그 순간 자식(_DefaultFallbackWithAdMob)도
   // 새 State로 다시 만들어져 이미 로드된 AdMob 광고까지 처음부터 다시 요청한다.
-  // static final로 앱 생애주기 동안 딱 한 번만 만들어 모든 인스턴스가 공유한다.
-  static final Stream<QuerySnapshot> _sponsorsStream =
-      FirebaseFirestore.instance.collection('sponsors').snapshots();
+  // 그렇다고 무조건 하나만 만들어 영원히 재사용하면, Firestore 권한 오류처럼
+  // 스트림이 한 번 error로 끝나버리는 사고가 나면(과거에 sponsors 규칙이
+  // 안 배포돼 실제로 겪었다) 그 뒤로는 규칙을 고쳐도 앱을 껐다 켜기 전까진
+  // 영영 복구가 안 된다. 그래서 "죽은 뒤에만" 새로 만든다 — 평소엔 하나를
+  // 계속 재사용하고, 마지막으로 만든 스트림이 에러로 끝난 경우에만 다음
+  // build()에서 새로 구독한다.
+  static Stream<QuerySnapshot>? _cachedSponsorsStream;
+  static bool _sponsorsStreamErrored = false;
+
+  static Stream<QuerySnapshot> get _sponsorsStream {
+    if (_cachedSponsorsStream == null || _sponsorsStreamErrored) {
+      _sponsorsStreamErrored = false;
+      _cachedSponsorsStream = FirebaseFirestore.instance
+          .collection('sponsors')
+          .snapshots()
+          .transform(
+            StreamTransformer.fromHandlers(
+              handleError: (error, stackTrace, sink) {
+                _sponsorsStreamErrored = true;
+                sink.addError(error, stackTrace);
+              },
+            ),
+          );
+    }
+    return _cachedSponsorsStream!;
+  }
 
   Future<void> _handleTap(BuildContext context, String? url) async {
     if (onTap != null) {

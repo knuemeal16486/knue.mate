@@ -96,4 +96,28 @@ void main() {
     final chip = tester.widget<Chip>(find.byType(Chip));
     expect(chip.onDeleted, isNull);
   });
+
+  testWidgets('시각 두 개를 거의 동시에 삭제해도 경쟁 없이 둘 다 반영된다', (tester) async {
+    PreferencesService.noticeAlertMode.value = NoticeAlertMode.scheduled;
+    PreferencesService.noticeAlertHours.value = [9, 12, 18];
+    PreferencesService.noticeKeywords.value = []; // 키워드 칩과 안 섞이게
+    await tester.pumpWidget(
+      const MaterialApp(home: NoticeAlertSettingsScreen()),
+    );
+    await tester.pump();
+
+    final chips = tester.widgetList<Chip>(find.byType(Chip)).toList();
+    expect(chips, hasLength(3));
+
+    // pump 없이 두 삭제 콜백을 연달아 호출 — 실제 화면에서 두 칩의 삭제
+    // 버튼을 빠르게 연속으로 누른 상황과 같다. 큐로 직렬화되지 않으면
+    // 나중에 끝난 저장이 먼저 저장을 덮어써서 하나가 유실된다.
+    chips[0].onDeleted!();
+    chips[1].onDeleted!();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(); // 체인으로 순서대로 처리되는 두 저장이 끝날 때까지
+
+    expect(PreferencesService.noticeAlertHours.value, hasLength(1));
+  });
 }

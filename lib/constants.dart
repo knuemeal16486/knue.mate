@@ -1115,13 +1115,18 @@ class PreferencesService {
         : NoticeAlertMode.instant;
     final savedHours = prefs.getStringList(keyNoticeAlertHours);
     if (savedHours != null && savedHours.isNotEmpty) {
-      noticeAlertHours.value = savedHours
+      final parsedHours = savedHours
           .map((s) => int.tryParse(s))
           .whereType<int>()
           .where((h) => h >= 0 && h <= 23)
           .toSet()
           .toList()
         ..sort();
+      // 저장된 원본 목록은 비어있지 않았지만(isNotEmpty 통과) 파싱 후
+      // 전부 걸러질 수 있다(손상된 값 등) — 그 경우 기본값으로 되돌린다.
+      // 안 그러면 scheduled 모드인데 지정 시각이 0개가 되어 isDigestDue가
+      // 항상 false를 반환해, 알림이 영영 안 오는데 원인이 안 보이는 상태가 된다.
+      noticeAlertHours.value = parsedHours.isNotEmpty ? parsedHours : [9, 18];
     }
 
     // 별도 try/catch — 한쪽 JSON이 손상되어도 다른 쪽까지 조용히 날아가지 않도록.

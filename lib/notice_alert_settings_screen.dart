@@ -29,6 +29,26 @@ class _NoticeAlertSettingsScreenState
     await PreferencesService.saveNoticeAlertMode(mode);
   }
 
+  // 칩을 빠르게 연달아 눌렀을 때(추가 직후 삭제, 삭제 두 번 연속 등) 각
+  // 호출이 서로의 await 도중에 끼어들면 "읽고 → 고치고 → 쓰기" 패턴이
+  // 경쟁해서 나중에 끝난 저장이 먼저 저장을 덮어써버린다 — 화면엔 지워진
+  // 것처럼 보였다가 되살아나는 식. 모든 변경을 한 줄로 순서대로 처리해서
+  // 항상 직전 변경이 끝난 뒤의 최신 목록을 기준으로 다음 변경이 일어나게 한다.
+  Future<void> _hourOpChain = Future.value();
+
+  Future<void> _queueHourChange(
+    List<int> Function(List<int> current) transform,
+  ) {
+    final result = _hourOpChain.then((_) async {
+      final current = PreferencesService.noticeAlertHours.value;
+      final next = transform(current);
+      if (next.isEmpty) return; // 최소 1개는 남겨둔다 — 0개면 영영 안 보내진다
+      await PreferencesService.saveNoticeAlertHours(next);
+    });
+    _hourOpChain = result.catchError((_) {});
+    return result;
+  }
+
   Future<void> _addHour(BuildContext context) async {
     final picked = await showTimePicker(
       context: context,
@@ -36,16 +56,13 @@ class _NoticeAlertSettingsScreenState
       helpText: "알림 받을 시각",
     );
     if (picked == null) return;
-    final hours = [...PreferencesService.noticeAlertHours.value, picked.hour];
-    await PreferencesService.saveNoticeAlertHours(hours);
+    await _queueHourChange((current) => [...current, picked.hour]);
   }
 
-  Future<void> _removeHour(int hour) async {
-    final hours = PreferencesService.noticeAlertHours.value
-        .where((h) => h != hour)
-        .toList();
-    if (hours.isEmpty) return; // 최소 1개는 남겨둔다 — 0개면 영영 안 보내진다
-    await PreferencesService.saveNoticeAlertHours(hours);
+  Future<void> _removeHour(int hour) {
+    return _queueHourChange(
+      (current) => current.where((h) => h != hour).toList(),
+    );
   }
 
   @override
