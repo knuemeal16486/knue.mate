@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'tab_edit_screen.dart';
+import 'notice_alert_settings_screen.dart';
 import 'root_screen.dart';
 import 'ui_utils.dart';
 import 'meal_rating.dart';
@@ -1501,6 +1502,20 @@ class _SettingsPageState extends State<SettingsPage> {
                         context,
                         MaterialPageRoute(
                           builder: (c) => const TabEditScreen(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildAppInfoItem(
+                      context: context,
+                      icon: Icons.notifications_active_rounded,
+                      title: "공지 알림",
+                      subtitle: "알림 켜고 끄기, 알림 받을 키워드 관리",
+                      iconColor: Colors.orange,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (c) => const NoticeAlertSettingsScreen(),
                         ),
                       ),
                     ),

@@ -629,22 +629,23 @@ class _NoticeScreenState extends State<NoticeScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (sheetContext) => _KeywordSheet(color: color),
+      builder: (sheetContext) => KeywordSheet(color: color),
     );
   }
 }
 
 /// 키워드 관리 bottom sheet. 현재 키워드를 칩으로 보여주고 추가/삭제 시
 /// PreferencesService.saveNoticeKeywords + KeywordAlertService.syncRegistration을 호출한다.
-class _KeywordSheet extends StatefulWidget {
+/// notice_alert_settings_screen.dart(설정 탭 → 공지 알림)에서도 그대로 재사용한다.
+class KeywordSheet extends StatefulWidget {
   final Color color;
-  const _KeywordSheet({required this.color});
+  const KeywordSheet({super.key, required this.color});
 
   @override
-  State<_KeywordSheet> createState() => _KeywordSheetState();
+  State<KeywordSheet> createState() => KeywordSheetState();
 }
 
-class _KeywordSheetState extends State<_KeywordSheet> {
+class KeywordSheetState extends State<KeywordSheet> {
   late List<String> _keywords;
   final _controller = TextEditingController();
 

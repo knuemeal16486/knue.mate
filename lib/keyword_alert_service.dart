@@ -83,8 +83,12 @@ class KeywordAlertService {
   static Future<void> syncRegistration() async {
     if (kIsWeb) return;
     try {
-      final on = PreferencesService.noticeAlarmOn.value &&
-          PreferencesService.noticeKeywords.value.isNotEmpty;
+      // 키워드가 비어 있어도 filterNewMatches는 "즐겨찾기 게시판 전체 알림"으로
+      // 동작하도록 설계돼 있다(문서화된 의도, notice_screen.dart의 안내 문구도
+      // 같은 내용). 예전엔 여기서 keywords.isNotEmpty까지 같이 요구해서, 키워드를
+      // 전부 지우면 그 의도와 반대로 백그라운드 작업 자체가 등록조차 안 돼
+      // 알림이 완전히 끊겼다 — 스위치는 켜져 있는데 아무 일도 안 일어나는 상태.
+      final on = PreferencesService.noticeAlarmOn.value;
       if (on) {
         await Workmanager().registerPeriodicTask(
           kNoticeCheckTask,
