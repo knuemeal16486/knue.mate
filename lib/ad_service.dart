@@ -58,6 +58,9 @@ class AdService {
       // main()의 runApp() 호출 자체가 막힌다 — 앱이 흰 로딩 화면에 멈춘다.
       await MobileAds.instance.initialize().timeout(const Duration(seconds: 5));
     } catch (e) {
+      // 여기서 실패하면 다음에 다시 시도할 수 있게 플래그를 되돌린다.
+      // 되돌리지 않으면 일시적 네트워크 오류 한 번으로 그 세션 내내 광고가 영구히 꺼진다.
+      _initialized = false;
       debugPrint('AdService: 초기화 실패: $e');
     }
   }
