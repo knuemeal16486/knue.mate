@@ -3,6 +3,7 @@ import UIKit
 import flutter_local_notifications // [추가 1]
 import workmanager_apple // [수정]
 import google_mobile_ads
+import AppTrackingTransparency
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -60,6 +61,34 @@ import google_mobile_ads
     // [추가 3] iOS 10 이상에서 알림 센터 대리자 설정 (필요시)
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
+    }
+
+    // 앱 추적 투명성(ATT) 권한 요청 브릿지. Info.plist의
+    // NSUserTrackingUsageDescription과 짝 — Dart lib/att_service.dart가
+    // "requestTrackingAuthorization"을 호출하면 시스템 팝업을 띄운다.
+    // Main.storyboard 기반 런치라 이 시점에 window.rootViewController가
+    // 이미 FlutterViewController로 채워져 있다(GeneratedPluginRegistrant도
+    // 같은 전제로 self를 registrar로 쓰고 있다).
+    if let controller = window?.rootViewController as? FlutterViewController {
+      let attChannel = FlutterMethodChannel(
+        name: "com.knue.knuemate/att",
+        binaryMessenger: controller.binaryMessenger
+      )
+      attChannel.setMethodCallHandler { call, result in
+        guard call.method == "requestTrackingAuthorization" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        if #available(iOS 14, *) {
+          ATTrackingManager.requestTrackingAuthorization { status in
+            DispatchQueue.main.async {
+              result(status.rawValue)
+            }
+          }
+        } else {
+          result(-1)
+        }
+      }
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

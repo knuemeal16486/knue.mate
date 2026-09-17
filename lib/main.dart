@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'ad_service.dart';
+import 'att_service.dart';
 import 'constants.dart';
 import 'building_data.dart';
 import 'package:workmanager/workmanager.dart';
@@ -132,11 +133,20 @@ void main() async {
     try {
       _initializeBackgroundTasks();
       if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-        await _initializeHomeWidget();
-        await NotificationService().init();
-        // 스폰서가 없을 때 KnueNativeAdCard가 대체로 띄우는 AdMob 광고 —
-        // 광고를 요청하기 전에 반드시 끝나 있어야 하므로 runApp보다 앞에 둔다.
-        await AdService.initialize();
+        // 서로 의존하지 않는 초기화라 병렬로 돌린다 — 순서대로 await하면
+        // 지연 시간이 합산되어 첫 화면이 그만큼 늦게 뜬다.
+        await Future.wait([
+          _initializeHomeWidget(),
+          NotificationService().init(),
+          // 스폰서가 없을 때 KnueNativeAdCard가 대체로 띄우는 AdMob 광고 —
+          // 광고를 요청하기 전에 반드시 끝나 있어야 하므로 runApp보다 앞에 둔다.
+          // iOS는 앱 추적 투명성(ATT) 권한을 먼저 물어야 맞춤 광고 허용 여부가
+          // 정확히 반영되므로 AdService.initialize()보다 먼저 끝낸다.
+          () async {
+            await AttService.requestIfNeeded();
+            await AdService.initialize();
+          }(),
+        ]);
       }
     } catch (e) {
       debugPrint("Plugin initialization error: $e");

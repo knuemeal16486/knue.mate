@@ -35,6 +35,14 @@ class KnueNativeAdCard extends StatelessWidget {
     this.onTap,
   });
 
+  // StatelessWidget이라 build()가 부모 rebuild마다 다시 불린다 — 매번
+  // .snapshots()를 새로 부르면 StreamBuilder가 "스트림이 바뀌었다"고 보고
+  // 기존 구독을 버리고 새로 구독하는데, 그 순간 자식(_DefaultFallbackWithAdMob)도
+  // 새 State로 다시 만들어져 이미 로드된 AdMob 광고까지 처음부터 다시 요청한다.
+  // static final로 앱 생애주기 동안 딱 한 번만 만들어 모든 인스턴스가 공유한다.
+  static final Stream<QuerySnapshot> _sponsorsStream =
+      FirebaseFirestore.instance.collection('sponsors').snapshots();
+
   Future<void> _handleTap(BuildContext context, String? url) async {
     if (onTap != null) {
       onTap!();
@@ -208,7 +216,7 @@ class KnueNativeAdCard extends StatelessWidget {
 
     // 3. Firestore 'sponsors' 컬렉션 실시간 구독
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('sponsors').snapshots(),
+      stream: _sponsorsStream,
       builder: (context, snapshot) {
         // 규칙 미배포·권한 오류는 hasData가 false로만 나타나 조용히
         // fallback으로 넘어간다. 그 자체는 맞는 동작(광고 하나 때문에 화면이
@@ -581,8 +589,16 @@ class _DefaultFallbackWithAdMob extends StatefulWidget {
       _DefaultFallbackWithAdMobState();
 }
 
-class _DefaultFallbackWithAdMobState extends State<_DefaultFallbackWithAdMob> {
+class _DefaultFallbackWithAdMobState extends State<_DefaultFallbackWithAdMob>
+    with AutomaticKeepAliveClientMixin<_DefaultFallbackWithAdMob> {
   NativeAd? _ad;
+
+  // bus_screen.dart처럼 ListView 안에 놓이면 스크롤에 화면 밖으로 나갔다
+  // 들어올 때마다 State가 파괴·재생성되어 이미 로드된 광고를 또 요청하게
+  // 된다. AutomaticKeepAliveClientMixin이 그 재생성을 막아준다(리스트가
+  // 아닌 곳에 있으면 그냥 아무 효과 없이 무시된다).
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -623,6 +639,7 @@ class _DefaultFallbackWithAdMobState extends State<_DefaultFallbackWithAdMob> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 요구사항
     final ad = _ad;
     if (ad != null) {
       // 네이티브 레이아웃의 실제 렌더 높이에 맞춘 고정 높이 — 플랫폼 뷰는

@@ -370,7 +370,18 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
           controller: _pageController,
           onPageChanged: (index) => setState(() => _currentIndex = index),
           physics: const NeverScrollableScrollPhysics(),
-          children: tabs.map((t) => _getScreenForTab(t)).toList(),
+          // PageView는 모든 탭을 한꺼번에 마운트해두고 안 보이는 탭도 계속
+          // 살아있다 — 홈 탭의 날씨 파티클 애니메이션처럼 AnimationController를
+          // 쓰는 화면은 다른 탭을 보고 있어도 계속 돌아 배터리를 먹는다.
+          // TickerMode(enabled: false)를 씌우면 안 보이는 탭의 티커를
+          // 자동으로 멈춰준다(위젯마다 직접 가시성을 체크할 필요 없음).
+          children: List.generate(
+            tabs.length,
+            (i) => TickerMode(
+              enabled: i == _currentIndex,
+              child: _getScreenForTab(tabs[i]),
+            ),
+          ),
         ),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
