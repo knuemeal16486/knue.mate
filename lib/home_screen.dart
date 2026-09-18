@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'bus_route_data.dart';
 import 'bus_timetable_data.dart';
 import 'calendar_screen.dart';
 import 'campus_run_screen.dart';
@@ -9,6 +10,7 @@ import 'club_event_model.dart';
 import 'club_event_service.dart';
 import 'club_events_screen.dart';
 import 'constants.dart';
+import 'favorite_service.dart';
 import 'housing_screen.dart';
 import 'notice_model.dart';
 import 'notice_screen.dart';
@@ -52,6 +54,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _busError = false;
   String _busLabel = "운행 종료";
   String _busRemainingHint = "";
+  /// 지금 _busLabel이 어느 노선 얘기인지("513" 등). null이면 운행 종료라
+  /// 특정 노선을 안 가리킨다. 칩 문구(routeLabels)를 그 노선에 맞게 고르는 데 쓴다.
+  String? _busRoute;
 
   // 키워드 알림 상태
   bool _keywordLoading = true;
@@ -93,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ClubEventCache.revision.addListener(_loadClubEvents);
     MealCache.revision.addListener(_loadMeal);
     CalendarCache.revision.addListener(_loadUpcoming);
+    FavoriteService.favoritesNotifier.addListener(_onBusFavoritesChanged);
   }
 
   @override
@@ -104,7 +110,12 @@ class _HomeScreenState extends State<HomeScreen> {
     ClubEventCache.revision.removeListener(_loadClubEvents);
     MealCache.revision.removeListener(_loadMeal);
     CalendarCache.revision.removeListener(_loadUpcoming);
+    FavoriteService.favoritesNotifier.removeListener(_onBusFavoritesChanged);
     super.dispose();
+  }
+
+  void _onBusFavoritesChanged() {
+    if (mounted) _loadBus();
   }
 
   void _onSourceChanged() {
@@ -206,9 +217,18 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     try {
       final isWeekday = DateTime.now().weekday <= 5;
+      // 즐겨찾기(고정)해둔 노선이 있으면 그 중에서만 고른다 — 자기가 타는
+      // 노선을 골라뒀으면 그게 먼저 보여야 한다. 없으면 기존처럼 513/514/518
+      // 중 가장 빨리 오는 걸 보여준다(913은 방향 규칙이 달라 기본 후보엔
+      // 안 넣는다 — 913을 직접 고정했을 때만 후보에 든다).
+      final favorites = FavoriteService.favoritesNotifier.value;
+      final candidates = favorites.isNotEmpty
+          ? favorites.where(BusRouteData.routeLabels.containsKey)
+          : const ["513", "514", "518"];
+
       String? best;
       String? bestRoute;
-      for (final route in const ["513", "514", "518"]) {
+      for (final route in candidates) {
         final t = BusTimetableData.getNextBusTime(route, true, isWeekday);
         if (t != null && (best == null || t.compareTo(best) < 0)) {
           best = t;
@@ -218,9 +238,11 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         if (best != null && bestRoute != null) {
+          _busRoute = bestRoute;
           _busLabel = "$bestRoute번";
           _busRemainingHint = "$best 출발";
         } else {
+          _busRoute = null;
           _busLabel = "운행 종료";
           _busRemainingHint = "첫차 05:30";
         }
@@ -638,7 +660,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: _buildHeroTile(
                           icon: Icons.directions_bus_rounded,
                           title: "다음 버스",
-                          chip: "조치원·청주",
+                          // 어느 노선인지에 맞는 경유지 설명(가경동·성안길 등).
+                          // 로딩 중이거나 오늘 운행이 끝났으면(둘 다 _busRoute가
+                          // null) 굳이 틀린 노선 이름을 보여주느니 비워 둔다.
+                          chip: _busRoute == null
+                              ? ""
+                              : (BusRouteData.routeLabels[_busRoute] ?? ""),
                           footer: "실시간 위치",
                           onTap: () =>
                               RootNavigationScreen.switchTab(AppTab.bus),

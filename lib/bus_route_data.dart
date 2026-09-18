@@ -2,6 +2,15 @@
 /// bus_card.dart와 bus_screen.dart에서 공통으로 사용
 
 class BusRouteData {
+  /// 노선번호 -> 사람이 한눈에 알아볼 수 있는 짧은 경유지 설명.
+  /// 홈 화면 "다음 버스" 타일 등에서 쓴다.
+  static const Map<String, String> routeLabels = {
+    "513": "가경동·성안길",
+    "514": "지웰시티·성안길",
+    "518": "오송·교원대",
+    "913": "미호·가경·지웰",
+  };
+
   /// 정류장 데이터 (노선번호 -> 방향 -> 정류장 목록)
   static const Map<String, Map<String, List<String>>> routeStops = {
     "513": {

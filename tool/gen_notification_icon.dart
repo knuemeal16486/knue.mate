@@ -83,12 +83,14 @@ void main() {
     color: white,
   );
 
+  // flutter_local_notifications가 아이콘을 drawable 타입으로만 조회하므로
+  // mipmap-*이 아니라 drawable-*에 둬야 한다.
   final targets = {
-    'mipmap-mdpi': 24,
-    'mipmap-hdpi': 36,
-    'mipmap-xhdpi': 48,
-    'mipmap-xxhdpi': 72,
-    'mipmap-xxxhdpi': 96,
+    'drawable-mdpi': 24,
+    'drawable-hdpi': 36,
+    'drawable-xhdpi': 48,
+    'drawable-xxhdpi': 72,
+    'drawable-xxxhdpi': 96,
   };
 
   for (final entry in targets.entries) {

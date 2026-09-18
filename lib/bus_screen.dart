@@ -11,6 +11,7 @@ import 'bus_service.dart';
 import 'bus_card.dart';
 import 'bus_timetable_data.dart';
 import 'call_bus_sheet.dart';
+import 'favorite_service.dart';
 import 'ui_utils.dart';
 import 'native_ad_card.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -99,6 +100,28 @@ class _BusAppScreenState extends State<BusAppScreen>
     });
     _loadAlarms();
     _startRealtimeTracking();
+    // 즐겨찾기(고정) 노선이 바뀌면 카드 정렬 순서도 바로 바뀌어야 한다 —
+    // BusCard 안의 별 아이콘은 자기 상태만 알아서 갱신하지만, 카드 "순서"는
+    // 이 화면(부모)이 정하므로 여기서도 따로 구독해야 한다.
+    FavoriteService.favoritesNotifier.addListener(_onFavoritesChanged);
+  }
+
+  void _onFavoritesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// 즐겨찾기(고정)한 노선을 앞으로 빼고, 각 묶음 안에서는 원래 순서를
+  /// 그대로 지킨다. 순수 함수 — 테스트 대상.
+  static List<BusSummary> _favoritesFirst(
+    Iterable<BusSummary> buses,
+    Set<String> favoriteRoutes,
+  ) {
+    final favored = <BusSummary>[];
+    final rest = <BusSummary>[];
+    for (final b in buses) {
+      (favoriteRoutes.contains(b.number) ? favored : rest).add(b);
+    }
+    return [...favored, ...rest];
   }
 
   void _startRealtimeTracking() {
@@ -189,6 +212,7 @@ class _BusAppScreenState extends State<BusAppScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    FavoriteService.favoritesNotifier.removeListener(_onFavoritesChanged);
     _timer?.cancel();
     _tickTimer?.cancel();
     _busSub?.cancel();
@@ -516,9 +540,19 @@ class _BusAppScreenState extends State<BusAppScreen>
       );
     }
 
-    // 4. 버스 목록 표시
-    final directBuses = _realtimeBusList.where((b) => b.isDirect).toList();
-    final tapyeonBuses = _realtimeBusList.where((b) => !b.isDirect).toList();
+    // 4. 버스 목록 표시 — 즐겨찾기(고정)한 노선을 맨 위로. 나머지는 원래
+    // 순서(Firestore가 준 순서, 보통 도착 임박 순)를 그대로 지키도록
+    // List.sort() 대신 직접 두 묶음으로 나눠 이어붙인다 — Dart의 sort()는
+    // 안정 정렬을 보장하지 않아 comparator가 0을 반환해도 순서가 흔들릴 수 있다.
+    final favoriteRoutes = FavoriteService.favoritesNotifier.value;
+    final directBuses = _favoritesFirst(
+      _realtimeBusList.where((b) => b.isDirect),
+      favoriteRoutes,
+    );
+    final tapyeonBuses = _favoritesFirst(
+      _realtimeBusList.where((b) => !b.isDirect),
+      favoriteRoutes,
+    );
     final totalBuses = _realtimeBusList.fold<int>(
       0,
       (sum, b) => sum + b.arrivals.length,

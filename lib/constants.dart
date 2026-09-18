@@ -1335,7 +1335,11 @@ class NotificationService {
       tz.setLocalLocation(tz.getLocation('Asia/Seoul'));
     } catch (_) {}
 
-    const android = AndroidInitializationSettings('@mipmap/ic_stat_notify');
+    // flutter_local_notifications는 아이콘 이름을 drawable 타입으로만 찾는다
+    // (res/drawable-*/ic_stat_notify.png). "@mipmap/..." 같은 XML 참조 문법이
+    // 아니라 순수 리소스 이름만 받는다 — 접두사가 붙어 있으면 조회에 실패해
+    // 기본(뭉개진) 아이콘으로 조용히 대체된다.
+    const android = AndroidInitializationSettings('ic_stat_notify');
     // [수정] 초기화 시점에 자동으로 권한을 요청하지 않음.
     // 권한이 거부된 상태에서 requestAlert/Badge/SoundPermission: true(기본값)이면
     // initialize() 자체가 PlatformException을 던집니다.
@@ -1442,6 +1446,7 @@ class NotificationService {
             'meal_alarm_channel',
             '식단 알림',
             importance: Importance.max,
+            icon: 'ic_stat_notify',
           ),
           iOS: DarwinNotificationDetails(),
         ),
@@ -1460,6 +1465,7 @@ class NotificationService {
       '기본 알림',
       importance: Importance.max,
       priority: Priority.high,
+      icon: 'ic_stat_notify',
     );
     const ios = DarwinNotificationDetails(
       presentAlert: true,
