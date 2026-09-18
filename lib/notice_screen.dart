@@ -19,7 +19,8 @@ class NoticeScreen extends StatefulWidget {
   State<NoticeScreen> createState() => _NoticeScreenState();
 }
 
-class _NoticeScreenState extends State<NoticeScreen> {
+class _NoticeScreenState extends State<NoticeScreen>
+    with SingleTickerProviderStateMixin {
   final _scraper = KnueScraper();
   List<Notice> _notices = [];
   bool _loading = true;
@@ -29,6 +30,40 @@ class _NoticeScreenState extends State<NoticeScreen> {
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
   Timer? _searchDebounce;
+
+  // ── 2단 탭(큰 탭 → 하위 탭) ───────────────────────────────────────────
+  //
+  // 큰 탭: "공지사항" / "대학/대학원". 하위 탭은 그 안의 학사안내·교류
+  // 프로그램·캠퍼스 생활 또는 제1~4대학·대학원. noticeTabStructure(순서
+  // 보장을 위해 keys를 한 번 뽑아둔다) 기준.
+  late final List<String> _mainTabNames = KnueScraper.noticeTabStructure.keys
+      .toList();
+  late final TabController _mainTabController = TabController(
+    length: _mainTabNames.length,
+    vsync: this,
+  );
+  String? _selectedSubGroup; // null = 그 큰 탭 안에서 "전체"
+
+  String get _currentMainTab => _mainTabNames[_mainTabController.index];
+
+  Map<String, List<String>> get _currentSubGroups =>
+      KnueScraper.noticeTabStructure[_currentMainTab]!;
+
+  /// 지금 큰 탭(선택된 하위 탭이 있으면 그 안으)의 게시판 이름 전체.
+  Set<String> get _currentTabCategories {
+    if (_selectedSubGroup != null) {
+      return _currentSubGroups[_selectedSubGroup]!.toSet();
+    }
+    return _currentSubGroups.values.expand((v) => v).toSet();
+  }
+
+  /// [category]가 속한 하위 탭 이름. 못 찾으면 null.
+  String? _subGroupOf(String mainTab, String category) {
+    for (final entry in KnueScraper.noticeTabStructure[mainTab]!.entries) {
+      if (entry.value.contains(category)) return entry.key;
+    }
+    return null;
+  }
 
   // ── 파생 상태 캐시 ────────────────────────────────────────────────────
   //
@@ -40,8 +75,6 @@ class _NoticeScreenState extends State<NoticeScreen> {
   bool _failedBoard = false;
   /// 제목 소문자 사본. 검색할 때마다 새로 만들지 않도록 미리 계산해 둔다.
   final Map<String, String> _lowerTitleCache = {};
-  List<MapEntry<String, String>> _boardEntries = const [];
-  List<String> _boardEntriesFavKey = const [];
 
   @override
   void initState() {
@@ -50,14 +83,43 @@ class _NoticeScreenState extends State<NoticeScreen> {
     // fetchAllNotices()는 캐시를 먼저 반환하고 백그라운드로 갱신한다(await 없이).
     // 그 갱신이 끝났을 때 화면이 최신 데이터를 반영하도록 구독.
     NoticeCache.revision.addListener(_onCacheUpdated);
+    _mainTabController.addListener(_onMainTabChanged);
   }
 
   @override
   void dispose() {
     NoticeCache.revision.removeListener(_onCacheUpdated);
+    _mainTabController.removeListener(_onMainTabChanged);
+    _mainTabController.dispose();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  /// 큰 탭을 넘길 때: 하위 탭 선택은 초기화하고, "대학/대학원"으로 넘어간
+  /// 거면 고정(즐겨찾기)해둔 학과가 있는지 봐서 있으면 바로 그 학과로
+  /// 점프한다 — 학과 공지는 보통 자기 학과 하나만 보니, 제1~4대학을 매번
+  /// 뒤지게 하고 싶지 않다.
+  void _onMainTabChanged() {
+    if (_mainTabController.indexIsChanging) return; // 스와이프 중간 값 무시
+    setState(() {
+      _selectedSubGroup = null;
+      _selectedCategory = null;
+
+      if (_currentMainTab == '대학/대학원') {
+        final favBoards = PreferencesService.favoriteBoards.value;
+        final deptCategories = _currentSubGroups.values.expand((v) => v);
+        final pinned = favBoards.firstWhere(
+          deptCategories.contains,
+          orElse: () => '',
+        );
+        if (pinned.isNotEmpty) {
+          _selectedSubGroup = _subGroupOf('대학/대학원', pinned);
+          _selectedCategory = pinned;
+        }
+      }
+      _recomputeDerived();
+    });
   }
 
   Future<void> _onCacheUpdated() async {
@@ -138,8 +200,12 @@ class _NoticeScreenState extends State<NoticeScreen> {
   /// 목록·배너를 다시 계산한다. 입력(_notices/_selectedCategory/_searchQuery)이
   /// 바뀌는 지점에서만 부르고, build에서는 결과만 읽는다.
   void _recomputeDerived() {
+    // 게시판을 하나 고르지 않았으면(전체) 지금 보고 있는 큰 탭(+하위 탭)
+    // 범위로 좁힌다 — "대학/대학원" 탭에서 아무것도 안 골랐는데 입찰공고
+    // 같은 학사 공지까지 섞여 나오면 안 된다.
+    final scope = _currentTabCategories;
     final base = _selectedCategory == null
-        ? _notices
+        ? _notices.where((n) => scope.contains(n.category)).toList()
         : _notices.where((n) => n.category == _selectedCategory).toList();
 
     final q = _searchQuery.trim().toLowerCase();
@@ -164,33 +230,24 @@ class _NoticeScreenState extends State<NoticeScreen> {
           !_notices.any((n) => n.category == _selectedCategory);
     } else {
       final present = _notices.map((n) => n.category).toSet();
-      _failedBoard = _allCategories.any((c) => !present.contains(c));
+      final scopedCategories = scope.intersection(_allCategories);
+      _failedBoard = scopedCategories.any((c) => !present.contains(c));
     }
   }
 
-  /// 게시판 칩 목록. 즐겨찾기가 바뀔 때만 다시 정렬한다.
-  List<MapEntry<String, String>> _boardEntriesFor(List<String> favBoards) {
-    if (_boardEntries.isNotEmpty &&
-        _boardEntriesFavKey.length == favBoards.length &&
-        _boardEntriesFavKey.every(favBoards.contains)) {
-      return _boardEntries;
-    }
-    final entries = <MapEntry<String, String>>[]; // category -> group
-    for (final groupEntry in _scraper.boardGroups.entries) {
-      for (final catEntry in groupEntry.value.entries) {
-        entries.add(MapEntry(catEntry.key, groupEntry.key));
-      }
-    }
-    // 즐겨찾기를 앞으로. 나머지는 원래 그룹 순서를 지키도록 안정 정렬.
-    entries.sort((a, b) {
-      final aFav = favBoards.contains(a.key);
-      final bFav = favBoards.contains(b.key);
+  /// 지금 큰 탭(+하위 탭) 범위의 게시판 이름 목록. 즐겨찾기(고정)를 앞으로
+  /// 배치한다. 범위가 하위 탭 하나(최대 11개)로 좁아져서 예전처럼 50개를
+  /// 매번 다시 정렬하는 비용 걱정 없이 그냥 매번 새로 계산한다.
+  List<String> _boardEntriesFor(List<String> favBoards) {
+    final names = _currentTabCategories.toList();
+    // 즐겨찾기를 앞으로. 나머지는 noticeTabStructure에 적힌 순서를 지키도록 안정 정렬.
+    names.sort((a, b) {
+      final aFav = favBoards.contains(a);
+      final bFav = favBoards.contains(b);
       if (aFav != bFav) return aFav ? -1 : 1;
       return 0;
     });
-    _boardEntries = entries;
-    _boardEntriesFavKey = List.of(favBoards);
-    return entries;
+    return names;
   }
 
   Future<void> _openNotice(Notice notice) async {
@@ -241,10 +298,23 @@ class _NoticeScreenState extends State<NoticeScreen> {
                 tooltip: "새로고침",
               ),
             ],
+            bottom: TabBar(
+              controller: _mainTabController,
+              tabs: _mainTabNames.map((name) => Tab(text: name)).toList(),
+              indicatorColor: Colors.white,
+              indicatorWeight: 3,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              labelStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           body: Column(
             children: [
               _buildSearchField(color, isDark),
+              _buildSubGroupChips(color, isDark),
               _buildBoardChips(color),
               if (_failedBoard) _buildFailureBanner(isDark),
               Expanded(child: _buildNoticeList(color, isDark)),
@@ -253,6 +323,64 @@ class _NoticeScreenState extends State<NoticeScreen> {
           ),
         );
       },
+    );
+  }
+
+  /// 하위 탭(학사안내·교류 프로그램·캠퍼스 생활 또는 제1~4대학·대학원) 선택 줄.
+  /// 여기서 고르면 그 아래 게시판 칩 줄이 그 범위로 좁혀진다.
+  Widget _buildSubGroupChips(Color color, bool isDark) {
+    final subGroups = _currentSubGroups.keys.toList();
+    return SizedBox(
+      // 게시판 칩 줄에서 겪은 것과 같은 이유로 여유를 넉넉히 둔다.
+      height: 38,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
+        itemCount: subGroups.length + 1, // +1 = "전체"
+        itemBuilder: (context, index) {
+          final label = index == 0 ? "전체" : subGroups[index - 1];
+          final selected = index == 0
+              ? _selectedSubGroup == null
+              : _selectedSubGroup == label;
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _selectedSubGroup = index == 0 ? null : label;
+                // 하위 탭을 바꿨는데 지금 고른 게시판이 그 범위 밖이면 비운다.
+                if (_selectedCategory != null &&
+                    !_currentTabCategories.contains(_selectedCategory)) {
+                  _selectedCategory = null;
+                }
+                _recomputeDerived();
+              }),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? color.withValues(alpha: isDark ? 0.28 : 0.12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                    color: selected
+                        ? color
+                        : (isDark ? Colors.white54 : Colors.black54),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -371,14 +499,17 @@ class _NoticeScreenState extends State<NoticeScreen> {
     return ValueListenableBuilder<List<String>>(
       valueListenable: PreferencesService.favoriteBoards,
       builder: (context, favBoards, child) {
-        // 즐겨찾기 게시판을 먼저 배치하고, 나머지는 그룹 순서대로.
-        // 목록 자체는 즐겨찾기가 바뀔 때만 다시 만든다.
+        // 즐겨찾기(고정) 게시판을 먼저 배치. 지금 큰 탭(+하위 탭) 범위로 좁혀서 보여준다.
         final entries = _boardEntriesFor(favBoards);
 
         return SizedBox(
-          height: 44,
-          // ListView.builder — 게시판이 50개라 전부 미리 만들면 화면에 들어오지도
-          // 않는 칩까지 매번 생성된다. 보이는 것만 만들게 바꿨다.
+          // 44였을 때 칩 안쪽 글씨(특히 굵게 표시되는 선택 상태의 한글)가
+          // 위아래로 살짝 잘려 보였다 — ListView 자체 패딩(세로 6+6) +
+          // 칩 패딩(세로 8+8)을 빼면 글자에 남는 높이가 16px뿐이라
+          // 13px 굵은 한글 한 줄에는 빠듯했다. 여유를 더 줬다.
+          height: 50,
+          // ListView.builder — 게시판이 많을 수 있어 전부 미리 만들면 화면에
+          // 들어오지도 않는 칩까지 매번 생성된다. 보이는 것만 만들게 바꿨다.
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -395,7 +526,7 @@ class _NoticeScreenState extends State<NoticeScreen> {
                   }),
                 );
               }
-              final category = entries[index - 1].key;
+              final category = entries[index - 1];
               return _buildChip(
                 label: category,
                 selected: _selectedCategory == category,

@@ -23,11 +23,32 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: NoticeScreen()));
     await tester.pump(const Duration(seconds: 30));
 
-    await tester.tap(find.widgetWithText(GestureDetector, '초등교육과').first);
-    await tester.pump(const Duration(milliseconds: 100));
+    // '초등교육과'는 "대학/대학원" 큰 탭 소속이라 기본 화면(공지사항 탭)엔
+    // 안 보인다. 고정(즐겨찾기)해뒀으니 탭을 넘기면 자동으로 그 학과가
+    // 선택되는지까지 같이 확인한다.
+    await tester.tap(find.text('대학/대학원'));
+    await tester.pumpAndSettle();
 
     expect(find.text('바로 가기'), findsOneWidget);
     expect(find.text('표시할 공지가 없습니다'), findsNothing);
     await tester.pump(const Duration(seconds: 30));
+  });
+
+  testWidgets('큰 탭을 바꾸면 하위 탭·게시판 선택이 초기화된다', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const MaterialApp(home: NoticeScreen()));
+    await tester.pump(const Duration(seconds: 30));
+
+    // 공지사항 탭에서 하위 탭 하나를 고른다.
+    await tester.tap(find.text('학사안내'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('대학소식'), findsOneWidget);
+
+    // 큰 탭을 넘기면(고정된 학과가 없으니) 학사안내 하위 탭 선택이 풀려서
+    // 그 게시판(대학소식 등)은 더 이상 안 보이고, 대신 제1~4대학·대학원이 보인다.
+    await tester.tap(find.text('대학/대학원'));
+    await tester.pumpAndSettle();
+    expect(find.text('제1대학'), findsOneWidget);
+    expect(find.text('대학소식'), findsNothing);
   });
 }
