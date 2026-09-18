@@ -15,6 +15,7 @@ import 'root_screen.dart';
 import 'ui_utils.dart';
 import 'meal_rating.dart';
 import 'club_event_admin_screen.dart';
+import 'housing_admin_screen.dart';
 import 'sponsor_admin_screen.dart';
 import 'native_ad_card.dart';
 
@@ -1352,6 +1353,17 @@ class _SettingsPageState extends State<SettingsPage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const SponsorAdminScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.house_outlined),
+              title: const Text("자취방 정보 관리"),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HousingAdminScreen()),
                 );
               },
             ),

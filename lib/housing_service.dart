@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'housing_iso.dart' show BaseBuilding;
+import 'housing_model.dart';
 import 'offline_cache.dart';
 
 /// 자취방 시세 제보 한 건.
@@ -31,6 +33,10 @@ class HousingReport {
   /// 남긴 시점. 오래된 제보는 참고만 하도록 화면에 연도를 같이 보여준다.
   final DateTime reportedAt;
 
+  /// Firestore 문서 id. 학생 제보 작성 시점엔 아직 없어 null이고,
+  /// 관리자 화면이 개별 제보를 수정·삭제할 때만 필요해서 읽어올 때만 채운다.
+  final String? id;
+
   const HousingReport({
     required this.buildingId,
     required this.deposit,
@@ -39,6 +45,7 @@ class HousingReport {
     required this.reportedAt,
     this.maintenanceFee,
     this.oneRoomId,
+    this.id,
   });
 
   Map<String, dynamic> toFirestore() => {
@@ -51,14 +58,15 @@ class HousingReport {
         'reportedAt': FieldValue.serverTimestamp(),
       };
 
-  static HousingReport? fromMap(Map<String, dynamic> d) {
-    final id = d['buildingId'];
+  static HousingReport? fromMap(Map<String, dynamic> d, {String? id}) {
+    final buildingId = d['buildingId'];
     final deposit = d['deposit'];
     final rent = d['monthlyRent'];
-    if (id is! String || deposit is! num || rent is! num) return null;
+    if (buildingId is! String || deposit is! num || rent is! num) return null;
     final ts = d['reportedAt'];
     return HousingReport(
-      buildingId: id,
+      id: id,
+      buildingId: buildingId,
       deposit: deposit.toInt(),
       monthlyRent: rent.toInt(),
       maintenanceFee: (d['maintenanceFee'] as num?)?.toInt(),
@@ -68,6 +76,76 @@ class HousingReport {
     );
   }
 }
+
+/// 건물 하나에 대한 관리자 수정 정보. 학생 제보 다수결로 정해지는 이름·구역을
+/// 개발자가 직접 바로잡고 싶을 때 이 건물 id로 덮어쓴다([HousingService.fetchOverrides]가
+/// 있으면 항상 이 값이 이긴다).
+class HousingBuildingOverride {
+  final String buildingId;
+  final String name;
+  final HousingZone zone;
+  final int? builtYear;
+  final String? note;
+
+  const HousingBuildingOverride({
+    required this.buildingId,
+    required this.name,
+    required this.zone,
+    this.builtYear,
+    this.note,
+  });
+
+  Map<String, dynamic> toFirestore() => {
+        'name': name,
+        'zone': zone.name,
+        if (builtYear != null) 'builtYear': builtYear,
+        if (note != null && note!.isNotEmpty) 'note': note,
+      };
+
+  static HousingBuildingOverride? fromMap(String buildingId, Map<String, dynamic> d) {
+    final name = d['name'];
+    if (name is! String || name.isEmpty) return null;
+    HousingZone? zone;
+    for (final z in HousingZone.values) {
+      if (z.name == d['zone']) {
+        zone = z;
+        break;
+      }
+    }
+    if (zone == null) return null;
+    return HousingBuildingOverride(
+      buildingId: buildingId,
+      name: name,
+      zone: zone,
+      builtYear: (d['builtYear'] as num?)?.toInt(),
+      note: d['note'] as String?,
+    );
+  }
+
+  /// 화면 표시용으로 [OneRoomName]과 같은 모양으로 바꾼다 — 지도·검색이
+  /// 제보 다수결로 정해진 이름과 덮어쓴 이름을 구분 없이 다룰 수 있게.
+  OneRoomName toOneRoomName() => OneRoomName(
+        id: 'override:$buildingId',
+        name: name,
+        zone: zone,
+        builtYear: builtYear,
+        note: note,
+      );
+}
+
+/// 원룸으로 볼 만한 건물인지 판단한다(교내 건물 제외, 3층 이상·50㎡ 이상,
+/// 또는 이미 제보가 달려 있으면 조건과 무관하게 포함).
+/// [HousingScreen]의 지도와 관리자 화면의 건물 목록이 같은 기준을 써야
+/// 관리자가 고친 건물이 지도에도 그대로 나타난다.
+bool looksLikeOneRoom(
+  BaseBuilding b,
+  Map<String, HousingSummary> summaries, {
+  int minFloors = 3,
+  double minArea = 50.0,
+}) =>
+    !b.isCampus &&
+    (summaries.containsKey(b.id) ||
+        (b.floors >= minFloors && b.footprintArea >= minArea));
 
 /// 한 건물의 제보를 모은 결과.
 class HousingSummary {
@@ -218,6 +296,81 @@ class HousingService {
   static Future<bool> hasReported(String buildingId) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('housing_reported_$buildingId') ?? false;
+  }
+
+  // ── 관리자 전용 ──────────────────────────────────────────────
+
+  /// 문서 id를 포함한 제보 전체 목록. 관리 화면에서 개별 수정·삭제하려면
+  /// [fetchSummaries]처럼 뭉개서 집계한 값이 아니라 원본 문서가 필요하다.
+  static Future<List<HousingReport>> fetchAllReportsRaw() async {
+    final snap = await _db
+        .collection(_collection)
+        .orderBy('reportedAt', descending: true)
+        .get()
+        .timeout(const Duration(seconds: 8));
+    return snap.docs
+        .map((d) => HousingReport.fromMap(d.data(), id: d.id))
+        .whereType<HousingReport>()
+        .toList();
+  }
+
+  /// 제보 수정. 원문 그대로 덮어쓰면 reportedAt이 갱신 시각으로 밀리므로,
+  /// 여기서는 바뀔 수 있는 필드만 골라 update한다.
+  static Future<void> updateReport({
+    required String id,
+    required int deposit,
+    required int monthlyRent,
+    int? maintenanceFee,
+    required List<String> features,
+    String? oneRoomId,
+  }) async {
+    await _db.collection(_collection).doc(id).update({
+      'deposit': deposit,
+      'monthlyRent': monthlyRent,
+      'maintenanceFee': maintenanceFee,
+      'oneRoomId': oneRoomId,
+      'features': features,
+    });
+  }
+
+  static Future<void> deleteReport(String id) async {
+    await _db.collection(_collection).doc(id).delete();
+  }
+
+  static const String _overrideCollection = 'housing_building_overrides';
+
+  /// 관리자가 바로잡은 건물 정보. 건물 id로 색인해 지도가 바로 찾아 쓴다.
+  static Future<Map<String, HousingBuildingOverride>> fetchOverrides() async {
+    if (!FirestoreHealth.isAvailable) return const {};
+    try {
+      final snap = await _db
+          .collection(_overrideCollection)
+          .get()
+          .timeout(const Duration(seconds: 5));
+      FirestoreHealth.reportSuccess();
+      final result = <String, HousingBuildingOverride>{};
+      for (final doc in snap.docs) {
+        final o = HousingBuildingOverride.fromMap(doc.id, doc.data());
+        if (o != null) result[doc.id] = o;
+      }
+      return result;
+    } catch (e) {
+      FirestoreHealth.reportFailure();
+      debugPrint('HousingService.fetchOverrides error: $e');
+      return const {};
+    }
+  }
+
+  static Future<void> setOverride(HousingBuildingOverride override) async {
+    await _db
+        .collection(_overrideCollection)
+        .doc(override.buildingId)
+        .set(override.toFirestore());
+  }
+
+  /// 덮어쓴 정보를 지우고 학생 제보 다수결로 정해지는 이름으로 되돌린다.
+  static Future<void> clearOverride(String buildingId) async {
+    await _db.collection(_overrideCollection).doc(buildingId).delete();
   }
 }
 

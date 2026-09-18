@@ -250,6 +250,95 @@ void main() {
         isNotNull,
       );
     });
+
+    test('문서 id를 넘기면 그대로 실린다 — 관리 화면이 수정·삭제할 열쇠', () {
+      final r = HousingReport.fromMap(
+        {'buildingId': 'x', 'deposit': 100, 'monthlyRent': 30},
+        id: 'doc123',
+      );
+      expect(r?.id, 'doc123');
+    });
+  });
+
+  group('원룸 후보 판정 (looksLikeOneRoom)', () {
+    test('교내 건물은 층수·면적 조건을 만족해도 후보가 아니다', () {
+      final campus = BaseBuilding(
+        id: 'c',
+        floors: 5,
+        isCampus: true,
+        ring: const [
+          Offset(0, 0),
+          Offset(10, 0),
+          Offset(10, 10),
+          Offset(0, 10),
+        ],
+      );
+      expect(looksLikeOneRoom(campus, const {}), isFalse);
+    });
+
+    test('층수·면적이 기준 미만이어도 제보가 있으면 후보다', () {
+      final small = BaseBuilding(
+        id: 's',
+        floors: 1,
+        ring: const [Offset(0, 0), Offset(2, 0), Offset(2, 2), Offset(0, 2)],
+      );
+      expect(looksLikeOneRoom(small, {'s': HousingSummary.empty}), isTrue);
+    });
+
+    test('3층 이상·50㎡ 이상 비교내 건물은 제보 없이도 후보다', () {
+      final big = BaseBuilding(
+        id: 'b',
+        floors: 4,
+        ring: const [
+          Offset(0, 0),
+          Offset(10, 0),
+          Offset(10, 10),
+          Offset(0, 10),
+        ],
+      );
+      expect(looksLikeOneRoom(big, const {}), isTrue);
+    });
+  });
+
+  group('건물 정보 관리자 덮어쓰기 (HousingBuildingOverride)', () {
+    test('저장했다가 읽으면 그대로 돌아온다', () {
+      const o = HousingBuildingOverride(
+        buildingId: 'b1',
+        name: '테스트빌',
+        zone: HousingZone.aroundCu,
+        builtYear: 2015,
+        note: '1층 카페',
+      );
+      final restored = HousingBuildingOverride.fromMap('b1', o.toFirestore());
+      expect(restored?.name, '테스트빌');
+      expect(restored?.zone, HousingZone.aroundCu);
+      expect(restored?.builtYear, 2015);
+      expect(restored?.note, '1층 카페');
+    });
+
+    test('이름이 없으면 무시한다', () {
+      expect(HousingBuildingOverride.fromMap('b1', {'zone': 'aroundCu'}), isNull);
+    });
+
+    test('알 수 없는 구역 값은 무시한다', () {
+      expect(
+        HousingBuildingOverride.fromMap('b1', {'name': 'x', 'zone': 'nope'}),
+        isNull,
+      );
+    });
+
+    test('OneRoomName으로 바꾸면 지도·검색이 쓰는 필드가 그대로 옮겨진다', () {
+      const o = HousingBuildingOverride(
+        buildingId: 'b1',
+        name: '테스트빌',
+        zone: HousingZone.dorm,
+        builtYear: 2020,
+      );
+      final n = o.toOneRoomName();
+      expect(n.name, '테스트빌');
+      expect(n.zone, HousingZone.dorm);
+      expect(n.builtYear, 2020);
+    });
   });
   _landUseTests();
 }

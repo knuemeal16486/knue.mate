@@ -21,10 +21,6 @@ class HousingScreen extends StatefulWidget {
 
 class _HousingScreenState extends State<HousingScreen>
     with SingleTickerProviderStateMixin {
-  /// 원룸으로 볼 만한 건물의 최소 조건 (3층 이상, 면적 50㎡ 이상)
-  static const _minFloors = 3;
-  static const _minArea = 50.0;
-
   CampusBase _base = CampusBase.empty;
   bool _loading = true;
 
@@ -47,6 +43,9 @@ class _HousingScreenState extends State<HousingScreen>
   HousingZone? _selectedZone;
   String _searchQuery = '';
   Map<String, HousingSummary> _summaries = const {};
+
+  /// 관리자가 바로잡은 건물 정보. 있으면 학생 제보 다수결보다 우선한다.
+  Map<String, HousingBuildingOverride> _overrides = const {};
 
   final TransformationController _transformController =
       TransformationController();
@@ -84,12 +83,25 @@ class _HousingScreenState extends State<HousingScreen>
       _centerMap();
     });
 
-    final s = await HousingService.fetchSummaries();
+    final results = await Future.wait([
+      HousingService.fetchSummaries(),
+      HousingService.fetchOverrides(),
+    ]);
     if (!mounted) return;
     setState(() {
-      _summaries = s;
+      _summaries = results[0] as Map<String, HousingSummary>;
+      _overrides = results[1] as Map<String, HousingBuildingOverride>;
       _rebuild();
     });
+  }
+
+  /// 건물 하나의 표시용 이름·구역 정보. 관리자가 덮어썼으면 그걸 쓰고,
+  /// 아니면 학생 제보 다수결로 정해진 이름을 쓴다.
+  OneRoomName? _resolvedKnown(String buildingId) {
+    final override = _overrides[buildingId];
+    if (override != null) return override.toOneRoomName();
+    final oneRoomId = _summaries[buildingId]?.oneRoomId;
+    return oneRoomId == null ? null : kOneRoomNameById[oneRoomId];
   }
 
   void _centerMap() {
@@ -150,12 +162,7 @@ class _HousingScreenState extends State<HousingScreen>
       ..scale(targetScale);
   }
 
-  bool _looksLikeOneRoom(BaseBuilding b) =>
-      // 교내 건물은 층수·면적이 원룸 조건에 걸려도 원룸일 리 없다.
-      // (실제 층수를 넣고 나서 다정관·호연관 같은 동이 여기 걸리기 시작했다)
-      !b.isCampus &&
-      (_summaries.containsKey(b.id) ||
-          (b.floors >= _minFloors && b.footprintArea >= _minArea));
+  bool _looksLikeOneRoom(BaseBuilding b) => looksLikeOneRoom(b, _summaries);
 
   void _rebuild() {
     final proj = IsoProjection(scale: _scale, rotation: _rotationAngle);
@@ -169,25 +176,19 @@ class _HousingScreenState extends State<HousingScreen>
         oneRoomIds.add(b.id);
       }
 
-      final s = _summaries[b.id];
-      if (s != null && s.oneRoomId != null) {
-        final known = kOneRoomNameById[s.oneRoomId];
-        if (known != null) {
-          zoneColors[b.id] = known.zone.color;
-          displayNames[b.id] = known.name;
-        }
+      final known = _resolvedKnown(b.id);
+      if (known != null) {
+        zoneColors[b.id] = known.zone.color;
+        displayNames[b.id] = known.name;
       }
     }
 
     final selectedZoneBuildings = <String>{};
     if (_selectedZone != null) {
       for (final b in _base.buildings) {
-        final s = _summaries[b.id];
-        if (s != null && s.oneRoomId != null) {
-          final known = kOneRoomNameById[s.oneRoomId];
-          if (known != null && known.zone == _selectedZone) {
-            selectedZoneBuildings.add(b.id);
-          }
+        final known = _resolvedKnown(b.id);
+        if (known != null && known.zone == _selectedZone) {
+          selectedZoneBuildings.add(b.id);
         }
       }
     }
@@ -534,6 +535,28 @@ class _HousingScreenState extends State<HousingScreen>
       }
     }
 
+    // 3. 관리자가 덮어쓴 이름 검색 — kOneRoomNames에 없는 새 이름도 찾을 수 있게.
+    final alreadyMatched = results.map((r) => r.building.id).toSet();
+    for (final entry in _overrides.entries) {
+      if (alreadyMatched.contains(entry.key)) continue;
+      final o = entry.value;
+      if (!o.name.toLowerCase().contains(q)) continue;
+      BaseBuilding? b;
+      for (final elem in _base.buildings) {
+        if (elem.id == entry.key) {
+          b = elem;
+          break;
+        }
+      }
+      if (b == null) continue;
+      results.add(_SearchResultItem(
+        name: o.name,
+        subtitle: '${o.zone.label} · ${o.builtYear ?? 0}년 준공',
+        color: o.zone.color,
+        building: b,
+      ));
+    }
+
     return results.take(8).toList();
   }
 
@@ -810,6 +833,7 @@ class _HousingScreenState extends State<HousingScreen>
       builder: (_) => _DetailSheet(
         building: b,
         summary: _summaries[b.id] ?? HousingSummary.empty,
+        known: _resolvedKnown(b.id),
         isDark: isDark,
         onReported: () async {
           final s = await HousingService.fetchSummaries();
@@ -906,12 +930,14 @@ class _SearchResultItem {
 class _DetailSheet extends StatefulWidget {
   final BaseBuilding building;
   final HousingSummary summary;
+  final OneRoomName? known;
   final bool isDark;
   final Future<void> Function() onReported;
 
   const _DetailSheet({
     required this.building,
     required this.summary,
+    required this.known,
     required this.isDark,
     required this.onReported,
   });
@@ -936,7 +962,7 @@ class _DetailSheetState extends State<_DetailSheet> {
     final isDark = widget.isDark;
     final b = widget.building;
     final s = widget.summary;
-    final known = s.oneRoomId == null ? null : kOneRoomNameById[s.oneRoomId];
+    final known = widget.known;
 
     return Container(
       decoration: BoxDecoration(
