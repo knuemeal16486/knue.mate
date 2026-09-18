@@ -9,6 +9,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'tab_edit_screen.dart';
 import 'notice_alert_settings_screen.dart';
+import 'meal_rating_service.dart';
+import 'rewarded_ad_service.dart';
 import 'root_screen.dart';
 import 'ui_utils.dart';
 import 'meal_rating.dart';
@@ -632,7 +634,7 @@ class _TodayMealPageState extends State<TodayMealPage>
                       _buildInfoRow(
                         Icons.attach_money,
                         "가격",
-                        isSado ? "의무입사생 무료" : "5,500원 (느티헌)",
+                        isSado ? "의무입사생 무료" : "6,000원 (느티헌)",
                       ),
                       const SizedBox(height: 12),
                       _buildInfoRow(
@@ -658,7 +660,7 @@ class _TodayMealPageState extends State<TodayMealPage>
                           {
                             "category": "🍲 한식 & 찌개",
                             "items": [
-                              {"name": "느티헌 교원백반", "price": "5,500"},
+                              {"name": "느티헌 교원백반", "price": "6,000"},
                               {"name": "매화헌 교원백반", "price": "6,000"},
                               {"name": "촌돼지김치찌개", "price": "6,500"},
                             ],
@@ -2629,9 +2631,26 @@ class _RainbowModeTile extends StatelessWidget {
         ),
         Switch.adaptive(
           value: isOn,
-          onChanged: (v) => PreferencesService.setRainbowMode(v),
+          onChanged: (v) => _handleToggle(context, v),
         ),
       ],
+    );
+  }
+
+  /// 끄는 건 바로 처리하지만, 켜는 건 보상형 광고를 끝까지 봐야 켜진다.
+  Future<void> _handleToggle(BuildContext context, bool wantsOn) async {
+    if (!wantsOn) {
+      await PreferencesService.setRainbowMode(false);
+      return;
+    }
+    showToast(context, "광고를 보면 무지개 모드가 켜져요 🌈");
+    await RewardedAdService.show(
+      onEarned: () => PreferencesService.setRainbowMode(true),
+      onUnavailable: () {
+        if (context.mounted) {
+          showToast(context, "지금은 광고를 불러올 수 없어요. 잠시 후 다시 시도해주세요.");
+        }
+      },
     );
   }
 }
@@ -2851,12 +2870,6 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     }
   }
 
-  String _getRatingPath() {
-    final dateStr =
-        "${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}";
-    return "ratings_${widget.source.name}_${widget.type.stdKey}_$dateStr";
-  }
-
   /// 별점 평가 가능 시간인지 확인
   /// 운영 시작 시간부터 운영 종료 후 30분까지 평가 가능
   bool _isRatingAllowed() {
@@ -2943,6 +2956,10 @@ class _MealDetailCardState extends State<_MealDetailCard> {
 
   /// 별점과 배식 방식을 한 문서로 제출한다.
   /// [style]이 null이면 배식 방식 투표는 하지 않은 것으로 남긴다.
+  ///
+  /// 실제 제출·중복 방지 로직은 MealRatingService에 있다 — 홈 화면의
+  /// "식사하셨나요?" 알림 팝업(meal_reminder.dart)도 같은 서비스를 써서
+  /// 두 경로의 중복 방지 키가 어긋나지 않는다.
   Future<void> _submitRating(double rating, {ServingStyle? style}) async {
     // 평가 가능 시간인지 다시 확인
     if (!_isRatingAllowed()) {
@@ -2955,54 +2972,20 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     setState(() => _isRatingSubmitting = true);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final path = _getRatingPath();
-      final localKey = "rated_$path";
-
-      if (prefs.getBool(localKey) ?? false) {
-        if (mounted) showToast(context, "이미 이 식단에 별점을 남기셨어요! ✨");
-        return;
-      }
-
-      String? fingerPrint = prefs.getString('user_fingerprint');
-      if (fingerPrint == null) {
-        fingerPrint = DateTime.now().millisecondsSinceEpoch.toString();
-        await prefs.setString('user_fingerprint', fingerPrint);
-      }
-
-      final dateStr =
-          "${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}";
-
-      final existing = await FirebaseFirestore.instance
-          .collection('meal_ratings')
-          .where('fingerPrint', isEqualTo: fingerPrint)
-          .where('date', isEqualTo: dateStr)
-          .where('source', isEqualTo: widget.source.name)
-          .where('mealType', isEqualTo: widget.type.stdKey)
-          .get();
-
-      if (existing.docs.isNotEmpty) {
-        if (mounted) showToast(context, "이미 참여하셨습니다. (중복 방지 정책)");
-        await prefs.setBool(localKey, true);
-        return;
-      }
-
-      await FirebaseFirestore.instance.collection('meal_ratings').add({
-        'fingerPrint': fingerPrint,
-        'date': dateStr,
-        'source': widget.source.name,
-        'mealType': widget.type.stdKey,
-        'rating': rating,
-        // 고르지 않았으면 필드 자체를 넣지 않는다 — 집계에서 "무응답"과
-        // "빈 문자열 응답"을 구분할 필요가 없어진다.
-        if (style != null) 'servingStyle': style.key,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      await prefs.setBool(localKey, true);
+      final errorMsg = await MealRatingService.submit(
+        source: widget.source,
+        type: widget.type,
+        date: widget.date,
+        rating: rating,
+        style: style,
+      );
       if (mounted) {
-        final styleMsg = style == null ? '' : ' (${style.label})';
-        showToast(context, "별점 $rating점$styleMsg 반영되었습니다. 감사합니다 ❤️");
+        if (errorMsg != null) {
+          showToast(context, errorMsg);
+        } else {
+          final styleMsg = style == null ? '' : ' (${style.label})';
+          showToast(context, "별점 $rating점$styleMsg 반영되었습니다. 감사합니다 ❤️");
+        }
       }
     } catch (e) {
       if (mounted) showToast(context, "별점 저장 중 오류가 발생했어요.");
@@ -3056,6 +3039,66 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     );
   }
 
+  /// 별점 단계(5.0 → 0.5)별로 몇 명이 투표했는지 막대로 보여준다.
+  /// 별 배지를 눌러야만 펼쳐지는 상세 정보 — 기본 화면에는 평균만 보인다.
+  Widget _buildRatingBreakdown(MealRatingSummary summary, Color warm) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final maxCount = summary.maxDistributionCount;
+    // 5.0부터 내림차순 — 높은 점수부터 훑어보는 게 자연스럽다.
+    final levels = List.generate(10, (i) => 5.0 - i * 0.5);
+
+    return Column(
+      children: levels.map((level) {
+        final voteCount = summary.distribution[level] ?? 0;
+        final ratio = maxCount == 0 ? 0.0 : voteCount / maxCount;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                child: Text(
+                  level.toStringAsFixed(1),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                    fontFeatures: KnueTokens.tabularFigures,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: ratio,
+                    minHeight: 6,
+                    backgroundColor: warm.withValues(alpha: 0.08),
+                    valueColor: AlwaysStoppedAnimation(warm),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 20,
+                child: Text(
+                  "$voteCount",
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                    fontFeatures: KnueTokens.tabularFigures,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   Widget _buildStarRatingBar(double rating, Function(double) onRatingChanged) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -3094,6 +3137,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
 
     double currentRating = 4.0;
     ServingStyle? currentStyle;
+    bool showBreakdown = false;
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -3149,24 +3193,58 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.star_rounded, color: warm, size: 24),
-                              const SizedBox(width: 8),
-                              Text(
-                                summary.hasRatings
-                                    ? "${summary.average.toStringAsFixed(1)}점 (${summary.count}명 참여 중)"
-                                    : "아직 평가가 없습니다",
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: warm,
-                                  fontFeatures: KnueTokens.tabularFigures,
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: summary.hasRatings
+                                  ? () => setDialogState(
+                                      () => showBreakdown = !showBreakdown,
+                                    )
+                                  : null,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.star_rounded,
+                                      color: warm,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      summary.hasRatings
+                                          ? "${summary.average.toStringAsFixed(1)}점 (${summary.count}명 참여 중)"
+                                          : "아직 평가가 없습니다",
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: warm,
+                                        fontFeatures: KnueTokens.tabularFigures,
+                                      ),
+                                    ),
+                                    if (summary.hasRatings) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        showBreakdown
+                                            ? Icons.expand_less_rounded
+                                            : Icons.expand_more_rounded,
+                                        color: warm,
+                                        size: 18,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
-                            ],
+                            ),
                           ),
+                          if (showBreakdown && summary.hasRatings) ...[
+                            const SizedBox(height: 10),
+                            _buildRatingBreakdown(summary, warm),
+                          ],
                           if (summary.styleVotes > 0) ...[
                             const SizedBox(height: 8),
                             _buildServingStyleBar(summary, warm),

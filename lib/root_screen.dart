@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'club_event_model.dart';
 import 'club_event_service.dart';
 import 'constants.dart';
+import 'meal_reminder.dart';
 import 'meal_screen.dart';
 import 'bus_screen.dart';
 import 'campus_map_screen.dart';
@@ -31,9 +34,15 @@ class RootNavigationScreen extends StatefulWidget {
   }
 }
 
-class RootNavigationScreenState extends State<RootNavigationScreen> {
+class RootNavigationScreenState extends State<RootNavigationScreen>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
   late PageController _pageController;
+
+  /// 식사시간 종료 10분 전 "식사하셨나요?" 팝업 점검 타이머. 앱이 포그라운드에
+  /// 있는 동안만 주기적으로 확인한다 — 백그라운드에서는 어차피 타이머가
+  /// 멈추므로(iOS/Android 공통) 별도로 막을 필요가 없다.
+  Timer? _mealReminderTimer;
 
   /// 탭 전환 애니메이션(400ms) 도중에는 방금 떠난 탭도 화면에 걸쳐 보인다.
   /// TickerMode(enabled: i == _currentIndex)만 쓰면 탭을 누른 그 순간
@@ -69,13 +78,37 @@ class RootNavigationScreenState extends State<RootNavigationScreen> {
 
     // 탭 순서가 바뀌었을 때 UI를 갱신하기 위한 리스너
     PreferencesService.tabOrder.addListener(_onTabOrderChanged);
+
+    WidgetsBinding.instance.addObserver(this);
+    // 앱을 막 열었을 때도 이미 "종료 10분 전" 구간일 수 있다 — 타이머 첫
+    // 주기(1분)를 기다리지 않고 바로 한 번 확인한다.
+    _checkMealReminder();
+    _mealReminderTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _checkMealReminder(),
+    );
   }
 
   @override
   void dispose() {
     PreferencesService.tabOrder.removeListener(_onTabOrderChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    _mealReminderTimer?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 백그라운드에 있다가 막 돌아왔을 때 — 다음 1분 주기까지 기다리지 않고
+    // 바로 확인한다. 마침 종료 10분 구간에 딱 돌아왔는데 59초를 더 기다리게
+    // 하고 싶지 않다.
+    if (state == AppLifecycleState.resumed) _checkMealReminder();
+  }
+
+  void _checkMealReminder() {
+    if (!mounted) return;
+    MealReminder.maybeShow(context);
   }
 
   void _onTabOrderChanged() {

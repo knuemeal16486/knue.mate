@@ -117,6 +117,51 @@ class _CallBusBottomSheetState extends State<CallBusBottomSheet>
             ),
           ),
 
+          // 콜버스 이용 안내 — "바로 DRT" 앱으로 예약해야 탄다는 걸 모르는
+          // 학생이 많다. 여기서 시간표만 보고 정류장에 그냥 나가면 못 탄다.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline_rounded, size: 18, color: primaryColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                        children: [
+                          const TextSpan(text: "'"),
+                          TextSpan(
+                            text: "바로 DRT",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: primaryColor,
+                            ),
+                          ),
+                          const TextSpan(
+                            text: "' 앱을 설치해서 예약해야 탈 수 있어요. "
+                                "요금은 성인 기준 카드 650원 · 현금 700원이에요.",
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           // 탭 바
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),

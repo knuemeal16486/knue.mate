@@ -274,12 +274,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   children: [
                     if (_loadingCalendar)
                       const LinearProgressIndicator(minHeight: 2),
+                    // D-day를 가장 먼저 — 탭을 열자마자 가장 궁금한 "며칠 남았지"부터
+                    // 보이게. 달력·학사일정은 그 아래로.
+                    _buildDdaySection(color, isDark),
+                    const SizedBox(height: 8),
                     _buildCalendarCard(color, isDark),
                     _buildLegend(isDark),
                     _buildSelectedDayEvents(color, isDark),
                     _buildMonthAgenda(color, isDark),
-                    const SizedBox(height: 8),
-                    _buildDdaySection(color, isDark),
                     const SizedBox(height: 24),
                   ],
                 ),

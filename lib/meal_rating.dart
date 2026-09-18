@@ -50,19 +50,33 @@ class MealRatingSummary {
   /// 정량배식이라고 답한 사람 수.
   final int fixedVotes;
 
+  /// 별점 단계(0.5~5.0, 0.5 간격)별 투표 수. 키는 별점 값, 값은 그 점수를
+  /// 준 사람 수 — 항상 10개 단계가 전부 채워져 있다(투표가 0이어도 0으로).
+  final Map<double, int> distribution;
+
   const MealRatingSummary({
     required this.average,
     required this.count,
     required this.selfVotes,
     required this.fixedVotes,
+    this.distribution = const {},
   });
 
-  static const empty = MealRatingSummary(
+  // double을 키로 쓰는 맵은 부동소수점 비교 문제 때문에 const로 못 만든다
+  // (Dart 자체 제약) — final로 런타임에 한 번만 만든다.
+  static final empty = MealRatingSummary(
     average: 0,
     count: 0,
     selfVotes: 0,
     fixedVotes: 0,
+    distribution: {
+      for (var i = 1; i <= 10; i++) i / 2: 0,
+    },
   );
+
+  /// distribution에서 가장 많이 나온 표 수 — 막대그래프 길이 계산에 쓴다.
+  int get maxDistributionCount =>
+      distribution.values.fold(0, (a, b) => a > b ? a : b);
 
   bool get hasRatings => count > 0;
 
@@ -93,12 +107,18 @@ class MealRatingSummary {
     var count = 0;
     var selfVotes = 0;
     var fixedVotes = 0;
+    final distribution = {for (var i = 1; i <= 10; i++) i / 2: 0};
 
     for (final d in docs) {
       final raw = d['rating'];
       if (raw is num) {
         sum += raw.toDouble();
         count++;
+        // 저장된 값은 항상 0.5 단위(별점 UI가 반개 단위로만 입력받는다)여야
+        // 하지만, 혹시 모를 낡은/이상한 값도 가장 가까운 단계로 묶어 버리지
+        // 않고 집계에 반영한다.
+        final bucket = ((raw.toDouble() * 2).round() / 2).clamp(0.5, 5.0);
+        distribution[bucket] = (distribution[bucket] ?? 0) + 1;
       }
       switch (ServingStyle.fromKey(d['servingStyle'] as String?)) {
         case ServingStyle.self:
@@ -115,6 +135,7 @@ class MealRatingSummary {
       count: count,
       selfVotes: selfVotes,
       fixedVotes: fixedVotes,
+      distribution: distribution,
     );
   }
 }

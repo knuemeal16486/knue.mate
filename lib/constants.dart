@@ -472,6 +472,33 @@ String? mealTimeRangeFor(MealType type, MealSource source) {
   }
 }
 
+/// 지금이 [type](이 식당 기준) 운영 종료 10분 전부터 종료 시각까지인지.
+/// 순수 함수 — 테스트 대상. meal_reminder.dart의 "식사하셨나요?" 팝업이
+/// 언제 뜰지 판단하는 데 쓴다.
+bool isMealEndingSoon(MealType type, MealSource source, DateTime now) {
+  final range = mealTimeRangeFor(type, source);
+  if (range == null) return false; // 이 식당은 이 끼니를 운영 안 함
+  final endStr = range.split("~")[1].trim().split(":");
+  final end = DateTime(
+    now.year,
+    now.month,
+    now.day,
+    int.parse(endStr[0]),
+    int.parse(endStr[1]),
+  );
+  final tenMinBefore = end.subtract(const Duration(minutes: 10));
+  return !now.isBefore(tenMinBefore) && !now.isAfter(end);
+}
+
+/// 지금 곧 끝나가는 끼니 하나(있으면). 아침/점심/저녁 사이 간격이 넉넉해
+/// 두 끼가 동시에 "곧 끝남" 구간에 걸칠 일은 없다.
+MealType? mealEndingSoonNow(MealSource source, DateTime now) {
+  for (final type in MealType.values) {
+    if (isMealEndingSoon(type, source, now)) return type;
+  }
+  return null;
+}
+
 ServeStatus statusFor(
   MealType type,
   DateTime now,

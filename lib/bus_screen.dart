@@ -1804,8 +1804,12 @@ class _BusAppScreenState extends State<BusAppScreen>
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          // 남은 시간 = 시간 신호이므로 보조색(앰버).
-                          color: KnueTokens.warm(isDark),
+                          // 다음 버스까지 남은 시간 — 곧 출발한다는 걸 강조하려고
+                          // 빨간색으로. (다른 화면의 "임박 신호"는 계속 앰버를 쓴다 —
+                          // 이 카드만 명시적으로 빨간색을 요청받았다.)
+                          color: isDark
+                              ? const Color(0xFFEF4444)
+                              : const Color(0xFFDC2626),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
