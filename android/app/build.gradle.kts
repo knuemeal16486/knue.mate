@@ -64,8 +64,8 @@ android {
             // signingConfig = signingConfigs.getByName("debug")  <-- 이거 지우고 아래 걸로!
             signingConfig = signingConfigs.getByName("release")
 
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
