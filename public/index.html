@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KNUE Mate</title>
+<meta name="description" content="한국교원대학교 학생들을 위한 올인원 캠퍼스 앱, KNUE Mate 공식 개발자 페이지." />
+<link rel="icon" href="icon.png" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f8;
+    --card: #ffffff;
+    --text: #1c1c1e;
+    --muted: #6b6b70;
+    --accent: #3478f6;
+    --border: #e5e5ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0b0d;
+      --card: #17171a;
+      --text: #f2f2f3;
+      --muted: #9a9aa0;
+      --accent: #6ea8ff;
+      --border: #2a2a2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 56px 20px 80px;
+  }
+  .hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+  .hero img {
+    width: 88px;
+    height: 88px;
+    border-radius: 22px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  }
+  .hero h1 {
+    font-size: 26px;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -0.5px;
+  }
+  .hero p {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 0;
+    max-width: 420px;
+  }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 8px;
+  }
+  .links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-radius: 12px;
+    background: var(--accent);
+    color: white;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .links a.secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+  }
+  section h2 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 10px;
+  }
+  section p, section li {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin: 0 0 4px;
+  }
+  ul { margin: 0; padding-left: 18px; }
+  footer {
+    text-align: center;
+    margin-top: 32px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <img src="icon.png" alt="KNUE Mate 아이콘" />
+      <h1>KNUE Mate</h1>
+      <p>한국교원대학교 학생들을 위한 올인원 캠퍼스 앱. 식단, 버스, 공지, 학사일정, 자취방 정보를 한곳에서 확인하세요.</p>
+      <div class="links">
+        <a href="https://play.google.com/store/apps/details?id=com.knue.knuemate">Google Play에서 받기</a>
+      </div>
+    </div>
+
+    <section>
+      <h2>기능</h2>
+      <ul>
+        <li>학생식당·기숙사식당 식단 및 별점</li>
+        <li>청람버스·청주 콜버스 실시간 정보</li>
+        <li>청람공지 — 학사·학과별 공지사항 모아보기</li>
+        <li>학사일정 D-day</li>
+        <li>자취방 지도 및 시세 정보</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>개발자 정보</h2>
+      <p>KNUE Mate는 한국교원대학교 학생이 재학생 편의를 위해 개발·운영하는 비공식 앱입니다.</p>
+    </section>
+
+    <footer>
+      &copy; KNUE Mate
+    </footer>
+  </div>
+</body>
+</html>
