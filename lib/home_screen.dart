@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'bus_model.dart';
 import 'bus_route_data.dart';
+import 'bus_service.dart';
 import 'bus_timetable_data.dart';
 import 'calendar_screen.dart';
 import 'campus_run_screen.dart';
@@ -57,6 +59,17 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 지금 _busLabel이 어느 노선 얘기인지("513" 등). null이면 운행 종료라
   /// 특정 노선을 안 가리킨다. 칩 문구(routeLabels)를 그 노선에 맞게 고르는 데 쓴다.
   String? _busRoute;
+
+  /// 실시간 도착 정보를 띄우고 있는지. false면 시간표 기반 안내(_busRemainingHint).
+  bool _busRealtime = false;
+
+  /// 실시간 모드에서 남은 시간의 기준 정류장이 어디인지(직행=교원대, 경유=탑연삼거리).
+  bool _busIsDirect = true;
+
+  /// 실시간 모드일 때 방향별 다음 차. 기준 정류장은 노선 종류에 따라
+  /// 탑연삼거리(경유) 또는 교원대(직행)다.
+  BusArrival? _busUpNext;
+  BusArrival? _busDownNext;
 
   // 키워드 알림 상태
   bool _keywordLoading = true;
@@ -210,25 +223,59 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadBus() async {
-    if (mounted)
+    if (mounted) {
       setState(() {
         _busLoading = true;
         _busError = false;
       });
+    }
     try {
-      final isWeekday = DateTime.now().weekday <= 5;
-      // 즐겨찾기(고정)해둔 노선이 있으면 그 중에서만 고른다 — 자기가 타는
-      // 노선을 골라뒀으면 그게 먼저 보여야 한다. 없으면 기존처럼 513/514/518
-      // 중 가장 빨리 오는 걸 보여준다(913은 방향 규칙이 달라 기본 후보엔
-      // 안 넣는다 — 913을 직접 고정했을 때만 후보에 든다).
       final favorites = FavoriteService.favoritesNotifier.value;
-      final candidates = favorites.isNotEmpty
-          ? favorites.where(BusRouteData.routeLabels.containsKey)
+
+      // 1) 고정해둔 노선이 있으면 실시간 위치를 먼저 본다. 탑연삼거리 경유
+      //    노선은 시간표만으론 쓸모가 없다 — 청주에서 출발해 오는 차라
+      //    "지금 어디쯤인지"가 곧 탈 수 있느냐를 가른다.
+      //    fetchAllBuses()는 오프라인·메모리·Firestore 캐시를 차례로 타므로
+      //    버스 탭과 캐시를 공유한다(홈 때문에 API를 더 두드리지 않는다).
+      if (favorites.isNotEmpty) {
+        // 실시간 조회 실패(키 누락·네트워크·API 장애)는 여기서 삼키고 아래
+        // 시간표 안내로 넘어간다. fetchAllBuses()는 키가 없으면 예외를
+        // 던지는데, 그걸 그대로 위로 올리면 홈 타일이 시간표를 보여줄 수
+        // 있는 상황에서도 "불러오기 실패"만 뜬다.
+        BusSummary? picked;
+        try {
+          final all = await BusService().fetchAllBuses();
+          picked = pickHomeBusSummary(all, favorites);
+        } catch (e) {
+          debugPrint("홈 타일 실시간 버스 조회 실패, 시간표로 대체: $e");
+        }
+        if (picked != null) {
+          if (!mounted) return;
+          setState(() {
+            _busRoute = picked!.number;
+            _busLabel = "${picked.number}번";
+            _busRealtime = true;
+            _busIsDirect = picked.isDirect;
+            _busUpNext = picked.nextArrivalTowards(BusDirection.outbound);
+            _busDownNext = picked.nextArrivalTowards(BusDirection.inbound);
+            _busRemainingHint = "";
+            _busLoading = false;
+          });
+          return;
+        }
+      }
+
+      // 2) 실시간으로 잡히는 차가 없으면(운행 전/후) 시간표로 안내한다.
+      //    고정한 노선이 없으면 기존처럼 513/514/518 중 가장 빠른 것
+      //    (913은 방향 규칙이 달라 기본 후보엔 안 넣는다).
+      final isWeekday = DateTime.now().weekday <= 5;
+      final timetableCandidates = favorites.isNotEmpty
+          ? favorites.where(BusTimetableData.schedules.containsKey)
           : const ["513", "514", "518"];
 
       String? best;
       String? bestRoute;
-      for (final route in candidates) {
+      for (final route in timetableCandidates) {
         final t = BusTimetableData.getNextBusTime(route, true, isWeekday);
         if (t != null && (best == null || t.compareTo(best) < 0)) {
           best = t;
@@ -237,6 +284,9 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (!mounted) return;
       setState(() {
+        _busRealtime = false;
+        _busUpNext = null;
+        _busDownNext = null;
         if (best != null && bestRoute != null) {
           _busRoute = bestRoute;
           _busLabel = "$bestRoute번";
@@ -249,11 +299,12 @@ class _HomeScreenState extends State<HomeScreen> {
         _busLoading = false;
       });
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _busLoading = false;
           _busError = true;
         });
+      }
     }
   }
 
@@ -660,11 +711,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: _buildHeroTile(
                           icon: Icons.directions_bus_rounded,
                           title: "다음 버스",
-                          // 어느 노선인지에 맞는 경유지 설명(가경동·성안길 등).
-                          // 로딩 중이거나 오늘 운행이 끝났으면(둘 다 _busRoute가
-                          // null) 굳이 틀린 노선 이름을 보여주느니 비워 둔다.
+                          // 실시간일 땐 남은 시간이 "어느 정류장 기준"인지가
+                          // 제일 중요하다(탑연삼거리 경유 노선은 교원대가 아니라
+                          // 탑연삼거리 도착 시간이다). 시간표 모드에선 노선의
+                          // 경유지 설명(가경동·성안길 등)을 그대로 쓴다.
                           chip: _busRoute == null
                               ? ""
+                              : _busRealtime
+                              ? (_busIsDirect ? "교원대 기준" : "탑연삼거리 기준")
                               : (BusRouteData.routeLabels[_busRoute] ?? ""),
                           footer: "실시간 위치",
                           onTap: () =>
@@ -879,6 +933,28 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+    if (_busRealtime) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _busLabel,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.4,
+              color: Colors.white,
+              fontFeatures: KnueTokens.tabularFigures,
+            ),
+          ),
+          const SizedBox(height: 3),
+          _buildHeroBusDirectionRow("↑", _busUpNext),
+          const SizedBox(height: 2),
+          _buildHeroBusDirectionRow("↓", _busDownNext),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -899,6 +975,69 @@ class _HomeScreenState extends State<HomeScreen> {
             fontWeight: FontWeight.w500,
             color: Colors.white.withValues(alpha: 0.8),
             fontFeatures: KnueTokens.tabularFigures,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 실시간 타일의 방향 한 줄: "↑ 4분 · 석소".
+  /// 그 방향으로 오는 차가 없으면 흐리게 "-"만 남겨, 두 줄 높이를 유지한다
+  /// (한쪽만 있을 때 타일 높이가 들쭉날쭉하지 않게).
+  Widget _buildHeroBusDirectionRow(String arrow, BusArrival? arrival) {
+    final faded = Colors.white.withValues(alpha: 0.45);
+    if (arrival == null) {
+      return Row(
+        children: [
+          Text(
+            arrow,
+            style: TextStyle(fontSize: 10.5, color: faded),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            "운행 없음",
+            style: TextStyle(fontSize: 10.5, color: faded),
+          ),
+        ],
+      );
+    }
+
+    final mins = arrival.estimatedMinutes.round();
+    final timeText = arrival.remainStops == 0
+        ? "곧 도착"
+        : (mins < 1 ? "곧 도착" : "$mins분");
+
+    return Row(
+      children: [
+        Text(
+          arrow,
+          style: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          timeText,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            fontFeatures: KnueTokens.tabularFigures,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            arrival.currentStopName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.75),
+            ),
           ),
         ),
       ],

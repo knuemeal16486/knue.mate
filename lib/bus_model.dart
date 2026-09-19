@@ -36,6 +36,29 @@ enum BusDirection {
   const BusDirection(this.label);
 }
 
+/// 홈 화면 "다음 버스" 타일에 띄울 노선 하나를 고른다.
+///
+/// 즐겨찾기(고정)한 노선 중 **지금 실제로 오고 있는 차가 있는** 것만 후보로
+/// 두고, 그중 가장 빨리 도착하는 노선을 고른다. 고정해둔 노선이 전부 운행
+/// 전/후라면 null — 호출부가 시간표 기반 안내로 넘어간다.
+///
+/// 순수 함수 — 테스트 대상.
+BusSummary? pickHomeBusSummary(
+  List<BusSummary> all,
+  Set<String> favorites,
+) {
+  final candidates = all
+      .where((b) => favorites.contains(b.number) && b.arrivals.isNotEmpty)
+      .toList();
+  if (candidates.isEmpty) return null;
+  candidates.sort((a, b) {
+    final an = a.nextArrival?.remainStops ?? 1 << 30;
+    final bn = b.nextArrival?.remainStops ?? 1 << 30;
+    return an.compareTo(bn);
+  });
+  return candidates.first;
+}
+
 /// 노선 정류장 순서 안에서 "우리 정류장"이 나오는 한 지점.
 @immutable
 class TargetStopOrd {

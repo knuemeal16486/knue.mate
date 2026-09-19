@@ -189,4 +189,60 @@ void main() {
       expect(s.nextArrivalTowards(BusDirection.inbound), isNull);
     });
   });
+
+  group('pickHomeBusSummary — 홈 타일에 띄울 노선 고르기', () {
+    BusSummary summary(String number, List<int> remains, {bool direct = false}) =>
+        BusSummary(
+          id: int.parse(number),
+          number: number,
+          type: 'blue',
+          direction: '',
+          arrivals: [
+            for (final r in remains)
+              BusArrival(
+                remainStops: r,
+                currentStopName: '정류장$r',
+                direction: BusDirection.outbound,
+              ),
+          ],
+          congestion: 'normal',
+          isDirect: direct,
+        );
+
+    test('고정한 노선 중 가장 빨리 오는 것을 고른다', () {
+      final all = [
+        summary('511', [20]),
+        summary('502', [4]),
+        summary('747', [11]),
+      ];
+      final picked = pickHomeBusSummary(all, {'511', '502', '747'});
+      expect(picked!.number, '502');
+    });
+
+    test('고정 안 한 노선은 더 빨라도 안 고른다', () {
+      final all = [
+        summary('511', [20]),
+        summary('502', [1]), // 더 빠르지만 고정 안 함
+      ];
+      final picked = pickHomeBusSummary(all, {'511'});
+      expect(picked!.number, '511');
+    });
+
+    test('고정한 노선이 전부 운행 중이 아니면 null (시간표로 넘어감)', () {
+      final all = [summary('511', const []), summary('502', const [])];
+      expect(pickHomeBusSummary(all, {'511', '502'}), isNull);
+    });
+
+    test('고정한 게 없으면 null', () {
+      expect(pickHomeBusSummary([summary('511', [3])], const {}), isNull);
+    });
+
+    test('탑연삼거리 경유 노선도 그대로 후보가 된다', () {
+      // 예전 홈 타일은 routeLabels에 있는 직행 4개만 볼 수 있었다.
+      final all = [summary('747', [6], direct: false)];
+      final picked = pickHomeBusSummary(all, {'747'});
+      expect(picked!.number, '747');
+      expect(picked.isDirect, isFalse);
+    });
+  });
 }
