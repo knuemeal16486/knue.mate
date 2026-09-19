@@ -1128,6 +1128,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 else if (_upcomingAcademic.isNotEmpty)
                   ListView.separated(
                     shrinkWrap: true,
+                    padding: EdgeInsets.zero,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _upcomingAcademic.length,
                     separatorBuilder: (_, __) => Divider(
@@ -1284,6 +1285,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         )
                       : ListView.separated(
                           shrinkWrap: true,
+                          padding: EdgeInsets.zero,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: _keywordMatches.length,
                           separatorBuilder: (_, __) => Divider(
@@ -1382,6 +1384,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   )
                 : ListView.separated(
                     shrinkWrap: true,
+                    padding: EdgeInsets.zero,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _favNotices.length,
                     separatorBuilder: (_, __) => Divider(
