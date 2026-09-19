@@ -8,6 +8,25 @@ import 'package:flutter/foundation.dart';
 import 'notice_model.dart';
 import 'offline_cache.dart';
 
+/// 학교 학사일정 페이지는 searchM을 받아도 그 학년도 전체 일정을 한 번에
+/// 돌려준다(실측: searchM=09로 요청해도 1~12월 행이 전부 섞여 온다). 여기서
+/// 걸러내지 않으면 9월 카드에 1월 일정까지 그대로 들어간다. 월 경계에 걸친
+/// 일정(예: 8.31~9.4)은 양쪽 달 모두에 걸리는 게 맞으므로 날짜 범위가 그
+/// 달과 겹치는지로 판단한다. 순수 함수 — 테스트 대상.
+List<CalendarEvent> scopeEventsToMonth(
+  List<CalendarEvent> events,
+  int year,
+  int month,
+) {
+  final monthStart = DateTime(year, month, 1);
+  final monthEnd = DateTime(year, month + 1, 1);
+  return events
+      .where(
+        (e) => e.startDate.isBefore(monthEnd) && !e.endDate.isBefore(monthStart),
+      )
+      .toList();
+}
+
 class KnueScraper {
   // 모든 게시판 그룹 (기존과 동일)
   final Map<String, Map<String, String>> boardGroups = {
@@ -589,11 +608,12 @@ class KnueScraper {
         if (endSpan != null) {
           final mStr = endSpan.querySelector('.month')?.text.trim() ?? '01';
           final dStr = endSpan.querySelector('.days')?.text.trim() ?? '01';
-          endDate = DateTime(
-            year,
-            int.tryParse(mStr) ?? 1,
-            int.tryParse(dStr) ?? 1,
-          );
+          final endMonth = int.tryParse(mStr) ?? 1;
+          // 종료월이 시작월보다 앞이면(예: 12.28 ~ 1.3) 해가 넘어간 것이다.
+          // 둘 다 요청한 year를 그대로 쓰면 종료일이 시작일보다 앞서게 된다.
+          final rolledYear =
+              startDate != null && endMonth < startDate.month ? year + 1 : year;
+          endDate = DateTime(rolledYear, endMonth, int.tryParse(dStr) ?? 1);
         } else {
           endDate = startDate;
         }
@@ -604,8 +624,10 @@ class KnueScraper {
           );
         }
       }
-      await CalendarCache.save(year, month, events);
-      return events;
+
+      final scoped = scopeEventsToMonth(events, year, month);
+      await CalendarCache.save(year, month, scoped);
+      return scoped;
     } catch (e) {
       debugPrint('Calendar Fetch Error: $e');
       // 네트워크가 실패해도 저장해둔 값이 있으면 그걸 쓴다.
@@ -619,7 +641,9 @@ class CalendarCache {
   /// 백그라운드 갱신이 끝나면 값이 바뀐다. 화면은 이걸 구독해 다시 그린다.
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
-  static String _key(int year, int month) => 'calendarCache_${year}_$month';
+  // v2: 이전 버전은 월 필터링 버그로 전체 학년도 일정을 그대로 캐싱했다.
+  // 버전을 올려 기존 기기의 잘못된 캐시를 무시하고 새로 받게 한다.
+  static String _key(int year, int month) => 'calendarCache_v2_${year}_$month';
 
   static Future<List<CalendarEvent>?> load(int year, int month) async {
     // 학사일정은 학기 중 드물게 바뀐다. 오래된 값이라도 빈 카드보다 낫고,

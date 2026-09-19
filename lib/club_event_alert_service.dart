@@ -32,7 +32,11 @@ class ClubEventAlertService {
   /// notifiedIds에 기록만 하고 알림은 보내지 않는다. 이후 폴링부터는 기존
   /// diff+notify 로직이 정상 동작한다.
   static Future<void> checkAndNotify() async {
-    final events = await ClubEventService.fetchAll(forceRefresh: true);
+    // 백그라운드 작업이라 화면이 걸릴 일이 없다 — 기본 4초보다 넉넉히 준다.
+    final events = await ClubEventService.fetchAll(
+      forceRefresh: true,
+      timeout: const Duration(seconds: 8),
+    );
     if (events.isEmpty) return;
 
     final prefs = await SharedPreferences.getInstance();

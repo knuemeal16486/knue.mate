@@ -86,6 +86,7 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
       final list = await ClubEventService.fetchAll(
         forceRefresh: true,
         includeEnded: true,
+        timeout: const Duration(seconds: 8),
       );
       if (!mounted) return;
       setState(() {

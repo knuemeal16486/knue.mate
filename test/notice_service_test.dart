@@ -1,7 +1,50 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:knue_mate/notice_model.dart';
 import 'package:knue_mate/notice_service.dart';
 
 void main() {
+  group('scopeEventsToMonth', () {
+    CalendarEvent ev(String title, DateTime start, DateTime end) =>
+        CalendarEvent(startDate: start, endDate: end, title: title);
+
+    test('학교 페이지가 전 학년도 일정을 한 번에 줘도 요청한 달만 남는다', () {
+      final events = [
+        ev('1월 일정', DateTime(2026, 1, 15), DateTime(2026, 1, 15)),
+        ev('9월 일정', DateTime(2026, 9, 10), DateTime(2026, 9, 10)),
+        ev('12월 일정', DateTime(2026, 12, 25), DateTime(2026, 12, 25)),
+      ];
+      final scoped = scopeEventsToMonth(events, 2026, 9);
+      expect(scoped.map((e) => e.title), ['9월 일정']);
+    });
+
+    test('달 경계에 걸친 일정은 양쪽 달 모두에 남는다', () {
+      final boundary = ev(
+        '수강신청 변경',
+        DateTime(2026, 8, 31),
+        DateTime(2026, 9, 4),
+      );
+      expect(scopeEventsToMonth([boundary], 2026, 8), [boundary]);
+      expect(scopeEventsToMonth([boundary], 2026, 9), [boundary]);
+      expect(scopeEventsToMonth([boundary], 2026, 10), isEmpty);
+    });
+
+    test('해당 달에 일정이 없으면 빈 목록', () {
+      final events = [ev('1월 일정', DateTime(2026, 1, 1), DateTime(2026, 1, 1))];
+      expect(scopeEventsToMonth(events, 2026, 9), isEmpty);
+    });
+
+    test('12월 요청도 해 넘김 없이 정상 처리된다', () {
+      final events = [
+        ev('12월 일정', DateTime(2026, 12, 20), DateTime(2026, 12, 20)),
+        ev('1월 일정', DateTime(2027, 1, 3), DateTime(2027, 1, 3)),
+      ];
+      expect(
+        scopeEventsToMonth(events, 2026, 12).map((e) => e.title),
+        ['12월 일정'],
+      );
+    });
+  });
+
   test('KNUE 표준 게시판 HTML 파싱', () {
     const html = '''
 <table class="bbs_list"><tbody>

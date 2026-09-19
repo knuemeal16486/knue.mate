@@ -20,8 +20,9 @@ class ClubEventService {
   static Future<List<ClubEvent>> fetchAll({
     bool forceRefresh = false,
     bool includeEnded = false,
+    Duration timeout = const Duration(seconds: 4),
   }) async {
-    final all = await _fetchAllRaw(forceRefresh: forceRefresh);
+    final all = await _fetchAllRaw(forceRefresh: forceRefresh, timeout: timeout);
     if (includeEnded) return all;
     final now = DateTime.now();
     return all.where((e) => !e.hasEnded(now)).toList();
@@ -29,16 +30,17 @@ class ClubEventService {
 
   static Future<List<ClubEvent>> _fetchAllRaw({
     bool forceRefresh = false,
+    Duration timeout = const Duration(seconds: 4),
   }) async {
     if (!forceRefresh) {
       final cached = await ClubEventCache.load();
       if (cached != null && cached.isNotEmpty) {
         // throttle이 없으면 갱신→재로드→갱신으로 계속 Firestore를 두드린다.
-        RefreshThrottle.deferred("clubEvents", _fetchAndCache);
+        RefreshThrottle.deferred("clubEvents", () => _fetchAndCache(timeout));
         return cached;
       }
     }
-    return _fetchAndCache();
+    return _fetchAndCache(timeout);
   }
 
   /// 끝난 지 [grace]가 지난 행사를 Firestore에서 지운다.
@@ -63,22 +65,26 @@ class ClubEventService {
         debugPrint('ClubEventService.purgeEnded error: $err');
       }
     }
-    if (removed > 0) await _fetchAndCache();
+    if (removed > 0) await _fetchAndCache(const Duration(seconds: 8));
     return removed;
   }
 
-  static Future<List<ClubEvent>> _fetchAndCache() async {
+  static Future<List<ClubEvent>> _fetchAndCache(
+    Duration timeout,
+  ) async {
     // 이미 Firestore가 죽어 있다고 확인됐으면 기다리지 않고 캐시로 간다.
     if (!FirestoreHealth.isAvailable) {
       return await ClubEventCache.load() ?? const [];
     }
     try {
       // 타임아웃이 없어서, 권한 오류처럼 실패하는 경우 7초 가까이 매달렸다.
-      // 홈 화면이 그만큼 로딩 상태로 남는다.
-      final snapshot = await _db
-          .collection(_collection)
-          .get()
-          .timeout(const Duration(seconds: 4));
+      // 홈 화면이 그만큼 로딩 상태로 남는다 — 그래서 홈 미리보기 카드는 기본값
+      // (4초)을 쓴다. 반면 전용 목록 화면(ClubEventsScreen)은 사용자가 이미
+      // 그 화면만 보고 기다리는 중이라 더 길게 줘도 된다 — 앱 시작 직후라
+      // Firebase 초기화·다른 탭 로딩과 네트워크를 나눠 쓰는 순간엔 4초가
+      // 너무 빠듯해서 캐시 없는 첫 진입이 그대로 "불러오기 실패"로 떨어졌다.
+      final snapshot =
+          await _db.collection(_collection).get().timeout(timeout);
       final events =
           snapshot.docs
               .map((d) => ClubEvent.fromFirestore(d.id, d.data()))

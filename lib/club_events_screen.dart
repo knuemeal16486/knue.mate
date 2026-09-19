@@ -64,7 +64,13 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
       });
     }
     try {
-      final list = await ClubEventService.fetchAll(forceRefresh: force);
+      // 앱 시작 직후 진입하면 Firebase 초기화·다른 탭 로딩과 네트워크를
+      // 나눠 쓰는 타이밍이라 기본 4초 타임아웃이 빠듯하다. 여기는 사용자가
+      // 이 화면만 보고 기다리는 전용 목록이라 넉넉히 준다.
+      final list = await ClubEventService.fetchAll(
+        forceRefresh: force,
+        timeout: const Duration(seconds: 8),
+      );
       final ts = await ClubEventCache.lastUpdated();
       if (!mounted) return;
       setState(() {
