@@ -20,9 +20,30 @@ class BusService {
     return key;
   }
 
+  /// 노선 정류장 목록(BusRouteInfoInqireService)용 키.
+  ///
+  /// 공공데이터포털은 서비스마다 따로 활용신청을 받기 때문에, 버스위치
+  /// (BusLcInfoInqireService) 키와 노선정보 키가 서로 다를 수 있다. 실제로
+  /// 두 키를 교차로 넣으면 "등록되지 않은 서비스키"가 떨어진다. 따로 안
+  /// 넣었으면 같은 키로 폴백한다 — 한 키가 두 서비스에 모두 등록된 경우엔
+  /// 그대로 동작한다.
+  static String get _routeInfoKey {
+    const definedKey = String.fromEnvironment('BUS_ROUTE_API_KEY');
+    final key = definedKey.isNotEmpty
+        ? definedKey
+        : dotenv.env['BUS_ROUTE_API_KEY'];
+    if (key != null && key.isNotEmpty) return key;
+    return _serviceKey;
+  }
+
   static const String _baseUrl =
       "https://apis.data.go.kr/1613000/BusLcInfoInqireService/getRouteAcctoBusLcList";
 
+  /// ⚠️ routeId는 반드시 공공데이터포털 노선목록(getRouteNoList, cityCode=33010)에
+  /// 실린 값과 대조하고 넣을 것. 2026-09-19 전수조사에서 10개 중 5개가 엉뚱한
+  /// 노선을 가리키고 있었다 — 500→40-1(순환), 503→407, 509→416, 511→417,
+  /// 747→872. 즉 앱이 "511번"이라고 띄우던 위치가 실제로는 417번 버스였다.
+  /// 아래 값은 그때 API 응답으로 하나씩 확인해 바로잡은 것이다.
   static const List<BusRouteConfig> _kRoutes = [
     // 1. 교원대 직행/순환
     BusRouteConfig(routeNumber: 513, routeId: "CJB270008000", isDirect: true),
@@ -30,34 +51,65 @@ class BusService {
     BusRouteConfig(routeNumber: 518, routeId: "CJB270024700", isDirect: true),
     BusRouteConfig(routeNumber: 913, routeId: "CJB270014300", isDirect: true),
 
-    // 2. 탑연삼거리 경유 (502번 등)
-    BusRouteConfig(routeNumber: 500, routeId: "CJB270005500", isDirect: false),
+    // 2. 탑연삼거리 경유
+    BusRouteConfig(routeNumber: 500, routeId: "CJB270007100", isDirect: false),
     BusRouteConfig(routeNumber: 502, routeId: "CJB270007300", isDirect: false),
-    BusRouteConfig(routeNumber: 503, routeId: "CJB270005800", isDirect: false),
-    BusRouteConfig(routeNumber: 509, routeId: "CJB270006400", isDirect: false),
-    BusRouteConfig(routeNumber: 511, routeId: "CJB270006600", isDirect: false),
-    BusRouteConfig(routeNumber: 747, routeId: "CJB270016400", isDirect: false),
+    BusRouteConfig(routeNumber: 503, routeId: "CJB270026400", isDirect: false),
+    BusRouteConfig(routeNumber: 509, routeId: "CJB270026500", isDirect: false),
+    BusRouteConfig(routeNumber: 511, routeId: "CJB270007500", isDirect: false),
+    BusRouteConfig(routeNumber: 747, routeId: "CJB270011200", isDirect: false),
   ];
 
-  // [수정됨] 각 노선별 '도착 기준 정류장'의 순번 (NodeOrd)
-  // 직행 노선 -> '한국교원대학교' 정류장 기준
-  // 경유 노선 -> '탑연삼거리' 정류장 기준
-  static const Map<int, int> _kTargetNodeOrdByRoute = {
-    // 교원대행 (한국교원대학교 정류장)
-    513: 42,
-    514: 45,
-    518: 35,
-    // TODO(913): 2024-08-10 노선 개정(평동↔미호종점) 뒤 정류장 순서가 바뀌었다.
-    // 이 번호는 개정 전 기준이라 실시간 도착정보가 엉뚱한 정류장을 가리킬 수 있다.
-    // 새 정류장 순서를 확인해 다시 잡아야 한다.
-    913: 31,
-    // 탑연삼거리 경유 (탑연삼거리 정류장)
-    500: 45,
-    502: 42,
-    503: 51,
-    509: 16,
-    511: 47,
-    747: 15, // 급행이라 정류장 수가 적음
+  /// 각 노선에서 "도착"의 기준이 되는 정류장 이름.
+  /// 직행은 교원대 앞, 경유는 탑연삼거리에서 타고 내린다.
+  static String _targetStopName(bool isDirect) =>
+      isDirect ? "한국교원대학교" : "탑연삼거리";
+
+  /// 이 노선에서 기준 정류장이 나오는 지점들(상행 1개 + 하행 1개).
+  ///
+  /// 정류장 목록 API가 응답하면 거기서 직접 뽑는다 — 노선이 개정돼도
+  /// 앱이 알아서 따라가고, 하드코딩 값이 낡아서 엉뚱한 정류장을 도착지로
+  /// 잡는 일이 없다. 실패하면 검증해둔 [_kTargetNodeOrdByRoute]로 폴백.
+  static Future<List<TargetStopOrd>> _resolveTargetOrds(
+    BusRouteConfig cfg,
+  ) async {
+    try {
+      final stops = await fetchRouteStops(cfg.routeId);
+      final derived = targetOrdsFromStops(
+        stops,
+        _targetStopName(cfg.isDirect),
+      );
+      if (derived.isNotEmpty) return derived;
+    } catch (e) {
+      debugPrint("BusService: ${cfg.routeNumber}번 기준 정류장 계산 실패: $e");
+    }
+    return targetOrdsFromFallback(_kTargetNodeOrdByRoute[cfg.routeNumber]);
+  }
+
+  /// 기준 정류장의 nodeOrd — **상행/하행 두 번 다** 적는다.
+  ///
+  /// 왕복 노선은 정류장 순서가 상행·하행을 하나로 이어 붙인 형태라 기준
+  /// 정류장이 목록에 두 번 나온다. 예전엔 상행 것 하나만 적어두고 "남은
+  /// 정거장 = 기준 - 현재"가 음수면 하행으로 간주했는데, 그러면 **돌아오는
+  /// 길에 우리 정류장으로 다가오는 버스가 전부 "이미 지나간 차"로 버려졌다**
+  /// (하행 카드에 도착 예정 시간이 아예 없던 이유).
+  ///
+  /// 이 표는 [fetchRouteStops]가 실패했을 때 쓰는 폴백이다. 정상적으로는
+  /// [_resolveTargetOrds]가 매번 API에서 직접 계산하므로 노선이 개정돼도
+  /// 알아서 따라간다. 값은 2026-09-19 API 응답 기준.
+  static const Map<int, List<int>> _kTargetNodeOrdByRoute = {
+    // 교원대행 — [상행, 하행]
+    513: [43, 44],
+    514: [46, 47],
+    518: [1, 36], // 교원대에서 출발해 교원대로 돌아오는 셔틀
+    913: [32, 47],
+    // 탑연삼거리 경유 — [상행, 하행]
+    500: [45, 66],
+    502: [42, 79],
+    503: [51, 76],
+    509: [16, 23],
+    511: [47, 82],
+    747: [15, 18], // 급행이라 정류장 수가 적음
   };
 
   // [수정됨] 노선별 예상 속도 계수 (분/정거장)
@@ -323,30 +375,35 @@ class BusService {
         list = [items];
       }
 
+      final targets = await _resolveTargetOrds(cfg);
+
       final arrivals = list.whereType<Map>().map((e) {
         final b = BusLocation.fromJson(e.cast<String, dynamic>());
-        // 남은 정거장 계산 (타겟 정류장 기준)
-        final target = _kTargetNodeOrdByRoute[cfg.routeNumber] ?? 40;
-        final int remaining = target - b.nodeOrd;
+        // 이 차가 "다음에" 닿을 기준 정류장을 찾는다. 상행 지점을 이미
+        // 지났어도 돌아오는 길의 하행 지점이 남아 있으면 그쪽으로 잡히므로,
+        // 예전처럼 음수(=버려짐)가 나오지 않는다.
+        final next = nextTargetFor(b.nodeOrd, targets);
+        if (next == null) return null; // 이번 운행에선 우리 정류장을 다 지났다
+
+        final int remaining = next.ord - b.nodeOrd;
 
         return BusArrival(
           remainStops: remaining,
           currentStopName: b.nodeNm,
-          estimatedMinutes: remaining >= 0
-              ? _calculateEstimatedMinutes(
-                  cfg.routeNumber,
-                  remaining,
-                  DateTime.now(),
-                  busCongestion: b.congestion,
-                )
-              : 0.0,
+          direction: next.dir,
+          estimatedMinutes: _calculateEstimatedMinutes(
+            cfg.routeNumber,
+            remaining,
+            DateTime.now(),
+            busCongestion: b.congestion,
+          ),
           latitude: b.latitude,
           longitude: b.longitude,
           vehicleNo: b.vehicleno,
           nodeOrd: b.nodeOrd,
           congestion: b.congestion,
         );
-      }).toList();
+      }).whereType<BusArrival>().toList();
 
       return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: arrivals);
     } catch (e) {
@@ -402,17 +459,12 @@ class BusService {
     return estimatedMinutes;
   }
 
-  /// 가장 먼저 도착하는(=상행 중 remainStops 최소) 차량을 고른다.
-  /// [BusSummary.nextArrival]과 동일한 선택 규칙 — 배지가 상세 시트와 같은 차량 기준이 되도록.
+  /// 가장 먼저 도착하는 차량. 이제 remainStops가 항상 0 이상이라
+  /// (상행이든 하행이든 "다음에 닿을 기준 정류장까지의 거리") 부호를 따질
+  /// 필요 없이 제일 가까운 차를 그대로 고르면 된다.
   BusArrival? _nextArrival(List<BusArrival> arrivals) {
     if (arrivals.isEmpty) return null;
-    final upbound = arrivals.where((a) => a.remainStops >= 0).toList();
-    if (upbound.isNotEmpty) {
-      return upbound.reduce((a, b) => a.remainStops <= b.remainStops ? a : b);
-    }
-    return arrivals.reduce(
-      (a, b) => a.remainStops.abs() < b.remainStops.abs() ? a : b,
-    );
+    return arrivals.reduce((a, b) => a.remainStops <= b.remainStops ? a : b);
   }
 
   String _calculateCongestion(DateTime now, int routeNumber) {
@@ -454,16 +506,18 @@ class BusService {
       return _routeStopsCache[routeId]!;
     }
 
-    // 2. API 호출
-    final key = _serviceKey;
+    // 2. API 호출 — 이 엔드포인트는 버스위치와 다른 서비스라 키가 따로다.
+    final key = _routeInfoKey;
     if (key.isEmpty) {
       debugPrint("BusService: API 키 누락으로 정류장 조회를 건너뜁니다 ($routeId)");
       return [];
     }
 
+    // numOfRows=200은 511(129개)엔 충분하지만 여유를 둔다 — 정류장이 잘리면
+    // 하행 기준 정류장이 목록에서 빠져 도착 계산이 조용히 틀어진다.
     final uri = Uri.parse(
       "https://apis.data.go.kr/1613000/BusRouteInfoInqireService/getRouteAcctoThrghSttnList"
-      "?serviceKey=$key&pageNo=1&numOfRows=200&_type=json&cityCode=33010&routeId=$routeId",
+      "?serviceKey=$key&pageNo=1&numOfRows=300&_type=json&cityCode=33010&routeId=$routeId",
     );
 
     try {

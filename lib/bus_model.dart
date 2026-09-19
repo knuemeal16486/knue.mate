@@ -19,19 +19,97 @@ String? congestionLevelLabel(int? level) {
   }
 }
 
-/// remainStops 부호로 상행/하행을 가른다.
+/// 기준 정류장(교원대/탑연삼거리)을 어느 쪽 방향으로 지나가는 차인지.
 ///
-/// remainStops(bus_service.dart가 "기준 정류장(교원대/탑연삼거리) nodeOrd -
-/// 현재 nodeOrd"로 계산)가 0 이상이면 기준 정류장을 향해 다가오는 중(상행),
-/// 음수면 이미 지나쳐 반대 방향으로 멀어지는 중(하행)이다.
+/// 왕복 노선은 API가 상행·하행을 하나로 이어 붙인 정류장 순서(nodeOrd)를
+/// 돌려준다. 그래서 기준 정류장이 그 순서 안에 **두 번** 나온다 — 나갈 때
+/// 한 번, 돌아올 때 한 번. 어느 쪽 차인지는 그 차가 다음에 도착할 기준
+/// 정류장이 둘 중 어느 것이냐로 정해진다([BusService]가 판정해 넣어준다).
+enum BusDirection {
+  /// 첫 번째 기준 정류장을 향해 가는 중 (교원대 기준 오송·조치원 방면).
+  outbound('상행'),
+
+  /// 돌아오는 길의 기준 정류장을 향해 가는 중 (청주 방면).
+  inbound('하행');
+
+  final String label;
+  const BusDirection(this.label);
+}
+
+/// 노선 정류장 순서 안에서 "우리 정류장"이 나오는 한 지점.
+@immutable
+class TargetStopOrd {
+  final int ord;
+  final BusDirection dir;
+  const TargetStopOrd(this.ord, this.dir);
+
+  @override
+  bool operator ==(Object other) =>
+      other is TargetStopOrd && other.ord == ord && other.dir == dir;
+
+  @override
+  int get hashCode => ord.hashCode ^ dir.hashCode;
+
+  @override
+  String toString() => 'TargetStopOrd($ord, ${dir.name})';
+}
+
+/// 노선 정류장 목록에서 기준 정류장이 나오는 지점을 방향별로 하나씩 뽑는다.
 ///
-/// 예전에는 직전 폴링 때의 nodeOrd와 비교해 "늘었으면 상행"으로 추정했는데,
-/// 왕복 노선의 nodeOrd는 상행·하행을 합쳐 하나로 이어져 있어서 버스가 전진하는
-/// 한 방향에 상관없이 거의 항상 늘어난다 — 그래서 사실상 늘 "상행"으로만
-/// 판정됐고, 처음 보는 차량(과거 기록 없음)은 아예 걸러내지도 못해 상행 탭에
-/// 하행 버스가 섞여 나왔다. 이 함수는 과거 기록 없이 nodeOrd 하나만으로
-/// 매 순간 정확하다.
-String busDirectionLabel(int remainStops) => remainStops >= 0 ? "상행" : "하행";
+/// - 이름은 **정확히** 일치해야 한다. "한국교원대학교"를 찾는데 부분일치를
+///   쓰면 "한국교원대정문"·"한국교원대학교입구" 같은 다른 정류장이 걸려
+///   엉뚱한 지점을 도착지로 잡는다(518·913번에 실제로 그런 정류장이 있다).
+/// - 같은 방향에 같은 이름이 연달아 나오는 노선이 있다(913번은 상행에
+///   32·33 두 번). 먼저 닿는 쪽만 남긴다.
+///
+/// 순수 함수 — 테스트 대상.
+List<TargetStopOrd> targetOrdsFromStops(
+  List<RouteStop> stops,
+  String targetName,
+) {
+  final matched = stops.where((s) => s.nodeName == targetName).toList()
+    ..sort((a, b) => a.nodeOrd.compareTo(b.nodeOrd));
+  final seenDirections = <int>{};
+  final result = <TargetStopOrd>[];
+  for (final s in matched) {
+    final ud = s.upDownCd ?? 0;
+    if (!seenDirections.add(ud)) continue;
+    result.add(
+      TargetStopOrd(
+        s.nodeOrd,
+        ud == 1 ? BusDirection.inbound : BusDirection.outbound,
+      ),
+    );
+  }
+  result.sort((a, b) => a.ord.compareTo(b.ord));
+  return result;
+}
+
+/// 폴백 표([BusService]의 하드코딩 값)를 같은 모양으로 바꾼다.
+/// 첫 번째가 상행, 두 번째가 하행.
+List<TargetStopOrd> targetOrdsFromFallback(List<int>? ords) {
+  if (ords == null || ords.isEmpty) return const [];
+  return [
+    TargetStopOrd(ords.first, BusDirection.outbound),
+    if (ords.length > 1) TargetStopOrd(ords[1], BusDirection.inbound),
+  ];
+}
+
+/// [nodeOrd]에 있는 차가 다음에 닿을 기준 정류장.
+///
+/// 상행 지점을 이미 지났어도 돌아오는 길의 하행 지점이 남아 있으면 그걸
+/// 돌려준다 — 이게 "하행 버스도 도착 시간이 나오는" 핵심이다. 이번 운행에서
+/// 기준 정류장을 전부 지났으면 null(= 이 차는 우리 정류장에 안 온다).
+///
+/// 순수 함수 — 테스트 대상.
+TargetStopOrd? nextTargetFor(int nodeOrd, List<TargetStopOrd> targets) {
+  TargetStopOrd? best;
+  for (final t in targets) {
+    if (t.ord < nodeOrd) continue;
+    if (best == null || t.ord < best.ord) best = t;
+  }
+  return best;
+}
 
 class BusRouteConfig {
   final int routeNumber;
@@ -56,6 +134,13 @@ class BusArrival {
   final int? nodeOrd;
   final int? congestion; // 1: 여유, 2: 보통, 3: 혼잡, 4: 매우혼잡
 
+  /// 이 차가 기준 정류장에 어느 방향으로 들어오는지.
+  ///
+  /// 예전에는 remainStops 부호로 추측했는데, 왕복 노선에서 돌아오는 차를
+  /// 전부 "이미 지나간 차"로 잘못 처리해 도착 시간을 못 보여줬다. 이제는
+  /// 다음에 도착할 기준 정류장이 상행 쪽이냐 하행 쪽이냐로 정확히 가른다.
+  final BusDirection direction;
+
   const BusArrival({
     required this.remainStops,
     required this.currentStopName,
@@ -65,6 +150,7 @@ class BusArrival {
     this.vehicleNo,
     this.nodeOrd,
     this.congestion,
+    this.direction = BusDirection.outbound,
   });
 
   int compareTo(BusArrival other) => remainStops.compareTo(other.remainStops);
@@ -80,7 +166,8 @@ class BusArrival {
         other.longitude == longitude &&
         other.vehicleNo == vehicleNo &&
         other.nodeOrd == nodeOrd &&
-        other.congestion == congestion;
+        other.congestion == congestion &&
+        other.direction == direction;
   }
 
   @override
@@ -92,15 +179,15 @@ class BusArrival {
       longitude.hashCode ^
       vehicleNo.hashCode ^
       nodeOrd.hashCode ^
-      congestion.hashCode;
+      congestion.hashCode ^
+      direction.hashCode;
 
   // 유틸리티 메서드
   bool get isApproaching => remainStops <= 3;
   bool get isFarAway => remainStops > 10;
 
   String get statusText {
-    if (remainStops == 0) return "도착";
-    if (remainStops < 0) return "현재 위치: $currentStopName";
+    if (remainStops <= 0) return "도착";
     if (remainStops <= 3) return "곧 도착";
     return "$remainStops정거장 전";
   }
@@ -171,18 +258,24 @@ class BusSummary {
     this.isCongestionEstimated = true,
   });
 
-  // 가장 빨리 도착하는 버스 정보
+  // 가장 빨리 도착하는 버스 정보. remainStops가 항상 0 이상(다음에 닿을
+  // 기준 정류장까지의 거리)이라 제일 가까운 차를 그대로 고르면 된다.
   BusArrival? get nextArrival {
     if (arrivals.isEmpty) return null;
-    final upboundArrivals = arrivals.where((a) => a.remainStops >= 0).toList();
-    if (upboundArrivals.isNotEmpty) {
-      return upboundArrivals.reduce(
-        (a, b) => a.remainStops <= b.remainStops ? a : b,
-      );
-    }
-    return arrivals.reduce(
-      (a, b) => a.remainStops.abs() < b.remainStops.abs() ? a : b,
-    );
+    return arrivals.reduce((a, b) => a.remainStops <= b.remainStops ? a : b);
+  }
+
+  /// 방향별로 나눠 본 도착 목록. 화면이 상행/하행 구역을 따로 그릴 때 쓴다.
+  List<BusArrival> arrivalsTowards(BusDirection dir) {
+    final list = arrivals.where((a) => a.direction == dir).toList()
+      ..sort((a, b) => a.remainStops.compareTo(b.remainStops));
+    return list;
+  }
+
+  /// 해당 방향에서 가장 빨리 오는 차.
+  BusArrival? nextArrivalTowards(BusDirection dir) {
+    final list = arrivalsTowards(dir);
+    return list.isEmpty ? null : list.first;
   }
 
   int get arrivingBusCount => arrivals.length;
@@ -416,6 +509,14 @@ class RouteStop {
   final double? longitude;
   final int? traffic; // 0: 원활, 1: 서행, 2: 정체
 
+  /// 상행/하행 구분. API가 직접 내려주는 값이라 추측할 필요가 없다.
+  /// 0 = 상행(나가는 길), 1 = 하행(돌아오는 길).
+  ///
+  /// 왕복 노선은 정류장 순서(nodeOrd)가 상행·하행을 하나로 이어 붙인 형태라,
+  /// 기준 정류장이 이 목록에 두 번 나온다(예: 511번 탑연삼거리 = nodeOrd 47(상행),
+  /// 82(하행)). 이 값으로 둘을 구분한다.
+  final int? upDownCd;
+
   const RouteStop({
     required this.nodeId,
     required this.nodeName,
@@ -424,6 +525,7 @@ class RouteStop {
     this.latitude,
     this.longitude,
     this.traffic,
+    this.upDownCd,
   });
 
   factory RouteStop.fromJson(Map<String, dynamic> j) {
@@ -445,6 +547,11 @@ class RouteStop {
           : (j['traffic'] != null
                 ? int.tryParse(j['traffic'].toString())
                 : null),
+      upDownCd: (j['updowncd'] is num)
+          ? (j['updowncd'] as num).toInt()
+          : (j['updowncd'] != null
+                ? int.tryParse(j['updowncd'].toString())
+                : null),
     );
   }
 
@@ -456,6 +563,7 @@ class RouteStop {
     'gpslati': latitude,
     'gpslong': longitude,
     'traffic': traffic,
+    'updowncd': upDownCd,
   };
 }
 

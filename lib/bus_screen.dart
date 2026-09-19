@@ -617,21 +617,38 @@ class _BusAppScreenState extends State<BusAppScreen>
               ),
             ),
 
-          if (directBuses.isNotEmpty) ...[
-            _buildSectionHeader("🎯 교원대 직행", isDark, subtitle: "정문까지 직통"),
-            ...directBuses.map((b) => BusCard(bus: b)),
-            const SizedBox(height: 20),
-          ],
+          // 방향별로 완전히 갈라서 보여준다. 예전엔 한 카드에 상행·하행이
+          // 섞여 들어가 "지금 탈 수 있는 차"가 어느 쪽인지 알 수 없었다.
+          ..._buildDirectionSection(
+            BusDirection.outbound,
+            directBuses,
+            tapyeonBuses,
+            isDark,
+          ),
+          ..._buildDirectionSection(
+            BusDirection.inbound,
+            directBuses,
+            tapyeonBuses,
+            isDark,
+          ),
 
-          if (tapyeonBuses.isNotEmpty) ...[
-            _buildSectionHeader(
-              "🔄 탑연삼거리 경유",
-              isDark,
-              subtitle: "탑연삼거리 하차 후 환승",
+          if (_realtimeBusList.isNotEmpty &&
+              !_realtimeBusList.any((b) => b.arrivals.isNotEmpty))
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 24,
+              ),
+              child: Text(
+                "지금 우리 정류장으로 오는 버스가 없어요.\n버스 시간표 탭에서 다음 운행을 확인해주세요.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  color: isDark ? Colors.white38 : Colors.grey.shade500,
+                ),
+              ),
             ),
-            ...tapyeonBuses.map((b) => BusCard(bus: b)),
-            const SizedBox(height: 20),
-          ],
 
           _buildArrivalInfoSection(isDark),
         ],
@@ -892,6 +909,88 @@ class _BusAppScreenState extends State<BusAppScreen>
             ),
           ),
           Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
+        ],
+      ),
+    );
+  }
+
+  /// 한 방향(상행/하행)의 구역 전체. 그 방향으로 오는 차가 하나도 없으면
+  /// 구역째 빼서, 지금 탈 수 있는 쪽만 화면에 남게 한다.
+  List<Widget> _buildDirectionSection(
+    BusDirection dir,
+    List<BusSummary> directBuses,
+    List<BusSummary> tapyeonBuses,
+    bool isDark,
+  ) {
+    bool hasDir(BusSummary b) => b.arrivalsTowards(dir).isNotEmpty;
+    final direct = directBuses.where(hasDir).toList();
+    final tapyeon = tapyeonBuses.where(hasDir).toList();
+    if (direct.isEmpty && tapyeon.isEmpty) return const [];
+
+    final isOutbound = dir == BusDirection.outbound;
+    return [
+      _buildDirectionHeader(
+        title: isOutbound ? "상행" : "하행",
+        subtitle: isOutbound ? "오송·조치원 방면" : "청주 방면",
+        color: isOutbound
+            ? (isDark ? Colors.blueAccent : Colors.blue.shade700)
+            : (isDark ? Colors.orangeAccent : Colors.deepOrange.shade600),
+        isDark: isDark,
+      ),
+      if (direct.isNotEmpty) ...[
+        _buildSectionHeader("🎯 교원대 직행", isDark, subtitle: "정문까지 직통"),
+        ...direct.map((b) => BusCard(bus: b, direction: dir)),
+      ],
+      if (tapyeon.isNotEmpty) ...[
+        _buildSectionHeader(
+          "🔄 탑연삼거리 경유",
+          isDark,
+          subtitle: "탑연삼거리 하차 후 환승",
+        ),
+        ...tapyeon.map((b) => BusCard(bus: b, direction: dir)),
+      ],
+      const SizedBox(height: 20),
+    ];
+  }
+
+  Widget _buildDirectionHeader({
+    required String title,
+    required String subtitle,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 20,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.white38 : Colors.grey.shade600,
+              ),
+            ),
+          ),
         ],
       ),
     );

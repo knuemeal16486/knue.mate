@@ -1,47 +1,53 @@
 // 실시간 버스 상행/하행 판정 회귀 테스트.
 //
-// 예전에는 직전 폴링 때의 nodeOrd와 비교해 "늘었으면 상행"으로 추정했다.
-// 왕복 노선의 nodeOrd는 상행·하행을 합쳐 하나로 이어진 순번이라, 버스가
-// 전진하는 한 nodeOrd는 방향에 상관없이 거의 항상 늘어난다 — 그래서 사실상
-// 늘 "상행"으로만 판정됐고, 처음 보는 차량(과거 기록 없음)은 걸러내지도
-// 못해 상행 탭에 하행 버스가 같이 찍혔다. 왕복 노선(502 등)은 상행·하행이
-// 같은 정류장 이름을 쓰기 때문에 이름 매칭만으로는 둘을 못 가른다.
+// 판정 방식이 두 번 바뀌었다.
+//  1세대: 직전 폴링의 nodeOrd와 비교해 "늘었으면 상행" — 왕복 노선은 하행에서도
+//         nodeOrd가 늘기 때문에 거의 전부 상행으로 오판됐다.
+//  2세대: remainStops(기준 정류장 - 현재)의 부호 — 방향은 갈렸지만, 기준 정류장을
+//         하나만 잡아둔 탓에 **돌아오는 길에 우리 정류장으로 다가오는 차가 전부
+//         "이미 지나간 차"로 버려져** 하행엔 도착 예정 시간이 아예 없었다.
+//  3세대(현재): 노선 정류장 순서에서 기준 정류장이 나오는 두 지점을 모두 찾고,
+//         차량 위치에서 "다음에 닿을 지점"을 고른다. 방향은 그 지점의 updowncd
+//         (API가 직접 주는 값)로 정해지고, 남은 정거장은 항상 0 이상이 된다.
 //
-// 지금은 bus_service.dart가 이미 계산해 둔 remainStops(기준 정류장 nodeOrd -
-// 현재 nodeOrd)의 부호만으로 상태 기록 없이 매 순간 정확하게 가른다.
+// 3세대 핵심 로직 자체는 bus_direction_target_test.dart가 검증한다.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:knue_mate/bus_model.dart';
 
 void main() {
-  group('busDirectionLabel', () {
-    test('기준 정류장에 아직 도달 전(양수)이면 상행', () {
-      expect(busDirectionLabel(37), '상행');
-      expect(busDirectionLabel(4), '상행');
-      expect(busDirectionLabel(0), '상행'); // 도착 직전도 상행 취급
+  group('BusArrival.direction', () {
+    test('방향은 부호가 아니라 명시된 값으로 정해진다', () {
+      // 같은 remainStops라도 방향이 다를 수 있다 — 부호로는 절대 못 가른다.
+      const up = BusArrival(
+        remainStops: 12,
+        currentStopName: '충청대학교',
+        direction: BusDirection.outbound,
+      );
+      const down = BusArrival(
+        remainStops: 12,
+        currentStopName: '오송역',
+        direction: BusDirection.inbound,
+      );
+      expect(up.direction.label, '상행');
+      expect(down.direction.label, '하행');
     });
 
-    test('기준 정류장을 이미 지났으면(음수) 하행', () {
-      expect(busDirectionLabel(-1), '하행');
-      expect(busDirectionLabel(-20), '하행');
-      expect(busDirectionLabel(-77), '하행');
+    test('하행 차량도 도착 상태 문구가 정상적으로 나온다', () {
+      // 예전엔 하행이면 remainStops가 음수라 "현재 위치: …"만 나오고
+      // 도착 예정이라는 개념 자체가 없었다.
+      const arrival = BusArrival(
+        remainStops: 2,
+        currentStopName: '월곡초등학교',
+        direction: BusDirection.inbound,
+        estimatedMinutes: 4.0,
+      );
+      expect(arrival.statusText, '곧 도착');
+      expect(arrival.remainStops, greaterThanOrEqualTo(0));
     });
 
-    test('직전 폴링 기록이 없어도(첫 관측) 정확하다', () {
-      // 예전 트렌드 기반 판정은 과거 기록이 없으면 null을 반환해 필터링이
-      // 무력화됐다. 이 함수는 상태가 아예 없으므로 항상 답을 낸다.
-      expect(busDirectionLabel(37), isNotNull);
-      expect(busDirectionLabel(-20), isNotNull);
-    });
-
-    test('같은 차량의 nodeOrd가 계속 늘어나도(정상 전진) 하행으로 정확히 잡힌다', () {
-      // 예전 버그의 핵심 사례: 하행 leg에서도 버스가 전진하면 nodeOrd는
-      // 계속 늘어난다. "늘었으면 상행" 규칙이면 이 버스는 영원히 상행으로
-      // 오판된다. remainStops는 기준 정류장과의 거리이므로 흔들리지 않는다.
-      final progressingDownbound = [-5, -12, -20, -34, -39];
-      for (final r in progressingDownbound) {
-        expect(busDirectionLabel(r), '하행',
-            reason: 'remainStops=$r인데 하행으로 안 잡힘');
-      }
+    test('기본값은 상행', () {
+      const arrival = BusArrival(remainStops: 5, currentStopName: 'x');
+      expect(arrival.direction, BusDirection.outbound);
     });
   });
 

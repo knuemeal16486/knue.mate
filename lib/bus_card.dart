@@ -12,7 +12,11 @@ import 'ui_utils.dart';
 class BusCard extends StatelessWidget {
   final BusSummary bus;
 
-  const BusCard({super.key, required this.bus});
+  /// 이 카드가 보여줄 방향. 화면이 상행/하행 구역을 따로 그리므로 보통
+  /// 지정해서 쓴다. null이면 방향 구분 없이 전체 차량을 모아 보여준다.
+  final BusDirection? direction;
+
+  const BusCard({super.key, required this.bus, this.direction});
 
   // 정류장 좌표 정보 (가장 가까운 정류장 계산용)
   static const Map<String, List<double>> stopCoordinates = {
@@ -87,81 +91,63 @@ class BusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final arrivals = bus.arrivals;
-    final BusArrival? best = bus.nextArrival;
+    // 이 카드가 맡은 방향의 차량만 본다. 화면이 상행/하행 구역을 나눠
+    // 그리므로 보통 한쪽만 들어온다.
+    final arrivals = direction == null
+        ? bus.arrivals
+        : bus.arrivalsTowards(direction!);
+    final BusArrival? best = direction == null
+        ? bus.nextArrival
+        : bus.nextArrivalTowards(direction!);
     final bool isArrived = best != null && best.remainStops == 0;
     final bool hasInfo = best != null;
 
     String currentStopName = hasInfo ? best.currentStopName : _getNoInfoMessage();
 
-    // 버스 방향 추측 (양수면 상행, 음수면 하행)
-    final bool isUpbound = best != null && best.remainStops >= 0;
-    // 직행/경유에 따라 목적지 라벨 및 정류장 명을 구분
-    String directionSubText = "";
-    String targetStation = "";
+    // 방향은 더 이상 추측하지 않는다 — API가 준 정류장 순서에서 계산해
+    // BusArrival.direction에 담아 온다. 예전엔 "남은 정거장"의 부호로
+    // 갈랐는데, 그러면 돌아오는 길의 버스가 전부 "이미 지나감"이 됐다.
+    final BusDirection dir =
+        direction ?? best?.direction ?? BusDirection.outbound;
+    final bool isOutbound = dir == BusDirection.outbound;
+
+    final String directionSubText;
+    final String targetStation;
     if (bus.isDirect) {
-      directionSubText = isUpbound ? "교원대 정문행" : "종점 방면";
+      directionSubText = isOutbound ? "오송·조치원 방면" : "청주 방면";
       targetStation = "한국교원대 정류장";
     } else {
-      bool is747 = bus.number == "747";
-      // 일반 경유 노선은 상행이 오송 방면, 하행이 청주 방면. 747은 반대.
-      bool isOsongBound = is747 ? !isUpbound : isUpbound;
-      if (isOsongBound) {
-        directionSubText = "오송 방면";
-        targetStation = "탑연삼거리 (궁평3리 방면)";
-      } else {
-        directionSubText = "청주 방면";
-        targetStation = "탑연삼거리 (월곡초등학교 방면)";
-      }
+      directionSubText = isOutbound ? "오송 방면" : "청주 방면";
+      targetStation = isOutbound
+          ? "탑연삼거리 (궁평3리 방면)"
+          : "탑연삼거리 (월곡초등학교 방면)";
     }
 
-    String remainText = "-";
+    String remainText;
     if (hasInfo) {
-      if (isUpbound) {
-        remainText = isArrived
-            ? "$targetStation 진입 중"
-            : "$targetStation까지 ${best.remainStops}정거장 전";
-      } else {
-        // 하행일 때 현재 위치와 방면을 명시
-        remainText = "$targetStation 방면 운행 중 (현재: ${best.currentStopName})";
-      }
+      remainText = isArrived
+          ? "$targetStation 진입 중"
+          : "$targetStation까지 ${best.remainStops}정거장 전";
     } else {
-      // 운행 정보가 없을 때 시간대별 메시지
       final hour = DateTime.now().hour;
-      if (hour >= 23 || hour < 5) {
-        remainText = "운행 종료 시간대";
-      } else {
-        remainText = "운행 정보 대기 중";
-      }
+      remainText = (hour >= 23 || hour < 5) ? "운행 종료 시간대" : "운행 정보 대기 중";
     }
 
-    // 뒤차 정보 (상행 우선 표시)
+    // 뒤차 정보 — 같은 방향의 두 번째 차.
     String secondBusInfo = "";
     if (arrivals.length > 1) {
-      final upboundBuses = arrivals.where((a) => a.remainStops >= 0).toList();
-      if (upboundBuses.length >= 2) {
-        upboundBuses.sort((a, b) => a.remainStops.compareTo(b.remainStops));
-        final second = upboundBuses[1];
-        if (second.estimatedMinutes > 0) {
-          secondBusInfo = "뒤차 약 ${second.estimatedMinutes.round()}분 후";
-        } else {
-          secondBusInfo = "뒤차 ${second.remainStops}정거장 전";
-        }
-      } else if (upboundBuses.length == 1) {
-        final downbound = arrivals.where((a) => a.remainStops < 0).toList();
-        if (downbound.isNotEmpty) {
-          secondBusInfo = "+ ${downbound.length}대 반대 방면";
-        }
-      } else {
-        secondBusInfo = "모든 차량 종점 방면";
-      }
-    } else if (arrivals.length == 1 && !isUpbound) {
-      secondBusInfo = "종점 이동 후 되돌아옵니다";
+      final sorted = [...arrivals]
+        ..sort((a, b) => a.remainStops.compareTo(b.remainStops));
+      final second = sorted[1];
+      secondBusInfo = second.estimatedMinutes > 0
+          ? "뒤차 약 ${second.estimatedMinutes.round()}분 후"
+          : "뒤차 ${second.remainStops}정거장 전";
     }
 
-    // ETA: BusService에서 교통/시간대/날씨를 반영하여 계산한 estimatedMinutes 사용
+    // ETA: BusService가 교통/시간대/혼잡도를 반영해 계산한 값.
+    // 이제 상행·하행 모두 실제 도착 예정 시간이 나온다.
     String etaText = "";
-    if (hasInfo && isUpbound) {
+    if (hasInfo) {
       if (isArrived) {
         etaText = "잠시 후 도착";
       } else if (best.estimatedMinutes > 0) {
@@ -171,18 +157,13 @@ class BusCard extends StatelessWidget {
         } else if (mins >= 60) {
           final h = mins ~/ 60;
           final m = mins % 60;
-          etaText = "약 ${h}시간 ${m}분 후";
+          etaText = "약 $h시간 $m분 후";
         } else {
-          etaText = "약 ${mins}분 후 도착";
+          etaText = "약 $mins분 후 도착";
         }
       } else {
         etaText = "도착 예정";
       }
-    } else if (hasInfo && !isUpbound) {
-      // best.statusText는 하행일 때 "현재 위치: <정류장명>"처럼 길어질 수 있다.
-      // 그 내용은 바로 아래 remainText가 이미 "현재: ${currentStopName}"로
-      // 보여주므로, 여기 상단 배지에는 짧은 라벨만 쓴다.
-      etaText = "하행 운행 중";
     }
 
     return Semantics(
@@ -296,32 +277,24 @@ class BusCard extends StatelessWidget {
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: !isUpbound
-                              ? (isDark
-                                    ? Colors.white10
-                                    : Colors.grey.withOpacity(0.1))
-                              : (isArrived
-                                    ? Colors.red.withOpacity(0.15)
-                                    : (isDark
-                                          ? Colors.blueAccent.withOpacity(0.2)
-                                          : Colors.blue.withOpacity(0.1))),
+                          // 이제 상행·하행 모두 실제 도착 예정 시간이 있으므로
+                          // 한쪽만 회색으로 죽이지 않는다. 임박한 차만 빨강.
+                          color: isArrived
+                              ? Colors.red.withOpacity(0.15)
+                              : (isDark
+                                    ? Colors.blueAccent.withOpacity(0.2)
+                                    : Colors.blue.withOpacity(0.1)),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              !isUpbound
-                                  ? Icons.arrow_forward
-                                  : Icons.access_time_filled,
+                              Icons.access_time_filled,
                               size: 13,
-                              color: !isUpbound
-                                  ? Colors.grey
-                                  : (isArrived
-                                        ? Colors.redAccent
-                                        : (isDark
-                                              ? Colors.blueAccent
-                                              : Colors.blue)),
+                              color: isArrived
+                                  ? Colors.redAccent
+                                  : (isDark ? Colors.blueAccent : Colors.blue),
                             ),
                             const SizedBox(width: 4),
                             Flexible(
@@ -330,13 +303,11 @@ class BusCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,
                                 style: TextStyle(
-                                  color: !isUpbound
-                                      ? Colors.grey
-                                      : (isArrived
-                                            ? Colors.redAccent
-                                            : (isDark
-                                                  ? Colors.blueAccent
-                                                  : Colors.blue[700])),
+                                  color: isArrived
+                                      ? Colors.redAccent
+                                      : (isDark
+                                            ? Colors.blueAccent
+                                            : Colors.blue[700]),
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
                                 ),
@@ -555,12 +526,12 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     return "${widget.bus.number}:${arrival.nodeOrd ?? -1}:${_normalize(arrival.currentStopName)}";
   }
 
-  /// nodeOrd가 있는(=위치를 신뢰할 수 있는) 차량만 방향을 판정한다.
-  /// 왕복 노선(상행·하행이 같은 정류장 이름을 공유)은 이름 매칭만으로 두
-  /// 방향을 못 가르므로, 상행/하행 탭 필터링에 이 판정이 반드시 필요하다.
+  /// 차량의 진행 방향. 왕복 노선은 상행·하행이 같은 정류장 이름을 공유해서
+  /// 이름만으론 못 가르는데, 이제 BusService가 정류장 순서로 계산한 값을
+  /// [BusArrival.direction]에 담아 주므로 그대로 쓰면 된다.
   String? _inferDirection(BusArrival arrival) {
     if (arrival.nodeOrd == null) return null;
-    return busDirectionLabel(arrival.remainStops);
+    return arrival.direction.label;
   }
 
   void _determineInitialDirection() {
@@ -572,9 +543,10 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     } else if (routeData is Map) {
       final arrivals = widget.bus.arrivals;
       if (arrivals.isNotEmpty) {
-        // 도착 예정 버스 중 상행(점수 >=0)이 하나라도 있으면 상행을 기본 탭으로
-        final hasApproaching = arrivals.any((a) => a.remainStops >= 0);
-        _selectedDirection = hasApproaching ? "상행" : "하행";
+        // 가장 먼저 도착하는 차의 방향을 기본 탭으로 — 지금 당장 탈 수 있는
+        // 쪽을 먼저 보여주는 게 맞다.
+        _selectedDirection =
+            (widget.bus.nextArrival ?? arrivals.first).direction.label;
       } else {
         // 운영 정보 없을 때: 맵의 첫 번째 키(보통 '상행') 사용
         _selectedDirection = routeData.keys.first.toString();
@@ -632,9 +604,8 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
           final congestionSuffix = b.congestion != null
               ? " [${b.formattedCongestion}]"
               : "";
-          final dirTag = "[${busDirectionLabel(b.remainStops)}] ";
+          final dirTag = "[${b.direction.label}] ";
           if (b.remainStops == 0) return "$dirTag곧 도착$congestionSuffix";
-          if (b.remainStops < 0) return "$dirTag진행 중$congestionSuffix";
           return "$dirTag${b.remainStops}전$congestionSuffix";
         })
         .join(", ");
@@ -644,11 +615,8 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
       final congestionSuffix = first.congestion != null
           ? " [${first.formattedCongestion}]"
           : "";
-      final dirTag = "[${busDirectionLabel(first.remainStops)}] ";
-      final firstText = first.remainStops >= 0
-          ? "${first.remainStops}전"
-          : "진행 중";
-      return "$dirTag$firstText$congestionSuffix 외 ${busesAtStop.length - 1}대";
+      final dirTag = "[${first.direction.label}] ";
+      return "$dirTag${first.remainStops}전$congestionSuffix 외 ${busesAtStop.length - 1}대";
     }
     return info;
   }
@@ -922,10 +890,10 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
 
         final nearestStop = _getNearestStopName(stops);
         final upboundCount = currentArrivals
-            .where((a) => a.remainStops >= 0)
+            .where((a) => a.direction == BusDirection.outbound)
             .length;
         final downboundCount = currentArrivals
-            .where((a) => a.remainStops < 0)
+            .where((a) => a.direction == BusDirection.inbound)
             .length;
 
         return Container(
