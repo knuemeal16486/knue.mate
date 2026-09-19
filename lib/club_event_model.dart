@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// 행사 종류. 카드에 붙는 딱지이고 목록에서 걸러내는 기준이 된다.
@@ -90,6 +92,22 @@ class ClubEvent {
     }
     if (a.isFeatured != b.isFeatured) return a.isFeatured ? -1 : 1;
     return a.title.compareTo(b.title);
+  }
+
+  /// 앱 종료 팝업에 보여줄 행사 하나를 고른다. 맨 위 것만 매번 보여주면
+  /// 뒤로가기를 여러 번 누르는 사람 눈엔 항상 같은 행사만 보인다 —
+  /// 진행중인 것 중 상위 [topN]개(정렬은 [compareForList] 기준으로 이미
+  /// 돼 있다고 가정) 안에서 무작위로 하나 골라 노출을 나눠준다. [random]은
+  /// 테스트에서 결과를 고정하려고 주입하는 용도.
+  static ClubEvent? pickForExitPromo(
+    List<ClubEvent> sortedOngoing, {
+    int topN = 3,
+    math.Random? random,
+  }) {
+    if (sortedOngoing.isEmpty) return null;
+    final top = sortedOngoing.take(topN).toList();
+    final r = random ?? math.Random();
+    return top[r.nextInt(top.length)];
   }
 
   /// 캐시용 JSON (SharedPreferences 저장). DateTime → ISO8601.

@@ -1,8 +1,11 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:knue_mate/club_event_model.dart';
 
 void main() {
   _categoryAndOrderTests();
+  _exitPromoPickTests();
 
   test('ClubEvent JSON 왕복 직렬화', () {
     final e = ClubEvent(
@@ -149,6 +152,62 @@ void _categoryAndOrderTests() {
         ev('추천', DateTime(2026, 5, 25), featured: true),
       ]..sort((a, b) => ClubEvent.compareForList(a, b, now));
       expect(list.first.title, '추천');
+    });
+  });
+}
+
+// ── 앱 종료 팝업에 보여줄 행사 고르기 ──────────────────────────────────
+void _exitPromoPickTests() {
+  group('pickForExitPromo', () {
+    test('진행중인 행사가 없으면 null', () {
+      expect(ClubEvent.pickForExitPromo(const []), isNull);
+    });
+
+    test('1~2개뿐이면 그중에서만 고른다', () {
+      final list = [ev('하나', DateTime(2026, 5, 1))];
+      expect(
+        ClubEvent.pickForExitPromo(list, random: Random(0))?.title,
+        '하나',
+      );
+    });
+
+    test('상위 3개를 넘는 행사는 절대 뽑히지 않는다', () {
+      final list = [
+        ev('1등', DateTime(2026, 5, 1)),
+        ev('2등', DateTime(2026, 5, 2)),
+        ev('3등', DateTime(2026, 5, 3)),
+        ev('4등', DateTime(2026, 5, 4)),
+        ev('5등', DateTime(2026, 5, 5)),
+      ];
+      // 시드를 바꿔가며 여러 번 뽑아도 4등·5등은 절대 나오면 안 된다.
+      for (var seed = 0; seed < 30; seed++) {
+        final picked = ClubEvent.pickForExitPromo(list, random: Random(seed));
+        expect(['1등', '2등', '3등'], contains(picked?.title));
+      }
+    });
+
+    test('같은 시드는 같은 결과 — 결정적이다', () {
+      final list = [
+        ev('1등', DateTime(2026, 5, 1)),
+        ev('2등', DateTime(2026, 5, 2)),
+        ev('3등', DateTime(2026, 5, 3)),
+      ];
+      final a = ClubEvent.pickForExitPromo(list, random: Random(7));
+      final b = ClubEvent.pickForExitPromo(list, random: Random(7));
+      expect(a?.title, b?.title);
+    });
+
+    test('충분히 반복하면 상위 3개가 골고루 뽑힌다', () {
+      final list = [
+        ev('1등', DateTime(2026, 5, 1)),
+        ev('2등', DateTime(2026, 5, 2)),
+        ev('3등', DateTime(2026, 5, 3)),
+      ];
+      final seen = <String>{};
+      for (var seed = 0; seed < 30; seed++) {
+        seen.add(ClubEvent.pickForExitPromo(list, random: Random(seed))!.title);
+      }
+      expect(seen, {'1등', '2등', '3등'});
     });
   });
 }

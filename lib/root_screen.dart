@@ -170,7 +170,7 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
       final events = await ClubEventService.fetchAll();
       final ongoing = events.where((e) => e.isOngoing(now)).toList()
         ..sort((a, b) => ClubEvent.compareForList(a, b, now));
-      return ongoing.isEmpty ? null : ongoing.first;
+      return ClubEvent.pickForExitPromo(ongoing);
     } catch (_) {
       return null;
     }
