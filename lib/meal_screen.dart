@@ -1638,6 +1638,12 @@ class _SettingsPageState extends State<SettingsPage> {
                             const Divider(height: 1),
                             const SizedBox(height: 8),
                             _RainbowModeTile(isOn: rainbowOn),
+                            const SizedBox(height: 4),
+                            const Divider(height: 1),
+                            const SizedBox(height: 8),
+                            // 무지개 모드가 켜져 있으면 색을 매일 자동으로
+                            // 덮어쓰므로, 뽑아봐야 소용이 없어 같이 잠근다.
+                            _RandomColorTile(disabled: rainbowOn),
                           ],
                         ),
                       ),
@@ -2671,6 +2677,84 @@ class _RainbowModeTile extends StatelessWidget {
     showToast(context, "광고를 보면 무지개 모드가 켜져요 🌈");
     await RewardedAdService.show(
       onEarned: () => PreferencesService.setRainbowMode(true),
+      onUnavailable: () {
+        if (context.mounted) {
+          showToast(context, "지금은 광고를 불러올 수 없어요. 잠시 후 다시 시도해주세요.");
+        }
+      },
+    );
+  }
+}
+
+/// 광고를 끝까지 보면 테마 색을 무작위로 하나 뽑아 적용한다.
+/// 팔레트를 훑어보기 귀찮은 사람을 위한 "아무거나 골라줘" 버튼.
+class _RandomColorTile extends StatelessWidget {
+  /// 무지개 모드가 켜져 있으면 색이 매일 자동으로 덮어써지므로 잠근다.
+  final bool disabled;
+  const _RandomColorTile({required this.disabled});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Opacity(
+      opacity: disabled ? 0.4 : 1.0,
+      child: IgnorePointer(
+        ignoring: disabled,
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: themeColor.value.withValues(alpha: isDark ? 0.22 : 0.12),
+              ),
+              child: Icon(
+                Icons.casino_rounded,
+                size: 19,
+                color: themeColor.value,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "랜덤 테마 색",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    disabled ? "무지개 모드를 끄면 쓸 수 있어요" : "광고 보고 색 하나 뽑기",
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark ? Colors.white54 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () => _roll(context),
+              child: const Text("뽑기"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _roll(BuildContext context) async {
+    showToast(context, "광고를 보면 색이 바뀌어요 🎲");
+    await RewardedAdService.show(
+      onEarned: () async {
+        // 지금 색은 후보에서 빠지므로 광고를 보고도 그대로인 일은 없다.
+        final picked = pickRandomThemeColor(themeColor.value);
+        themeColor.value = picked;
+        await PreferencesService.saveThemeColor(picked);
+        if (context.mounted) showToast(context, "새 테마 색이 적용됐어요 🎨");
+      },
       onUnavailable: () {
         if (context.mounted) {
           showToast(context, "지금은 광고를 불러올 수 없어요. 잠시 후 다시 시도해주세요.");

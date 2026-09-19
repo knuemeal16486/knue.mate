@@ -4,21 +4,20 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// 보상형 광고(무지개 모드 잠금 해제용) 로딩·표시를 한 곳에서 관리한다.
+/// 보상형 광고 로딩·표시를 한 곳에서 관리한다.
+/// 무지개 모드 잠금 해제와 랜덤 테마 색 뽑기가 같은 광고 단위를 쓴다.
 ///
 /// 미리 하나를 불러와 캐싱해두고, 실제로 보여줄 때는 그 캐시를 즉시 쓴다 —
 /// 사용자가 스위치를 누른 순간 로딩 스피너를 오래 보게 하지 않기 위해서다.
 /// 캐시가 없으면(아직 안 불러졌거나 막 하나 써버렸으면) 그 자리에서 새로
 /// 불러오되, 너무 오래 걸리면(8초) 광고 없이 실패로 처리한다.
 ///
-/// ⚠️ 아래 real ID는 AdMob 콘솔에서 "보상형" 광고 단위를 새로 만든 뒤
-/// 넣어야 한다(네이티브 광고 단위를 만들 때와 같은 절차). 아직 안 만들어서
-/// 지금은 테스트 ID로 대체돼 있다 — 실제 배포 전에 채워 넣을 것.
 class RewardedAdService {
   RewardedAdService._();
 
-  static const String _androidRealId = 'REPLACE_ME_ANDROID_REWARDED_UNIT_ID';
-  static const String _iosRealId = 'REPLACE_ME_IOS_REWARDED_UNIT_ID';
+  static const String _androidRealId =
+      'ca-app-pub-8400037761673359/5991705303';
+  static const String _iosRealId = 'ca-app-pub-8400037761673359/4422168102';
 
   // Google 공식 테스트용 보상형 광고 단위. 출처: developers.google.com/admob/*/test-ads
   static const String _androidTestId =
@@ -32,11 +31,9 @@ class RewardedAdService {
     if (!_isSupportedPlatform) return null;
     final realId = Platform.isAndroid ? _androidRealId : _iosRealId;
     final testId = Platform.isAndroid ? _androidTestId : _iosTestId;
-    // real ID를 아직 안 채워 넣었으면(placeholder 그대로면) 릴리스에서도
-    // 테스트 ID로 대체한다 — 빈 문자열이나 placeholder로 요청을 보내
-    // 광고가 통째로 안 뜨는 것보다는, 테스트 광고라도 뜨는 편이 낫다.
-    final useReal = kReleaseMode && !realId.startsWith('REPLACE_ME');
-    return useReal ? realId : testId;
+    // 개발 빌드는 항상 테스트 ID. 실제 광고 단위로 개발 중에 계속 광고를
+    // 띄우면 무효 트래픽으로 잡혀 AdMob 계정이 정지될 수 있다.
+    return kReleaseMode ? realId : testId;
   }
 
   static RewardedAd? _cached;
