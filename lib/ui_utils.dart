@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'constants.dart';
 
 /// 누르면 살짝 작아졌다가 돌아오는(Scale-down) 마이크로 인터랙션을 제공하는 래퍼 위젯.
@@ -171,6 +172,14 @@ class AppleAppBarFlexibleSpace extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 class KnueTokens {
   KnueTokens._();
+
+  /// 앱 기본 글꼴 패밀리 이름.
+  ///
+  /// 위젯은 테마(textTheme)에서 글꼴을 물려받지만, **Canvas에 직접 그리는
+  /// 글자(TextPainter)는 테마를 안 탄다** — 지정 안 하면 그 부분만 기본
+  /// 글씨체(Roboto)로 나온다. 지도 라벨처럼 직접 그리는 곳은 이 값을 쓴다.
+  /// GoogleFonts가 런타임에 등록한 패밀리 이름을 그대로 가져온다.
+  static String? get fontFamily => GoogleFonts.notoSansKr().fontFamily;
 
   /// 보조색(웜 앰버). 시간 긴급 신호 전용.
   static const Color warmLight = Color(0xFFD97706);

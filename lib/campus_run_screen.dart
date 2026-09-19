@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart';
+import 'ui_utils.dart';
 
 const String _kFavoriteClassroomsKey = 'campus_run_favorite_names';
 
@@ -625,7 +626,10 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                           fontSize: 64,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -2.0,
-                          fontFamily: 'Roboto',
+                          // 예전엔 숫자 폭을 고정하려고 fontFamily: 'Roboto'를
+                          // 박아놨는데, 그 바람에 이 화면만 기본 글씨체였다.
+                          // 앱 폰트를 그대로 쓰고 폭 고정은 tabular figures로.
+                          fontFeatures: KnueTokens.tabularFigures,
                         ),
                       ),
                     );

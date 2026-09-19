@@ -58,6 +58,14 @@ class StartupErrorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      // 이 화면은 앱 테마가 만들어지기 전에 뜨므로 폰트를 직접 지정해야 한다.
+      // 안 그러면 여기만 기본(Roboto) 글씨로 나온다.
+      theme: ThemeData(
+        useMaterial3: true,
+        textTheme: GoogleFonts.notoSansKrTextTheme(
+          ThemeData(brightness: Brightness.light).textTheme,
+        ),
+      ),
       home: Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
@@ -107,10 +115,18 @@ void main() async {
 
   try {
     runApp(
-      const MaterialApp(
+      MaterialApp(
         debugShowCheckedModeBanner: false,
+        // 부팅 화면도 앱 폰트로 — 테마 없이 띄우면 이 짧은 순간만 기본
+        // 글씨체로 나와서 첫인상이 어긋난다.
+        theme: ThemeData(
+          useMaterial3: true,
+          textTheme: GoogleFonts.notoSansKrTextTheme(
+            ThemeData(brightness: Brightness.light).textTheme,
+          ),
+        ),
         builder: _buildLoadingScreen,
-        home: Scaffold(backgroundColor: Colors.white),
+        home: const Scaffold(backgroundColor: Colors.white),
       ),
     );
 
@@ -351,6 +367,56 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  /// 팝업(다이얼로그·바텀시트) 공통 모양.
+  ///
+  /// 화면마다 손으로 만든 팝업이 제각각이라 모서리 반경·배경색·버튼 모양이
+  /// 다 달랐다. 여기서 한 번 정해두면 기본 AlertDialog/showModalBottomSheet를
+  /// 쓰는 곳은 호출부를 안 고쳐도 같은 모양으로 맞춰진다.
+  DialogThemeData _dialogTheme(bool isDark) => DialogThemeData(
+    backgroundColor: KnueTokens.surface(isDark),
+    surfaceTintColor: Colors.transparent,
+    elevation: 12,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    titleTextStyle: GoogleFonts.notoSansKr(
+      fontSize: 17,
+      fontWeight: FontWeight.w800,
+      letterSpacing: -0.4,
+      color: isDark ? Colors.white : Colors.black87,
+    ),
+    contentTextStyle: GoogleFonts.notoSansKr(
+      fontSize: 13.5,
+      height: 1.5,
+      letterSpacing: -0.2,
+      color: isDark ? Colors.white70 : Colors.black87,
+    ),
+  );
+
+  BottomSheetThemeData _bottomSheetTheme(bool isDark) => BottomSheetThemeData(
+    backgroundColor: KnueTokens.surface(isDark),
+    surfaceTintColor: Colors.transparent,
+    elevation: 12,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    showDragHandle: true,
+    dragHandleColor: isDark ? Colors.white24 : Colors.black26,
+  );
+
+  /// 팝업 하단 버튼. 기본 TextButton은 글씨가 얇고 터치 영역이 들쭉날쭉해서
+  /// "취소/확인"이 본문보다 눈에 덜 들어왔다.
+  TextButtonThemeData _textButtonTheme(Color seed) => TextButtonThemeData(
+    style: TextButton.styleFrom(
+      foregroundColor: seed,
+      textStyle: GoogleFonts.notoSansKr(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
@@ -401,6 +467,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     shadows: KnueTokens.headerTextShadow,
                   ),
                 ),
+                dialogTheme: _dialogTheme(false),
+                bottomSheetTheme: _bottomSheetTheme(false),
+                textButtonTheme: _textButtonTheme(color),
               ),
               darkTheme: ThemeData(
                 useMaterial3: true,
@@ -442,6 +511,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     shadows: KnueTokens.headerTextShadow,
                   ),
                 ),
+                dialogTheme: _dialogTheme(true),
+                bottomSheetTheme: _bottomSheetTheme(true),
+                textButtonTheme: _textButtonTheme(color),
               ),
               themeMode: mode,
               home: RootNavigationScreen(key: RootNavigationScreen.navKey),

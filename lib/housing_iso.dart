@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'ui_utils.dart' show KnueTokens;
+
 
 /// 건물 용도 — 지붕 색이 여기서 갈린다.
 ///
@@ -921,6 +923,8 @@ IsoBuilding buildIso(
           fontSize: highlighted ? 10.5 : 9.0,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.2,
+          // Canvas 텍스트는 테마를 안 타서 지정 안 하면 여기만 기본 글씨체가 된다.
+          fontFamily: KnueTokens.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -1651,11 +1655,12 @@ class HousingMapPainter extends CustomPainter {
         () => TextPainter(
           text: TextSpan(
             text: st[1] as String,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
               fontSize: 6.5,
               fontWeight: FontWeight.w900,
               height: 1.0,
+              fontFamily: KnueTokens.fontFamily,
             ),
           ),
           textDirection: TextDirection.ltr,
@@ -1691,6 +1696,7 @@ class HousingMapPainter extends CustomPainter {
               fontSize: 8.5,
               fontWeight: FontWeight.w800,
               height: 1.0,
+              fontFamily: KnueTokens.fontFamily,
             ),
           ),
           textDirection: TextDirection.ltr,
