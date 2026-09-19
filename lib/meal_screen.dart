@@ -1606,18 +1606,31 @@ class _SettingsPageState extends State<SettingsPage> {
                               opacity: rainbowOn ? 0.4 : 1.0,
                               child: IgnorePointer(
                                 ignoring: rainbowOn,
-                                child: Wrap(
-                                  spacing: 12,
-                                  runSpacing: 12,
-                                  children: kColorPalette
-                                      .map(
-                                        (c) => _ColorPickerItem(
-                                          color: c,
-                                          isSelected: !rainbowOn &&
-                                              c.value == currentColor.value,
-                                        ),
-                                      )
-                                      .toList(),
+                                // Wrap은 한 줄에 몇 개가 들어가는지가 스와치
+                                // 폭(고정 40)으로만 정해져서, 5개를 채우고 남는
+                                // 자투리 폭이 전부 오른쪽 끝 빈 공간으로 남았다.
+                                // GridView는 5열로 폭을 균등하게 나눠 쓰므로
+                                // 그 여백이 스와치 사이 간격으로 흡수된다.
+                                child: GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  gridDelegate:
+                                      const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 5,
+                                    mainAxisSpacing: 12,
+                                    crossAxisSpacing: 12,
+                                  ),
+                                  itemCount: kColorPalette.length,
+                                  itemBuilder: (context, i) {
+                                    final c = kColorPalette[i];
+                                    return Center(
+                                      child: _ColorPickerItem(
+                                        color: c,
+                                        isSelected: !rainbowOn &&
+                                            c.value == currentColor.value,
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ),
