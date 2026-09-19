@@ -62,6 +62,22 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ── 자취방 건물 정보 관리자 덮어쓰기 ───────────────────────
+    // 건물 이름·구역은 기본적으로 학생 제보 다수결로 정해지는데,
+    // 관리자가 housing_admin_screen.dart에서 바로잡은 값이 여기 저장된다.
+    match /housing_building_overrides/{doc} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // ── 캠퍼스맵 관리자 위치 ────────────────────────────────────
+    // club_events와 같은 사정 — 앱 내 비밀번호 게이트로만 보호되는
+    // 무인증 write. 개발자 모드에서 지도를 길게 눌러 추가/삭제한다.
+    match /admin_map_facilities/{doc} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // 그 외 경로는 명시하지 않아 기본 거부(default-deny).
   }
 }

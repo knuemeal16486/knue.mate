@@ -17,6 +17,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:screenshot/screenshot.dart';
 import 'constants.dart';
 import 'admin_staff_data.dart';
+import 'club_event_service.dart' show ClubEventService;
+import 'map_facility_service.dart';
 import 'staff_contacts_screen.dart';
 import 'ui_utils.dart';
 
@@ -157,11 +159,16 @@ class MapFacility {
   final FacilityType type;
   final LatLng position;
   final String? detail;
+
+  /// null이 아니면 개발자 모드로 추가된 위치([AdminMapFacility]의 Firestore
+  /// 문서 id) — 코드에 박힌 [kFacilities]와 구분해 삭제 버튼을 보여줄 때 쓴다.
+  final String? adminId;
   const MapFacility({
     required this.name,
     required this.type,
     required this.position,
     this.detail,
+    this.adminId,
   });
 }
 
@@ -428,6 +435,10 @@ class _CampusMapScreenState extends State<CampusMapScreen>
   final Set<int> _hiddenBuildingIdx = {};
   final Set<int> _hiddenFacilityIdx = {};
 
+  // ── 개발자 모드: 지도에 위치 찍기/삭제 (Firestore, 전체 사용자 공유) ──
+  bool _devMode = false;
+  List<AdminMapFacility> _adminFacilities = [];
+
   // 날씨
   String? _weatherTemp;
   String? _weatherIcon;
@@ -493,6 +504,7 @@ class _CampusMapScreenState extends State<CampusMapScreen>
     _loadFavoritesAndCategories();
     _startLocationTracking();
     _fetchWeather();
+    _loadAdminFacilities();
     // 첫 프레임 뒤에 안내 — 기능이 7개 탭에 흩어져 있어 아무도 모른다는 문제 보완.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -507,6 +519,275 @@ class _CampusMapScreenState extends State<CampusMapScreen>
 
   void _onBuildingsUpdated() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _loadAdminFacilities() async {
+    final list = await MapFacilityService.fetchAll();
+    if (mounted) setState(() => _adminFacilities = list);
+  }
+
+  FacilityType _facilityTypeFromKey(String key) {
+    for (final t in FacilityType.values) {
+      if (t.name == key) return t;
+    }
+    return FacilityType.department;
+  }
+
+  /// 개발자 모드 켜기. club_events·자취방 관리 화면과 같은 공유 비밀번호로
+  /// 잠근다 — 화면을 옮기지 않고 이 화면 안에서 바로 지도를 길게 눌러
+  /// 찍을 수 있어야 하므로, 별도 관리 화면 대신 비밀번호만 여기서 확인한다.
+  Future<void> _toggleDevMode(bool isDark) async {
+    if (_devMode) {
+      setState(() => _devMode = false);
+      return;
+    }
+    final password = await ClubEventService.fetchAdminPassword();
+    if (!mounted) return;
+    if (password == null) {
+      showToast(context, "관리자 설정이 없습니다");
+      return;
+    }
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("개발자 모드"),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: "비밀번호"),
+          onSubmitted: (_) => Navigator.pop(dialogContext, true),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text("취소"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text("확인"),
+          ),
+        ],
+      ),
+    );
+    final matched = ok == true && controller.text == password;
+    controller.dispose();
+    if (!mounted) return;
+    if (matched) {
+      setState(() => _devMode = true);
+      showToast(context, "개발자 모드 켜짐 — 지도를 길게 눌러 위치를 추가하세요");
+    } else if (ok == true) {
+      showToast(context, "비밀번호가 일치하지 않습니다");
+    }
+  }
+
+  /// 지도를 길게 눌렀을 때 새 위치를 등록하는 폼.
+  Future<void> _showAddFacilityDialog(LatLng point, bool isDark) async {
+    final nameCtrl = TextEditingController();
+    final detailCtrl = TextEditingController();
+    FacilityType selected = FacilityType.restaurant;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text("새 위치 추가"),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: "이름"),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<FacilityType>(
+                  initialValue: selected,
+                  decoration: const InputDecoration(labelText: "종류"),
+                  isExpanded: true,
+                  items: FacilityType.values
+                      .map((t) => DropdownMenuItem(
+                            value: t,
+                            child: Text('${t.label} (${t.category})'),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => selected = v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: detailCtrl,
+                  decoration: const InputDecoration(labelText: "설명 (선택, 예: 09:00~18:00)"),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text("취소"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text("추가"),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final name = nameCtrl.text.trim();
+    final detail = detailCtrl.text.trim();
+    nameCtrl.dispose();
+    detailCtrl.dispose();
+    if (saved != true || name.isEmpty) return;
+
+    try {
+      await MapFacilityService.add(
+        name: name,
+        typeKey: selected.name,
+        lat: point.latitude,
+        lng: point.longitude,
+        detail: detail.isEmpty ? null : detail,
+      );
+      await _loadAdminFacilities();
+      if (mounted) showToast(context, "위치를 추가했습니다");
+    } catch (e) {
+      if (mounted) showToast(context, "추가 실패");
+    }
+  }
+
+  Future<void> _confirmDeleteAdminFacility(AdminMapFacility f) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("위치 삭제"),
+        content: Text("'${f.name}'을(를) 삭제하시겠습니까? 모든 사용자에게서 사라집니다."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text("취소"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text("삭제", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await MapFacilityService.delete(f.id);
+      await _loadAdminFacilities();
+      if (mounted) showToast(context, "삭제되었습니다");
+    } catch (e) {
+      if (mounted) showToast(context, "삭제 실패");
+    }
+  }
+
+  /// 개발자 모드로 추가한 위치의 상세 시트. 기존 kFacilities용
+  /// _showFacilityDetail과는 별도로 둔다 — 그쪽은 이미 이름 바꾸기 등
+  /// 복잡한 로직이 얽혀 있어, 삭제 버튼 하나 추가하려고 건드리면
+  /// 회귀 위험이 크다.
+  void _showAdminFacilityDetail(AdminMapFacility f, bool isDark) {
+    final type = _facilityTypeFromKey(f.typeKey);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: type.color,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(type.icon, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        f.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        type.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (f.detail != null && f.detail!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                f.detail!,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+              ),
+            ],
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: isDark ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                "개발자 모드로 추가된 위치",
+                style: TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.w600),
+              ),
+            ),
+            if (_devMode) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _confirmDeleteAdminFacility(f);
+                  },
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  label: const Text("이 위치 삭제", style: TextStyle(color: Colors.red)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _loadFavoritesAndCategories() async {
@@ -843,6 +1124,18 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                         activeColor: primary,
                         onTap: () => _showFeatureGuide(primary, isDark),
                       ),
+                      // 숨은 개발자 모드 진입로 — 일반 사용자 눈에 띄지 않게
+                      // 다른 관리 화면들처럼 숨겨두는 대신, 지도 조작과
+                      // 묶여 있어야 해서 여기 아이콘으로 남긴다.
+                      _TopBarBtn(
+                        icon: _devMode
+                            ? Icons.build_circle_rounded
+                            : Icons.build_circle_outlined,
+                        active: _devMode,
+                        isDark: isDark,
+                        activeColor: Colors.redAccent,
+                        onTap: () => _toggleDevMode(isDark),
+                      ),
                     ],
                   ),
                 ),
@@ -1163,7 +1456,17 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         .where((i) => !_hiddenFacilityIdx.contains(i))
         .map((i) => kFacilities[i])
         .toList();
-    final filtered = orderedFacilities
+    // 개발자 모드로 찍은 위치도 같은 필터(카테고리 켜짐·줌 레벨)를 그대로 따른다.
+    final adminAsFacilities = _adminFacilities.map(
+      (a) => MapFacility(
+        name: a.name,
+        type: _facilityTypeFromKey(a.typeKey),
+        position: LatLng(a.lat, a.lng),
+        detail: a.detail,
+        adminId: a.id,
+      ),
+    );
+    final filtered = [...orderedFacilities, ...adminAsFacilities]
         .where(
           (f) =>
               _activeFilters.contains(f.type) && _currentZoom >= f.type.minZoom,
@@ -1181,6 +1484,9 @@ class _CampusMapScreenState extends State<CampusMapScreen>
             maxZoom: 19.0,
             onTap: _trailMode
                 ? (tap, pt) => setState(() => _trailPoints.add(pt))
+                : null,
+            onLongPress: _devMode
+                ? (tap, pt) => _showAddFacilityDialog(pt, isDark)
                 : null,
             onMapEvent: (e) {
               if (e is MapEventMove) {
@@ -1286,7 +1592,13 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                         width: 34,
                         height: 34,
                         child: GestureDetector(
-                          onTap: () => _showFacilityDetail(f),
+                          onTap: () => f.adminId != null
+                              ? _showAdminFacilityDetail(
+                                  _adminFacilities
+                                      .firstWhere((a) => a.id == f.adminId),
+                                  isDark,
+                                )
+                              : _showFacilityDetail(f),
                           child: _FacilityPin(type: f.type),
                         ),
                       ),
