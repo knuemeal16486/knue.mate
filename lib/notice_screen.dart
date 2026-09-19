@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -278,7 +276,6 @@ class _NoticeScreenState extends State<NoticeScreen>
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
           appBar: AppBar(
-            centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
             title: const Text("청람공지"),
             backgroundColor: Colors.transparent,
             flexibleSpace: AppleAppBarFlexibleSpace(
@@ -623,13 +620,17 @@ class _NoticeScreenState extends State<NoticeScreen>
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: list.length,
-        itemBuilder: (context, index) =>
-            _buildNoticeCard(list[index], color, isDark),
+        itemBuilder: (context, index) => _buildNoticeCard(list[index], isDark),
       ),
     );
   }
 
-  Widget _buildNoticeCard(Notice notice, Color color, bool isDark) {
+  Widget _buildNoticeCard(Notice notice, bool isDark) {
+    // 딱지는 테마색이 아니라 **게시판마다 고정된 색**을 쓴다. 전부 같은
+    // 색이면 목록을 훑을 때 어느 게시판 글인지 제목을 읽어야만 알 수 있다.
+    // 주요 게시판은 손으로 지정된 색, 학과 게시판은 이름 해시라 게시판이
+    // 늘어나도 손볼 필요가 없다(KnueTokens.categoryColor).
+    final color = KnueTokens.categoryColor(notice.category, isDark);
     return GestureDetector(
       onTap: () => _openNotice(notice),
       child: Container(

@@ -460,6 +460,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   foregroundColor: Colors.white,
                   elevation: 0,
                   scrolledUnderElevation: 0,
+                  // iOS는 AppBar 제목을 가운데로 보내는 게 기본이라, 화면마다
+                  // 따로 끄던 것을 여기서 한 번에 끈다(안 끈 화면이 8개 있었다).
+                  centerTitle: false,
                   titleTextStyle: GoogleFonts.notoSansKr(
                     color: Colors.white,
                     fontSize: 20,
@@ -504,6 +507,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   foregroundColor: Colors.white,
                   elevation: 0,
                   scrolledUnderElevation: 0,
+                  centerTitle: false,
                   titleTextStyle: GoogleFonts.notoSansKr(
                     color: Colors.white,
                     fontSize: 20,

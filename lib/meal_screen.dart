@@ -1009,7 +1009,6 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
           themeColor: primaryColor,
           isDark: Theme.of(context).brightness == Brightness.dark,
         ),
-        centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
           "월간 식단",
@@ -1485,8 +1484,12 @@ class _SettingsPageState extends State<SettingsPage> {
             expandedHeight: 80,
             pinned: true,
             backgroundColor: currentColor,
-            centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
             flexibleSpace: FlexibleSpaceBar(
+              // FlexibleSpaceBar는 제목 정렬을 자기가 따로 정한다 —
+              // SliverAppBar.centerTitle도, AppBarTheme.centerTitle도 안 보고
+              // theme.platform만 본다. iOS면 무조건 가운데로 가기 때문에
+              // 여기서 직접 꺼야 다른 탭처럼 왼쪽에 붙는다.
+              centerTitle: false,
               title: Text(
                 "설정",
                 style: TextStyle(
@@ -2263,7 +2266,6 @@ class DeveloperInfoPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: primary,
-        centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
         title: Text(
           "개발자 정보",
           style: TextStyle(

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -351,7 +350,6 @@ class _BusAppScreenState extends State<BusAppScreen>
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
           appBar: AppBar(
-            centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
             title: const Text("청람버스"),
             backgroundColor: Colors.transparent,
             flexibleSpace: AppleAppBarFlexibleSpace(

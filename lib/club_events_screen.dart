@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -114,7 +112,6 @@ class _ClubEventsScreenState extends State<ClubEventsScreen> {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
           appBar: AppBar(
-            centerTitle: (!kIsWeb && Platform.isIOS) ? false : null,
             title: const Text("공연·행사"),
             backgroundColor: Colors.transparent,
             flexibleSpace: AppleAppBarFlexibleSpace(
