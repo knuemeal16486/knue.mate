@@ -179,7 +179,10 @@ class BusCard extends StatelessWidget {
         etaText = "도착 예정";
       }
     } else if (hasInfo && !isUpbound) {
-      etaText = best.statusText;
+      // best.statusText는 하행일 때 "현재 위치: <정류장명>"처럼 길어질 수 있다.
+      // 그 내용은 바로 아래 remainText가 이미 "현재: ${currentStopName}"로
+      // 보여주므로, 여기 상단 배지에는 짧은 라벨만 쓴다.
+      etaText = "하행 운행 중";
     }
 
     return Semantics(
@@ -286,54 +289,61 @@ class BusCard extends StatelessWidget {
                     },
                   ),
                   if (hasInfo && etaText.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: !isUpbound
-                            ? (isDark
-                                  ? Colors.white10
-                                  : Colors.grey.withOpacity(0.1))
-                            : (isArrived
-                                  ? Colors.red.withOpacity(0.15)
-                                  : (isDark
-                                        ? Colors.blueAccent.withOpacity(0.2)
-                                        : Colors.blue.withOpacity(0.1))),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            !isUpbound
-                                ? Icons.arrow_forward
-                                : Icons.access_time_filled,
-                            size: 13,
-                            color: !isUpbound
-                                ? Colors.grey
-                                : (isArrived
-                                      ? Colors.redAccent
-                                      : (isDark
-                                            ? Colors.blueAccent
-                                            : Colors.blue)),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            etaText,
-                            style: TextStyle(
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: !isUpbound
+                              ? (isDark
+                                    ? Colors.white10
+                                    : Colors.grey.withOpacity(0.1))
+                              : (isArrived
+                                    ? Colors.red.withOpacity(0.15)
+                                    : (isDark
+                                          ? Colors.blueAccent.withOpacity(0.2)
+                                          : Colors.blue.withOpacity(0.1))),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              !isUpbound
+                                  ? Icons.arrow_forward
+                                  : Icons.access_time_filled,
+                              size: 13,
                               color: !isUpbound
                                   ? Colors.grey
                                   : (isArrived
                                         ? Colors.redAccent
                                         : (isDark
                                               ? Colors.blueAccent
-                                              : Colors.blue[700])),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
+                                              : Colors.blue)),
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                etaText,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  color: !isUpbound
+                                      ? Colors.grey
+                                      : (isArrived
+                                            ? Colors.redAccent
+                                            : (isDark
+                                                  ? Colors.blueAccent
+                                                  : Colors.blue[700])),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                 ],
