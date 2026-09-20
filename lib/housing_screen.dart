@@ -876,6 +876,7 @@ class _HousingScreenState extends State<HousingScreen>
         building: b,
         summary: _summaries[b.id] ?? HousingSummary.empty,
         known: _resolvedKnown(b.id),
+        edited: _overrides[b.id],
         isDark: isDark,
         onReported: () async {
           final s = await HousingService.fetchSummaries();
@@ -1277,6 +1278,11 @@ class _DetailSheet extends StatefulWidget {
   final BaseBuilding building;
   final HousingSummary summary;
   final OneRoomName? known;
+
+  /// 관리자가 고친 값. 주소·층수·세대수는 건축물대장보다 이쪽이 우선이다.
+  /// (집주인 연락처는 여기 있어도 화면에 띄우지 않는다 — 개인정보다.)
+  /// `override`라고 이름 붙이면 `@override` 어노테이션과 부딪힌다.
+  final HousingBuildingOverride? edited;
   final bool isDark;
   final Future<void> Function() onReported;
 
@@ -1284,6 +1290,7 @@ class _DetailSheet extends StatefulWidget {
     required this.building,
     required this.summary,
     required this.known,
+    required this.edited,
     required this.isDark,
     required this.onReported,
   });
@@ -1372,8 +1379,12 @@ class _DetailSheetState extends State<_DetailSheet> {
               const SizedBox(height: 4),
               Text(
                 [
-                  b.addressLabel,
-                  '지상 ${b.floors}층',
+                  // 관리자가 고친 값이 있으면 그게 이긴다. 대장이 틀렸거나
+                  // (신축·분할) 비어 있는 건물을 바로잡는 통로다.
+                  widget.edited?.address ?? b.addressLabel,
+                  '지상 ${widget.edited?.floors ?? b.floors}층',
+                  if (widget.edited?.unitCount != null)
+                    '${widget.edited!.unitCount}세대',
                   if (known?.builtYear != null) '${known!.builtYear}년 준공',
                   if (known?.note != null) known!.note!,
                 ].join(' · '),

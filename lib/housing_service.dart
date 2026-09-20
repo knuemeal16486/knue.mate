@@ -120,19 +120,48 @@ class HousingBuildingOverride {
   final int? builtYear;
   final String? note;
 
+  /// 도로명주소. VWorld 대장 값이 틀렸거나(신축·분할) 비어 있을 때 덮어쓴다.
+  /// 비워두면 대장 값을 그대로 쓴다.
+  final String? address;
+
+  /// 집주인·관리인 연락처. **공개 화면에는 띄우지 않는다** — 개인정보이고,
+  /// 동의 없이 앱에 뿌리면 곤란해진다. 관리자 화면에서만 보인다.
+  final String? landlordName;
+  final String? landlordPhone;
+
+  /// 관리자가 아는 실제 층수·세대수. 대장 값이 틀린 건물이 있다.
+  final int? floors;
+  final int? unitCount;
+
   const HousingBuildingOverride({
     required this.buildingId,
     required this.name,
     required this.zone,
     this.builtYear,
     this.note,
+    this.address,
+    this.landlordName,
+    this.landlordPhone,
+    this.floors,
+    this.unitCount,
   });
+
+  static String? _clean(String? v) {
+    final t = v?.trim();
+    return (t == null || t.isEmpty) ? null : t;
+  }
 
   Map<String, dynamic> toFirestore() => {
         'name': name,
         'zone': zone.name,
         if (builtYear != null) 'builtYear': builtYear,
-        if (note != null && note!.isNotEmpty) 'note': note,
+        if (_clean(note) != null) 'note': _clean(note),
+        if (_clean(address) != null) 'address': _clean(address),
+        if (_clean(landlordName) != null) 'landlordName': _clean(landlordName),
+        if (_clean(landlordPhone) != null)
+          'landlordPhone': _clean(landlordPhone),
+        if (floors != null) 'floors': floors,
+        if (unitCount != null) 'unitCount': unitCount,
       };
 
   static HousingBuildingOverride? fromMap(String buildingId, Map<String, dynamic> d) {
@@ -152,8 +181,37 @@ class HousingBuildingOverride {
       zone: zone,
       builtYear: (d['builtYear'] as num?)?.toInt(),
       note: d['note'] as String?,
+      address: d['address'] as String?,
+      landlordName: d['landlordName'] as String?,
+      landlordPhone: d['landlordPhone'] as String?,
+      floors: (d['floors'] as num?)?.toInt(),
+      unitCount: (d['unitCount'] as num?)?.toInt(),
     );
   }
+
+  HousingBuildingOverride copyWith({
+    String? name,
+    HousingZone? zone,
+    int? builtYear,
+    String? note,
+    String? address,
+    String? landlordName,
+    String? landlordPhone,
+    int? floors,
+    int? unitCount,
+  }) =>
+      HousingBuildingOverride(
+        buildingId: buildingId,
+        name: name ?? this.name,
+        zone: zone ?? this.zone,
+        builtYear: builtYear ?? this.builtYear,
+        note: note ?? this.note,
+        address: address ?? this.address,
+        landlordName: landlordName ?? this.landlordName,
+        landlordPhone: landlordPhone ?? this.landlordPhone,
+        floors: floors ?? this.floors,
+        unitCount: unitCount ?? this.unitCount,
+      );
 
   /// 화면 표시용으로 [OneRoomName]과 같은 모양으로 바꾼다 — 지도·검색이
   /// 제보 다수결로 정해진 이름과 덮어쓴 이름을 구분 없이 다룰 수 있게.

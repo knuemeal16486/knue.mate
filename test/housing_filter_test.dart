@@ -90,6 +90,53 @@ void main() {
     });
   });
 
+  group('HousingBuildingOverride 왕복', () {
+    test('관리자가 넣은 값이 저장했다가 읽으면 그대로 돌아온다', () {
+      const o = HousingBuildingOverride(
+        buildingId: 'b1',
+        name: '엘리트빌',
+        zone: HousingZone.aroundCu,
+        builtYear: 2015,
+        note: '1층 상가',
+        address: '월탄3길 48',
+        landlordName: '김사장',
+        landlordPhone: '010-1234-5678',
+        floors: 4,
+        unitCount: 16,
+      );
+      final back = HousingBuildingOverride.fromMap('b1', o.toFirestore());
+      expect(back, isNotNull);
+      expect(back!.name, '엘리트빌');
+      expect(back.address, '월탄3길 48');
+      expect(back.landlordName, '김사장');
+      expect(back.landlordPhone, '010-1234-5678');
+      expect(back.floors, 4);
+      expect(back.unitCount, 16);
+    });
+
+    test('빈 칸은 저장하지 않는다 — 대장 값을 덮어쓰면 안 된다', () {
+      // 폼에서 손대지 않은 칸은 빈 문자열로 온다. 그대로 저장하면
+      // "주소가 빈 문자열"이 되어 건축물대장 값을 가려버린다.
+      const o = HousingBuildingOverride(
+        buildingId: 'b1',
+        name: '이름',
+        zone: HousingZone.aroundCu,
+        address: '   ',
+        landlordName: '',
+        landlordPhone: '  ',
+      );
+      final m = o.toFirestore();
+      expect(m.containsKey('address'), isFalse);
+      expect(m.containsKey('landlordName'), isFalse);
+      expect(m.containsKey('landlordPhone'), isFalse);
+      expect(HousingBuildingOverride.fromMap('b1', m)!.address, isNull);
+    });
+
+    test('이름이 없으면 무효로 본다', () {
+      expect(HousingBuildingOverride.fromMap('b1', {'zone': 'aroundCu'}), isNull);
+    });
+  });
+
   group('housingMatchesFilter', () {
     HousingSummary sum({
       int? deposit = 500,

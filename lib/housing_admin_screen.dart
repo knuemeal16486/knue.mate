@@ -247,6 +247,9 @@ class _BuildingOverrideTabState extends State<_BuildingOverrideTab> {
         builder: (_) => _BuildingEditPage(
           building: b,
           current: _resolvedKnown(b.id),
+          // 덮어쓴 값 원본. current는 제보 다수결까지 섞인 표시용이라
+          // 연락처·주소 같은 관리자 전용 항목이 들어 있지 않다.
+          saved: _overrides[b.id],
           hasOverride: _overrides.containsKey(b.id),
         ),
       ),
@@ -337,11 +340,16 @@ class _BuildingOverrideTabState extends State<_BuildingOverrideTab> {
 class _BuildingEditPage extends StatefulWidget {
   final BaseBuilding building;
   final OneRoomName? current;
+
+  /// 이 건물에 이미 저장된 관리자 수정값. 없으면 null.
+  /// (`override`라고 이름 붙이면 `@override` 어노테이션과 부딪힌다.)
+  final HousingBuildingOverride? saved;
   final bool hasOverride;
 
   const _BuildingEditPage({
     required this.building,
     required this.current,
+    required this.saved,
     required this.hasOverride,
   });
 
@@ -353,6 +361,11 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _yearController;
   late final TextEditingController _noteController;
+  late final TextEditingController _addressController;
+  late final TextEditingController _landlordNameController;
+  late final TextEditingController _landlordPhoneController;
+  late final TextEditingController _floorsController;
+  late final TextEditingController _unitsController;
   late HousingZone _zone;
   bool _saving = false;
 
@@ -360,9 +373,18 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
   void initState() {
     super.initState();
     final c = widget.current;
+    final s = widget.saved;
     _nameController = TextEditingController(text: c?.name ?? '');
     _yearController = TextEditingController(text: c?.builtYear?.toString() ?? '');
     _noteController = TextEditingController(text: c?.note ?? '');
+    // 주소·층수는 비워두면 대장 값을 쓴다. 지금 대장 값을 미리 채워 넣으면
+    // 손대지 않았는데 덮어쓴 상태가 되므로, 빈 칸으로 두고 hint로만 보여준다.
+    _addressController = TextEditingController(text: s?.address ?? '');
+    _landlordNameController = TextEditingController(text: s?.landlordName ?? '');
+    _landlordPhoneController =
+        TextEditingController(text: s?.landlordPhone ?? '');
+    _floorsController = TextEditingController(text: s?.floors?.toString() ?? '');
+    _unitsController = TextEditingController(text: s?.unitCount?.toString() ?? '');
     _zone = c?.zone ?? HousingZone.values.first;
   }
 
@@ -371,6 +393,11 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
     _nameController.dispose();
     _yearController.dispose();
     _noteController.dispose();
+    _addressController.dispose();
+    _landlordNameController.dispose();
+    _landlordPhoneController.dispose();
+    _floorsController.dispose();
+    _unitsController.dispose();
     super.dispose();
   }
 
@@ -389,6 +416,11 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
           zone: _zone,
           builtYear: int.tryParse(_yearController.text.trim()),
           note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
+          address: _addressController.text,
+          landlordName: _landlordNameController.text,
+          landlordPhone: _landlordPhoneController.text,
+          floors: int.tryParse(_floorsController.text.trim()),
+          unitCount: int.tryParse(_unitsController.text.trim()),
         ),
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -398,6 +430,64 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
         showToast(context, "저장 실패");
       }
     }
+  }
+
+  /// 집주인 연락처. **학생에게 보이는 화면에는 절대 띄우지 않는다** —
+  /// 동의 없이 받은 개인정보를 앱에 뿌리면 곤란해진다. 여기에만 적어 두고,
+  /// 문의가 오면 관리자가 직접 연결해 준다.
+  Widget _buildLandlordSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : const Color(0xFFF6F7F9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white24 : const Color(0xFFE3E6EA),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lock_outline,
+                  size: 16, color: isDark ? Colors.white70 : Colors.black54),
+              const SizedBox(width: 6),
+              const Text(
+                "집주인 연락처",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "관리자만 봅니다. 학생 화면에는 나오지 않습니다.",
+            style: TextStyle(
+              fontSize: 11.5,
+              color: isDark ? Colors.white54 : Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _landlordNameController,
+            decoration: const InputDecoration(
+              labelText: "이름 / 호칭 (선택)",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _landlordPhoneController,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: "전화번호 (선택)",
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _clear() async {
@@ -486,6 +576,46 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _addressController,
+                  decoration: InputDecoration(
+                    labelText: "도로명주소 (선택)",
+                    // 비워두면 대장 값을 그대로 쓴다는 걸 hint로 알린다.
+                    hintText: b.addressLabel,
+                    helperText: "비워두면 건축물대장 값을 씁니다",
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _floorsController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: "층수 (선택)",
+                          hintText: '${b.floors}',
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _unitsController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: "세대수 (선택)",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                _buildLandlordSection(),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
