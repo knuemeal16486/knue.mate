@@ -68,3 +68,6 @@ android/*.keystore
 android/app/*.jks
 android/app/*.keystore
 .firebase/
+
+# 호스팅에 올리는 테스트 APK — 41MB 바이너리를 git에 넣지 않는다
+public/download/*.apk
