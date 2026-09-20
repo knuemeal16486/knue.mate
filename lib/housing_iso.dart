@@ -912,8 +912,12 @@ IsoBuilding buildIso(
 
   // 네이버 지도 스타일 핀/라벨 (White Pill + Dark Font)
   TextPainter? cachedBadge;
+  // 교내는 대장의 공식 명칭을, 교외는 호출부가 정해 준 이름([displayName])을
+  // 쓴다. 예전엔 조건에 `b.isCampus`가 걸려 있어서 **교외 건물은 이름이
+  // 있어도 이름표가 아예 안 만들어졌다** — 자취방 탭이 학생 제보로 모은
+  // 이름이 정작 지도에서만 사라지고 있었다.
   final labelText = displayName ?? (b.isCampus ? b.officialName : null);
-  if (highlighted || (b.isCampus && labelText != null && labelText.isNotEmpty)) {
+  if (highlighted || (labelText != null && labelText.isNotEmpty)) {
     cachedBadge = TextPainter(
       text: TextSpan(
         text: labelText ?? '',
@@ -1088,7 +1092,15 @@ class HousingMapPainter extends CustomPainter {
   static final Map<int, TextPainter> _numberPainters = {};
   static final Map<String, TextPainter> _poiPainters = {};
 
-  const HousingMapPainter({
+  /// 지금 확대 배율. 이름표를 화면에서 늘 같은 크기로 그리려고 쓴다
+  /// ([_paintLandmarkBadges] 참고). 확대·축소할 때마다 다시 그려야 하므로
+  /// [view]를 [repaint]로 넘겨 컨트롤러가 바뀔 때만 갱신되게 한다.
+  final TransformationController? view;
+
+  double get viewScale =>
+      (view?.value.getMaxScaleOnAxis() ?? 1.0).clamp(0.1, 8.0);
+
+  HousingMapPainter({
     required this.buildings,
     required this.roads,
     required this.terrain,
@@ -1096,7 +1108,8 @@ class HousingMapPainter extends CustomPainter {
     required this.origin,
     this.landuse = IsoLandUse.empty,
     this.showBuildingNumbers = false,
-  });
+    this.view,
+  }) : super(repaint: view);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1623,17 +1636,18 @@ class HousingMapPainter extends CustomPainter {
     );
   }
 
-  /// 지도 마커 — 편의점·버스정류장·주차장.
+  /// 지도 마커 — 버스정류장.
   ///
-  /// 자취방을 고르는 사람에게 실제로 쓸모 있는 정보라 건물 위에 얹는다.
   /// 캡처의 마커 색에서 위치만 뽑았고(크기는 화면 고정이라 뜻이 없다),
   /// 배지는 여기서 그린다.
+  ///
+  /// 편의점(C)·주차장(P) 배지는 뺐다. 원룸촌 골목마다 촘촘히 박혀 건물
+  /// 이름표를 덮었고, 자취방을 고를 때 먼저 보는 정보가 아니다. 위치
+  /// 데이터는 그대로 두었으니 다시 켜려면 여기에 항목만 되살리면 된다.
   void _paintPois(Canvas canvas) {
     if (terrain.pois.isEmpty) return;
     const style = {
-      'store': [Color(0xFFF59E0B), 'C'],
       'bus': [Color(0xFF2E86DE), 'B'],
-      'parking': [Color(0xFF4B6FA8), 'P'],
     };
     for (final e in terrain.pois) {
       final st = style[e.key];
@@ -1709,26 +1723,54 @@ class HousingMapPainter extends CustomPainter {
     }
   }
 
+  /// 이름표.
+  ///
+  /// 원룸촌은 건물이 워낙 붙어 있어서 이름표를 다 그리면 서로 겹쳐 **어느
+  /// 쪽도 안 읽힌다** (기본 배율에서 재 보니 후보 97개 중 66쌍이 겹쳤다).
+  /// 그래서 두 가지를 한다.
+  ///
+  /// 1. **화면 고정 크기** — 이름표를 확대 배율의 역수로 되돌려 그린다.
+  ///    그냥 두면 확대해도 글씨가 같이 커져 겹침이 영영 안 풀린다. 이렇게
+  ///    해야 길 하나를 당겨 볼 때 그 골목 이름이 차례로 드러난다.
+  /// 2. **겹치면 건너뛴다** — 중요한 것부터 자리를 잡는다. 선택한 건물 >
+  ///    조사해 이름이 붙은 건물 > 큰 건물 순.
   void _paintLandmarkBadges(Canvas canvas) {
-    for (final b in buildings) {
+    // 캔버스는 InteractiveViewer가 통째로 확대하므로, 여기서 1/배율을 곱해
+    // 그리면 화면에서는 늘 같은 크기로 보인다.
+    final k = 1.0 / viewScale;
+
+    final ordered = buildings.where((b) {
       // 번호를 켜면 이름표는 감춘다. 둘 다 지붕 한가운데 놓여서 겹치면
       // 어느 쪽도 안 읽힌다 — 번호로 짚으려면 이름이 비켜줘야 한다.
       // (선택한 건물은 예외 — 무엇을 골랐는지는 늘 보여야 한다)
       if (showBuildingNumbers && b.building.isCampus && !b.highlighted) {
-        continue;
+        return false;
       }
-      final tp = b.cachedBadgePainter;
-      if (tp == null) continue;
+      return b.cachedBadgePainter != null;
+    }).toList()
+      ..sort((x, y) {
+        if (x.highlighted != y.highlighted) return x.highlighted ? -1 : 1;
+        final xn = x.building.officialName != null;
+        final yn = y.building.officialName != null;
+        if (xn != yn) return xn ? -1 : 1;
+        return y.building.footprintArea.compareTo(x.building.footprintArea);
+      });
 
+    final placed = <Rect>[];
+    for (final b in ordered) {
+      final tp = b.cachedBadgePainter!;
       final center = b.topCenter;
-      final badgeRect = RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(center.dx, center.dy - 8),
-          width: tp.width + 12,
-          height: tp.height + 6,
-        ),
-        const Radius.circular(10),
+      final w = (tp.width + 12) * k;
+      final h = (tp.height + 6) * k;
+      final rect = Rect.fromCenter(
+        center: Offset(center.dx, center.dy - 8 * k),
+        width: w,
+        height: h,
       );
+      if (!b.highlighted && placed.any(rect.overlaps)) continue;
+      placed.add(rect);
+
+      final badgeRect = RRect.fromRectAndRadius(rect, Radius.circular(10 * k));
 
       // 네이버 지도 스타일 POI 마커 (White Capsule + Dark Font + Soft Drop Shadow)
       if (b.highlighted) {
@@ -1761,10 +1803,13 @@ class HousingMapPainter extends CustomPainter {
         );
       }
 
-      tp.paint(
-        canvas,
-        Offset(center.dx - tp.width / 2, center.dy - 8 - tp.height / 2),
-      );
+      // 글씨도 같은 비율로 되돌려 그린다. 캐시해 둔 TextPainter를 그대로
+      // 쓰려고 캔버스를 잠깐 축소한다(레이아웃을 다시 하지 않는다).
+      canvas.save();
+      canvas.translate(rect.center.dx, rect.center.dy);
+      canvas.scale(k);
+      tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+      canvas.restore();
     }
   }
 

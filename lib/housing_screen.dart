@@ -184,14 +184,35 @@ class _HousingScreenState extends State<HousingScreen>
     final displayNames = <String, String>{};
 
     for (final b in _base.buildings) {
-      if (_looksLikeOneRoom(b)) {
-        oneRoomIds.add(b.id);
-      }
+      final isOneRoom = _looksLikeOneRoom(b);
+      if (isOneRoom) oneRoomIds.add(b.id);
 
       final known = _resolvedKnown(b.id);
       if (known != null) {
         zoneColors[b.id] = known.zone.color;
         displayNames[b.id] = known.name;
+      } else if (isOneRoom) {
+        // 이름표 우선순위: 학생 제보 > 조사해 넣은 이름 > 건물번호.
+        //
+        // 조사한 이름은 tool/mapsrc/building_names.json에 있고 지도 데이터에
+        // 구워져 온다. 그마저 없으면 건물번호로 대신한다 — 번호는 교외
+        // 건물 505동이 전부 갖고 있어서 빈 이름표가 안 생긴다.
+        //
+        // 도로명까지 붙이면("월탄3길 5") 이름표가 길어져 서로 많이 겹친다.
+        // 어느 길인지는 도로별 색이 알려주고, 건물을 누르면 전체 주소가 뜬다.
+        final official = b.officialName;
+        final no = b.buildingNo;
+        if (official != null && official.isNotEmpty) {
+          displayNames[b.id] = official;
+        } else if (no != null && no.isNotEmpty) {
+          displayNames[b.id] = no;
+        }
+      }
+
+      // 도로별 색. 이름표만으로는 어느 골목인지 한눈에 안 들어온다.
+      final roadColor = kHousingRoadColors[b.road];
+      if (roadColor != null) {
+        zoneColors[b.id] ??= roadColor;
       }
     }
 
@@ -815,6 +836,8 @@ class _HousingScreenState extends State<HousingScreen>
                   isDark: isDark,
                   origin: _origin,
                   showBuildingNumbers: _showBuildingNumbers,
+                  // 이름표를 화면 고정 크기로 그리려면 지금 배율을 알아야 한다.
+                  view: _transformController,
                 ),
               ),
             ),

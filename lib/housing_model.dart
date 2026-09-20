@@ -19,6 +19,19 @@ enum HousingZone {
   const HousingZone(this.label, this.color);
 }
 
+/// 도로명별 건물 색.
+///
+/// [HousingZone]은 학생들이 부르는 덩어리 이름이라 제보가 붙은 건물에만
+/// 달린다. 도로명은 **571동 전부** 갖고 있어서(VWorld 대장) 빈 곳 없이
+/// 칠할 수 있다.
+///
+/// 월탄3길이 사실상 원룸촌 본거리다 — 원룸으로 볼 만한 건물 85동 중
+/// 54동(64%)이 이 길에 있다. 초록으로 칠해 그 덩어리가 한눈에 잡히게 한다.
+/// 다른 길도 칠하려면 여기 한 줄씩 넣으면 된다.
+const Map<String, Color> kHousingRoadColors = {
+  '월탄3길': Color(0xFF43A047),
+};
+
 /// 원룸 이름 후보.
 ///
 /// ⚠️ **좌표가 없다.** 건물 모양·위치는 VWorld 실측 데이터(BaseBuilding)에서

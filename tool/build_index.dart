@@ -324,26 +324,48 @@ void main() {
   // ── 부지 밖 건물: VWorld 지적을 그대로 ──
   // 사진에서 뽑던 시절엔 230동에 그쳤고(실제 305동) 흐린 구역 건물은 모양이
   // 뭉개졌다. 지적은 측량값이라 개수도 모양도 정확하다.
+  final names = loadBuildingNames();
   var outsideCount = 0;
+  var rescued = 0;
+  var named = 0;
   for (final v in vw) {
     final c = v['c'] as List<double>;
-    if (pip(outline, c[0], c[1])) continue; // 부지 안은 사진 몫
+    final road = v['road'] as String?;
+    // 부지 안은 사진 몫 — 다만 **원룸촌 도로명이 붙어 있으면 예외**다.
+    //
+    // 외곽선이 월탄3길·월탄1길 일부를 넘어 그어져 있어서, 그대로 걸러내면
+    // 그 골목 원룸 13동이 "사진 몫"으로 넘어갔다가 정작 사진 추출은 교내만
+    // 하므로 아무도 그리지 않는다 — 지도에서 통째로 사라진다. 실제로
+    // 아우름빌·등용문·그린캐슬·메이플빌·미소가·꿈터빌·청람드림빌 B/C 등이
+    // 그렇게 빠져 있었다. 이 길들은 캠퍼스일 수가 없으니 이름으로 되살린다.
+    if (!kResidentialRoads.contains(road) && pip(outline, c[0], c[1])) continue;
+    if (kResidentialRoads.contains(road) && pip(outline, c[0], c[1])) rescued++;
     final r = v['ring'] as List<List<double>>;
     if (r.length < 3 || (v['a'] as double) < 12) continue;
+    final no = v['no'] as String?;
+    final byId = names['byId'] ?? const {};
+    final byAddress = names['byAddress'] ?? const {};
+    var name = byId[v['id']];
+    if (name == null && road != null && no != null) {
+      name = byAddress['$road $no'];
+    }
+    if (name != null) named++;
     buildings.add({
       'id': v['id'],
+      if (name != null) 'name': name,
       'floors': math.max(1, v['floors'] as int),
       'use': 'etc',
       'campus': false,
-      if (v['road'] != null) 'road': v['road'],
-      if (v['no'] != null) 'bno': v['no'],
+      if (road != null) 'road': road,
+      if (no != null) 'bno': no,
       'ring': [
         for (final p in r) [_r1(p[0]), _r1(p[1])]
       ],
     });
     outsideCount++;
   }
-  stdout.writeln('부지 밖 건물 ${outsideCount}동 (VWorld 지적)');
+  stdout.writeln('부지 밖 건물 ${outsideCount}동 (VWorld 지적) '
+      '— 외곽선에 삼켜졌다가 되살린 원룸 $rescued동, 이름 붙임 $named동');
 
   final out = <String, dynamic>{
     'note': '네이버지도 캡처에서 뽑은 지형. '
@@ -393,6 +415,33 @@ void main() {
 ///
 /// 번호가 아니라 **좌표**로 맞춘다 — 통합·삭제하면 번호가 다시 매겨지므로
 /// 번호로 저장하면 다음 실행에서 엉뚱한 건물을 건드린다.
+/// 캠퍼스일 수 없는 주거지 도로. 부지 외곽선이 이 길들 일부를 넘어 그어져
+/// 있어서, 외곽선만 믿고 거르면 멀쩡한 원룸이 지도에서 사라진다.
+const kResidentialRoads = {
+  '월탄1길',
+  '월탄2길',
+  '월탄3길',
+  '다락탑연길',
+  '황탄리길',
+};
+
+/// 사람이 조사해 넣은 건물 이름표(tool/mapsrc/building_names.json).
+/// 파일이 없어도 생성은 그대로 돌아간다 — 이름만 안 붙는다.
+Map<String, Map<String, String>> loadBuildingNames() {
+  final f = File('tool/mapsrc/building_names.json');
+  if (!f.existsSync()) return const {};
+  final raw = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+  Map<String, String> section(String key) {
+    final m = raw[key];
+    if (m is! Map) return const {};
+    return {
+      for (final e in m.entries) e.key as String: e.value as String,
+    };
+  }
+
+  return {'byAddress': section('byAddress'), 'byId': section('byId')};
+}
+
 List<List<List<double>>> applyManualFixes(List<List<List<double>>> rings) {
   final f = File('tool/mapsrc/manual_fixes.json');
   if (!f.existsSync()) return rings;

@@ -376,4 +376,79 @@ void main() {
       }
     });
   });
+
+  group('조사해 넣은 건물 이름', () {
+    // tool/mapsrc/building_names.json 의 값이 실제로 지도 데이터에 구워졌는지.
+    // 도로명주소가 바뀌거나 생성기가 이름 단계를 건너뛰면 여기서 걸린다.
+    Map<String, dynamic> namesJson() => jsonDecode(
+        File('tool/mapsrc/building_names.json').readAsStringSync());
+
+    Map<String, String> byAddressInMap() {
+      final got = <String, String>{};
+      for (final b in (traced['buildings'] as List)) {
+        final m = b as Map<String, dynamic>;
+        if (m['name'] == null || m['road'] == null || m['bno'] == null) {
+          continue;
+        }
+        got['${m['road']} ${m['bno']}'] = m['name'] as String;
+      }
+      return got;
+    }
+
+    test('byAddress에 적은 이름이 전부 붙었다', () {
+      final want = (namesJson()['byAddress'] as Map).cast<String, String>();
+      final got = byAddressInMap();
+      final missing = [
+        for (final e in want.entries)
+          if (got[e.key] != e.value) '${e.key}=${e.value}'
+      ];
+      expect(missing, isEmpty, reason: '지도에 안 붙은 이름: $missing');
+    });
+
+    test('byId로 짚은 건물도 전부 붙었다', () {
+      // 같은 도로명주소에 여러 동이 있어 주소로는 못 가리는 것들.
+      final want = (namesJson()['byId'] as Map).cast<String, String>();
+      final got = {
+        for (final b in (traced['buildings'] as List))
+          (b as Map<String, dynamic>)['id'] as String: b['name']
+      };
+      for (final e in want.entries) {
+        expect(got[e.key], e.value, reason: 'id ${e.key}');
+      }
+    });
+
+    test('원룸촌 도로 건물이 부지 외곽선에 삼켜지지 않는다', () {
+      // build_index가 "부지 안"이라는 이유로 걸러내던 자리다. 외곽선이
+      // 월탄3길·월탄1길 일부를 넘어 그어져 있어 원룸 13동이 통째로
+      // 사라졌었다 — 이름을 붙여도 그릴 건물이 없으면 소용없다.
+      const rescued = {
+        '월탄3길 48-2': '아우름빌',
+        '월탄3길 48-3': '등용문',
+        '월탄3길 48-4': '그린캐슬',
+        '월탄3길 40-6': '메이플빌',
+        '월탄3길 36-6': '미소가',
+        '월탄3길 32-13': '꿈터빌',
+        '월탄3길 20-8': '청람드림빌 B',
+        '월탄3길 20-12': '청람드림빌 C',
+      };
+      final got = byAddressInMap();
+      for (final e in rescued.entries) {
+        expect(got[e.key], e.value, reason: '${e.key} 가 빠졌다');
+      }
+    });
+
+    test('교외 건물은 번호나 이름 중 하나는 갖는다', () {
+      // 지도 이름표가 빈 캡슐로 뜨는 걸 막는다.
+      var blank = 0;
+      for (final b in (traced['buildings'] as List)) {
+        final m = b as Map<String, dynamic>;
+        if (m['campus'] == true) continue;
+        final hasName = (m['name'] as String?)?.isNotEmpty ?? false;
+        final hasNo = (m['bno'] as String?)?.isNotEmpty ?? false;
+        if (!hasName && !hasNo) blank++;
+      }
+      // VWorld 지적에 주소가 비어 있는 부속 건물이 조금 있다.
+      expect(blank, lessThan(45));
+    });
+  });
 }
