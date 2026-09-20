@@ -126,6 +126,10 @@ struct MealWidgetEntryView: View {
         }
         .padding(16)
         .widgetBackground(backgroundColor)
+        // 위젯을 누르면 앱이 이 URL로 열린다. Flutter 쪽(main.dart)이
+        // home_widget의 클릭 스트림에서 이 host("meal")를 보고 식단 탭으로
+        // 이동한다. 스킴은 Runner Info.plist의 CFBundleURLSchemes와 같아야 한다.
+        .widgetURL(URL(string: "knuemate://meal"))
     }
 }
 

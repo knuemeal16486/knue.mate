@@ -1,57 +1,80 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_layout"
+<!--
+  배경을 ImageView로 따로 깔아 둔 이유:
+  예전에는 루트 LinearLayout에 setBackgroundColor를 걸어 색과 투명도를
+  적용했는데, RemoteViews의 setBackgroundColor는 배경 drawable을 단색
+  ColorDrawable로 **통째로 갈아끼운다**. 그래서 widget_background.xml의
+  둥근 모서리(16dp)가 사라져 각진 사각형으로 나왔다.
+  지금은 모양은 drawable이 유지하고, 색과 투명도는 ImageView의
+  setColorFilter / setImageAlpha로 입힌다.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:background="@drawable/widget_background">
+    android:layout_height="match_parent">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingBottom="10dp">
-
-        <TextView
-            android:id="@+id/widget_title"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="기숙사 식당"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:letterSpacing="-0.02"
-            android:textColor="#000000"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <TextView
-            android:id="@+id/widget_time"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="오늘 점심"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:textColor="#4285F4" 
-            android:paddingHorizontal="4dp"
-            android:maxLines="1"
-            android:ellipsize="end" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/widget_menu"
+    <ImageView
+        android:id="@+id/widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:text="메뉴 정보를\n불러오는 중입니다..."
-        android:textSize="13sp"
-        android:textStyle="normal"
-        android:textColor="#333333"
-        android:lineSpacingExtra="5dp"
-        android:letterSpacing="-0.02"
-        android:gravity="top|start"
-        android:layout_marginTop="2dp"
-        android:ellipsize="end" />
+        android:scaleType="fitXY"
+        android:contentDescription="@null"
+        android:src="@drawable/widget_background" />
 
-</LinearLayout>
+    <LinearLayout
+        android:id="@+id/widget_layout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="기숙사 식당"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:letterSpacing="-0.02"
+                android:textColor="#000000"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/widget_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="오늘 점심"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="#4285F4"
+                android:paddingHorizontal="4dp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_menu"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:text="메뉴 정보를\n불러오는 중입니다..."
+            android:textSize="13sp"
+            android:textStyle="normal"
+            android:textColor="#333333"
+            android:lineSpacingExtra="5dp"
+            android:letterSpacing="-0.02"
+            android:gravity="top|start"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end" />
+
+    </LinearLayout>
+
+</FrameLayout>

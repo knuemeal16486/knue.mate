@@ -16,6 +16,21 @@
 		<string>KNUE Mate</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
+		<!-- 홈 위젯을 누르면 knuemate://meal 로 앱이 열린다.
+		     MealWidget.swift의 widgetURL과 스킴이 같아야 한다. -->
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLName</key>
+				<string>com.knue.knuemate</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>knuemate</string>
+				</array>
+			</dict>
+		</array>
 		<key>CFBundleShortVersionString</key>
 		<string>$(FLUTTER_BUILD_NAME)</string>
 		<key>CFBundleSignature</key>

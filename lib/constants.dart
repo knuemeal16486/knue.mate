@@ -515,6 +515,50 @@ MealType? mealEndingSoonNow(MealSource source, DateTime now) {
   return null;
 }
 
+/// 홈 위젯이 지금 보여줄 끼니.
+///
+/// 규칙: **지금 파는 끼니 → 오늘 남은 다음 끼니 → 내일 첫 끼니** 순.
+///
+/// 예전에는 위젯이 시간대를 따로 하드코딩했는데([_updateWidgetDataInternal]),
+/// 그 값이 [mealTimeRangeFor]와 어긋나 있었다. 학생회관 저녁은 18:30까지인데
+/// 위젯은 18시에 이미 "내일 점심"으로 넘어가서, **아직 파는 저녁을 숨겼다.**
+/// 이제 운영 시간 한 곳에서만 끼니를 정한다.
+///
+/// 순수 함수 — 테스트 대상.
+({MealType type, bool isTomorrow}) widgetMealSlot(
+  MealSource source,
+  DateTime now,
+) {
+  DateTime? endOf(MealType t) {
+    final range = mealTimeRangeFor(t, source);
+    if (range == null) return null;
+    final parts = range.split("~")[1].trim().split(":");
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
+  }
+
+  // 그 식당이 운영하는 끼니만, 이른 순서대로 본다.
+  final served = MealType.values
+      .where((t) => mealTimeRangeFor(t, source) != null)
+      .toList();
+
+  for (final t in served) {
+    final end = endOf(t);
+    // 아직 안 끝난 끼니를 만나면 그게 지금 보여줄 끼니다.
+    // (시작 전이어도 "다음 끼니"로 미리 보여주는 게 맞다)
+    if (end != null && !now.isAfter(end)) {
+      return (type: t, isTomorrow: false);
+    }
+  }
+  // 오늘 치를 다 지났으면 내일 첫 끼니.
+  return (type: served.first, isTomorrow: true);
+}
+
 ServeStatus statusFor(
   MealType type,
   DateTime now,
@@ -584,15 +628,19 @@ void showToast(BuildContext context, String msg) {
 }
 
 // [3] API 및 위젯 로직
-DateTime getWidgetTargetDate(MealSource source) {
-  final now = DateTime.now();
-  final hour = now.hour;
-  if (source == MealSource.a && hour >= 19) {
-    return now.add(const Duration(days: 1));
-  } else if (source == MealSource.b && hour >= 18) {
-    return now.add(const Duration(days: 1));
-  }
-  return now;
+/// 위젯이 받아와야 할 날짜.
+///
+/// ⚠️ 반드시 [widgetMealSlot]과 같은 판단을 써야 한다. 예전엔 여기서 시간을
+/// 따로 하드코딩해서, 학생회관 18:00~18:30에는 "오늘 저녁" 라벨을 붙여 놓고
+/// **내일 메뉴를 받아오는** 어긋남이 생길 수 있었다.
+DateTime getWidgetTargetDate(MealSource source) =>
+    getWidgetTargetDateAt(source, DateTime.now());
+
+/// [getWidgetTargetDate]의 시각 주입형. "라벨과 받아올 날짜가 항상 같은
+/// 하루를 가리키는지"를 테스트로 고정하기 위해 따로 뺐다.
+DateTime getWidgetTargetDateAt(MealSource source, DateTime now) {
+  final slot = widgetMealSlot(source, now);
+  return slot.isTomorrow ? now.add(const Duration(days: 1)) : now;
 }
 
 /// KNUE 식당 HTML 스크래퍼
@@ -894,43 +942,16 @@ Future<void> _updateWidgetDataInternal(
 ) async {
   try {
     final now = DateTime.now();
-    final hour = now.hour;
     final isTomorrow =
         requestedDate.day != now.day || requestedDate.month != now.month;
 
-    String timeText = "";
-    String mealKey = "";
     String sourceName = source.label;
 
-    // 시간대 로직 (요구사항 반영)
-    if (source == MealSource.a) {
-      // 기숙사
-      if (hour < 9) {
-        timeText = "오늘 아침";
-        mealKey = "breakfast";
-      } else if (hour < 14) {
-        timeText = "오늘 점심";
-        mealKey = "lunch";
-      } else if (hour < 19) {
-        timeText = "오늘 저녁";
-        mealKey = "dinner";
-      } else {
-        timeText = "내일 아침";
-        mealKey = "breakfast";
-      }
-    } else {
-      // 학생회관
-      if (hour < 14) {
-        timeText = "오늘 점심";
-        mealKey = "lunch";
-      } else if (hour < 18) {
-        timeText = "오늘 저녁";
-        mealKey = "dinner";
-      } else {
-        timeText = "내일 점심";
-        mealKey = "lunch";
-      }
-    }
+    // 끼니는 운영 시간(mealTimeRangeFor) 한 곳에서만 정한다. 예전엔 여기서
+    // 시간대를 따로 하드코딩했는데 실제 운영 시간과 어긋나 있었다.
+    final slot = widgetMealSlot(source, now);
+    final timeText = "${slot.isTomorrow ? '내일' : '오늘'} ${slot.type.label}";
+    final mealKey = slot.type.stdKey;
 
     // 데이터 파싱
     final meals = data['meals'] ?? {};

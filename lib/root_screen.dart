@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'club_event_model.dart';
 import 'club_event_service.dart';
+import 'main.dart' show pendingWidgetTab;
 import 'constants.dart';
 import 'meal_reminder.dart';
 import 'meal_screen.dart';
@@ -23,14 +24,15 @@ class RootNavigationScreen extends StatefulWidget {
   @override
   State<RootNavigationScreen> createState() => RootNavigationScreenState();
 
-  static void switchTab(AppTab tab) {
+  /// 탭을 옮긴다. 아직 화면이 안 만들어졌거나(앱이 막 켜지는 중) 그 탭을
+  /// 숨겨 뒀으면 false — 호출부가 나중에 다시 시도할지 정할 수 있게 한다.
+  static bool switchTab(AppTab tab) {
     final state = navKey.currentState;
-    if (state != null) {
-      final index = PreferencesService.tabOrder.value.indexOf(tab);
-      if (index != -1) {
-        state._onTabTapped(index);
-      }
-    }
+    if (state == null) return false;
+    final index = PreferencesService.tabOrder.value.indexOf(tab);
+    if (index == -1) return false;
+    state._onTabTapped(index);
+    return true;
   }
 }
 
@@ -80,6 +82,17 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
     PreferencesService.tabOrder.addListener(_onTabOrderChanged);
 
     WidgetsBinding.instance.addObserver(this);
+
+    // 앱이 꺼져 있다가 홈 위젯을 눌러 열린 경우, 그 판단은 이 화면이
+    // 만들어지기 전에 끝나 있다. 남겨 둔 탭이 있으면 첫 프레임 뒤에 옮긴다.
+    final pending = pendingWidgetTab;
+    if (pending != null) {
+      pendingWidgetTab = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) RootNavigationScreen.switchTab(pending);
+      });
+    }
+
     // 앱을 막 열었을 때도 이미 "종료 10분 전" 구간일 수 있다 — 타이머 첫
     // 주기(1분)를 기다리지 않고 바로 한 번 확인한다.
     _checkMealReminder();

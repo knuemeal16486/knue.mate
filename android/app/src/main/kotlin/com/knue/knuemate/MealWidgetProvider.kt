@@ -5,8 +5,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Color
+import android.net.Uri
 import android.util.Log
 import android.widget.RemoteViews
+import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 import com.knue.knuemate.R
 
@@ -51,18 +53,31 @@ class MealWidgetProvider : HomeWidgetProvider() {
                 val subColor = if(isDark) Color.parseColor("#BBBBBB") else Color.parseColor("#555555")
                 val dividerColor = if(isDark) Color.parseColor("#444444") else Color.parseColor("#E0E0E0")
 
-                // 투명도 적용
+                // 배경: 모양(둥근 모서리)은 drawable이 유지하고 색·투명도만 입힌다.
+                // setBackgroundColor를 쓰면 drawable이 단색으로 갈아끼워져
+                // 16dp 둥근 모서리가 사라진다.
                 val alpha = ((1.0f - transparency) * 255).toInt().coerceIn(0, 255)
-                val finalBg = Color.argb(alpha, Color.red(bgColor), Color.green(bgColor), Color.blue(bgColor))
+                views.setInt(R.id.widget_bg, "setColorFilter", bgColor)
+                views.setInt(R.id.widget_bg, "setImageAlpha", alpha)
 
-                // 뷰에 적용
-                views.setInt(R.id.widget_layout, "setBackgroundColor", finalBg)
+                // 텍스트
                 views.setTextViewText(R.id.widget_title, title)
                 views.setTextColor(R.id.widget_title, textColor)
                 views.setTextViewText(R.id.widget_time, time)
                 views.setTextColor(R.id.widget_time, subColor)
                 views.setTextViewText(R.id.widget_menu, menu)
                 views.setTextColor(R.id.widget_menu, subColor)
+
+                // 위젯을 누르면 앱이 knuemate://meal 로 열린다.
+                // Flutter 쪽(main.dart)이 이 URI를 보고 식단 탭으로 이동한다.
+                views.setOnClickPendingIntent(
+                    R.id.widget_root,
+                    HomeWidgetLaunchIntent.getActivity(
+                        context,
+                        MainActivity::class.java,
+                        Uri.parse("knuemate://meal")
+                    )
+                )
 
                 appWidgetManager.updateAppWidget(widgetId, views)
             } catch (e: Exception) {

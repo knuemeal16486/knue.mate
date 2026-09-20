@@ -297,15 +297,45 @@ void _initializeBackgroundTasks() {
   }
 }
 
+/// 위젯을 눌러 앱이 열렸을 때 이동할 탭.
+///
+/// 앱이 **꺼져 있다가** 위젯으로 열리는 경우, 이 값이 정해지는 시점이
+/// RootNavigationScreen이 만들어지기 전이라 그 자리에서 탭을 바꿀 수 없다.
+/// 그래서 여기 담아 두고, 첫 화면이 준비되면 그때 꺼내 쓴다.
+AppTab? pendingWidgetTab;
+
+/// 위젯 URI(knuemate://meal 등)를 보고 갈 탭을 정한다.
+/// 모르는 주소면 null — 그냥 평소 시작 탭으로 연다.
+AppTab? widgetTabForUri(Uri? uri) {
+  if (uri == null) return null;
+  if (uri.scheme != 'knuemate') return null;
+  switch (uri.host) {
+    case 'meal':
+      return AppTab.meal;
+    case 'bus':
+      return AppTab.bus;
+    default:
+      return null;
+  }
+}
+
+void _handleWidgetUri(Uri? uri) {
+  final tab = widgetTabForUri(uri);
+  if (tab == null) return;
+  // 이미 떠 있는 앱이면 바로 옮기고, 아직이면 첫 화면이 가져가게 남겨 둔다.
+  if (!RootNavigationScreen.switchTab(tab)) {
+    pendingWidgetTab = tab;
+  }
+}
+
 Future<void> _initializeHomeWidget() async {
   try {
     debugPrint("HomeWidget 초기화 시도...");
     await HomeWidget.setAppGroupId('group.knue.meal');
-    final launchedFromWidget = await HomeWidget.initiallyLaunchedFromHomeWidget();
-    if (launchedFromWidget != null) {
-      final title = await HomeWidget.getWidgetData<String>('title');
-      debugPrint("위젯 데이터 - title: $title");
-    }
+    // 앱이 꺼져 있다가 위젯 탭으로 열린 경우.
+    _handleWidgetUri(await HomeWidget.initiallyLaunchedFromHomeWidget());
+    // 앱이 백그라운드에 있다가 위젯 탭으로 돌아온 경우.
+    HomeWidget.widgetClicked.listen(_handleWidgetUri);
   } catch (e) {
     debugPrint("HomeWidget 초기화 건너뜀 (플랫폼 제약 가능성): $e");
   }
