@@ -14,6 +14,9 @@ const String _kPendingTitlesKey = 'notice_pending_digest_titles';
 /// 지정 시각까지 이미 보냈는지 판단하는 기준.
 const String _kLastDigestSentAtKey = 'notice_last_digest_sent_at';
 
+/// 최초 1회 시딩을 마쳤는지. [KeywordAlertService.checkAndNotify] 참고.
+const String _kSeededKey = 'notice_alert_seeded';
+
 /// 온디바이스 키워드 알림 (MoA notification_service.dart 로직 이식, Hive 제거)
 class KeywordAlertService {
   /// 새로 알릴 공지 선별. 순수 함수 — 테스트 대상.
@@ -67,6 +70,13 @@ class KeywordAlertService {
   }
 
   /// 백그라운드 task 본체. 디버그 버튼에서도 직접 호출 가능.
+  ///
+  /// 최초 실행(시딩): 앱을 막 깔았거나 이 기능이 배포된 직후엔
+  /// `notified_ids`가 비어 있다. 그대로 diff를 돌리면 **이미 올라와 있던
+  /// 공지 수십 건이 전부 "새 글"로 잡혀**, 설치하자마자 "새 공지사항 30건"
+  /// 알림이 온다. 하나도 새롭지 않은데.
+  /// 그래서 최초 1회는 지금 보이는 목록을 조용히 기록만 하고 알림은 보내지
+  /// 않는다. (ClubEventAlertService가 같은 이유로 이미 이렇게 하고 있다.)
   static Future<void> checkAndNotify() async {
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool(PreferencesService.keyNoticeAlarm) ?? true)) return;
@@ -81,6 +91,17 @@ class KeywordAlertService {
         prefs.getStringList(PreferencesService.keyFavBoards) ?? [];
     final notified = prefs.getStringList('notified_ids') ?? [];
 
+    if (!(prefs.getBool(_kSeededKey) ?? false)) {
+      await prefs.setBool(_kSeededKey, true);
+      // 이미 쓰던 사람은 notified_ids가 차 있다 — 그건 시딩이 끝난 것과
+      // 같으므로 조용히 넘기지 않고 평소대로 진행한다. 안 그러면 업데이트
+      // 직후 한 차례 알림을 통째로 건너뛴다.
+      if (notified.isEmpty) {
+        await _rememberScanned(prefs, notified, notices);
+        return;
+      }
+    }
+
     final newItems = filterNewMatches(
       notices: notices,
       keywords: keywords,
@@ -88,13 +109,7 @@ class KeywordAlertService {
       notifiedIds: notified.toSet(),
     );
 
-    // 스캔한 상위 50개는 전부 알림 완료로 기록 (반복 알림 방지)
-    final allScanned = notices.take(50).map((n) => n.id.toString());
-    final merged = {...notified, ...allScanned}.toList();
-    final trimmed = merged.length > 200
-        ? merged.sublist(merged.length - 200)
-        : merged;
-    await prefs.setStringList('notified_ids', trimmed);
+    await _rememberScanned(prefs, notified, notices);
 
     // 백그라운드 isolate라 PreferencesService의 ValueNotifier는 못 믿는다
     // (메인 isolate에서 로드된 값이라 여기선 비어 있을 수 있다) — 항상
@@ -131,7 +146,12 @@ class KeywordAlertService {
             ['9', '18'])
         .map((s) => int.tryParse(s))
         .whereType<int>()
+        .where((h) => h >= 0 && h <= 23)
         .toList();
+    // 저장값이 비었거나 전부 손상됐으면 기본값으로. 0개로 두면 isDigestDue가
+    // 늘 false라 쌓아만 두고 알림이 영영 안 간다 — loadSettings도 같은
+    // 이유로 같은 대비를 한다.
+    if (hours.isEmpty) hours.addAll([9, 18]);
     final lastSentRaw = prefs.getString(_kLastDigestSentAtKey);
     final lastSent = lastSentRaw != null ? DateTime.tryParse(lastSentRaw) : null;
 
@@ -144,6 +164,21 @@ class KeywordAlertService {
     await prefs.setStringList(_kPendingTitlesKey, []);
     await prefs.setString(
         _kLastDigestSentAtKey, DateTime.now().toIso8601String());
+  }
+
+  /// 이번에 훑어본 상위 50건을 "알림 완료"로 기록해 같은 글이 다시 잡히지
+  /// 않게 한다. 목록이 무한히 커지지 않도록 최근 200건만 남긴다.
+  static Future<void> _rememberScanned(
+    SharedPreferences prefs,
+    List<String> notified,
+    List<Notice> notices,
+  ) async {
+    final allScanned = notices.take(50).map((n) => n.id.toString());
+    final merged = {...notified, ...allScanned}.toList();
+    final trimmed = merged.length > 200
+        ? merged.sublist(merged.length - 200)
+        : merged;
+    await prefs.setStringList('notified_ids', trimmed);
   }
 
   /// "[게시판] 제목" 형태로 미리 포맷된 목록을 알림 1건으로 내보낸다.
