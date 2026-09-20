@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'ad_service.dart';
+import 'admin_auth_service.dart';
 import 'att_service.dart';
 import 'rewarded_ad_service.dart';
 import 'constants.dart';
@@ -34,6 +35,9 @@ void callbackDispatcher() {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      // 백그라운드 작업도 공용 캐시(daily_meals 등)에 쓰므로 로그인이 필요하다.
+      // 로그인 상태는 기기에 저장돼 있어 보통은 그대로 복원된다.
+      await AdminAuthService.initialize();
       await PreferencesService.loadSettings();
       if (task == kNoticeCheckTask) {
         await KeywordAlertService.checkAndNotify();
@@ -219,6 +223,9 @@ Future<void> _initializeFirebase() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    // 익명 로그인. Firestore 쓰기 규칙이 로그인을 요구하므로 제보·별점 같은
+    // 기본 기능보다 먼저 끝나 있어야 한다. 실패해도 읽기는 되므로 앱은 뜬다.
+    await AdminAuthService.initialize();
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       await _setupFirebaseMessaging();

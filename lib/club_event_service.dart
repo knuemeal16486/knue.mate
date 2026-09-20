@@ -181,16 +181,9 @@ class ClubEventService {
     }
   }
 
-  /// 관리자 비밀번호 (app_config/club_admin 문서의 password 필드).
-  static Future<String?> fetchAdminPassword() async {
-    try {
-      final doc = await _db.collection('app_config').doc('club_admin').get();
-      return doc.data()?['password'] as String?;
-    } catch (e) {
-      debugPrint('ClubEventService.fetchAdminPassword error: $e');
-      return null;
-    }
-  }
+  // 관리자 비밀번호를 여기서 읽어 오던 fetchAdminPassword()는 없앴다.
+  // 비밀번호를 클라이언트로 내려주는 순간 그건 비밀번호가 아니다 —
+  // 대조는 이제 보안 규칙이 서버에서 하고, 앱은 AdminAuthService를 쓴다.
 }
 
 /// 행사 목록 캐시 — NoticeCache와 동일 패턴 (SharedPreferences + JSON).

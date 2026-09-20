@@ -17,7 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:screenshot/screenshot.dart';
 import 'constants.dart';
 import 'admin_staff_data.dart';
-import 'club_event_service.dart' show ClubEventService;
+import 'admin_auth_service.dart';
 import 'map_facility_service.dart';
 import 'staff_contacts_screen.dart';
 import 'ui_utils.dart';
@@ -541,12 +541,15 @@ class _CampusMapScreenState extends State<CampusMapScreen>
       setState(() => _devMode = false);
       return;
     }
-    final password = await ClubEventService.fetchAdminPassword();
-    if (!mounted) return;
-    if (password == null) {
-      showToast(context, "관리자 설정이 없습니다");
+    // 이 기기에 이미 권한이 있으면 비밀번호를 묻지 않는다.
+    if (AdminAuthService.isAdmin.value ||
+        await AdminAuthService.refreshAdminStatus()) {
+      if (!mounted) return;
+      setState(() => _devMode = true);
+      showToast(context, "개발자 모드 켜짐 — 지도를 길게 눌러 위치를 추가하세요");
       return;
     }
+    if (!mounted) return;
     final controller = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -571,14 +574,19 @@ class _CampusMapScreenState extends State<CampusMapScreen>
         ],
       ),
     );
-    final matched = ok == true && controller.text == password;
+    final typed = controller.text;
     controller.dispose();
+    if (ok != true) return;
+    // 맞는지는 서버가 판단한다 — 앱은 정답을 갖고 있지 않다.
+    final result = await AdminAuthService.unlock(typed);
     if (!mounted) return;
-    if (matched) {
+    if (result == AdminUnlockResult.ok) {
       setState(() => _devMode = true);
       showToast(context, "개발자 모드 켜짐 — 지도를 길게 눌러 위치를 추가하세요");
-    } else if (ok == true) {
+    } else if (result == AdminUnlockResult.wrongPassword) {
       showToast(context, "비밀번호가 일치하지 않습니다");
+    } else {
+      showToast(context, "확인에 실패했습니다. 연결을 확인해주세요");
     }
   }
 

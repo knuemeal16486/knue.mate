@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import 'club_event_service.dart';
+import 'admin_auth_service.dart';
 import 'constants.dart';
 import 'housing_iso.dart';
 import 'housing_model.dart';
@@ -22,10 +22,9 @@ class HousingAdminScreen extends StatefulWidget {
 
 class _HousingAdminScreenState extends State<HousingAdminScreen>
     with SingleTickerProviderStateMixin {
-  bool _passwordFetched = false;
-  String? _remotePassword;
-  bool _granted = false;
-  bool _leaveHandled = false;
+  /// 이 기기가 이미 관리자면 비밀번호를 다시 묻지 않는다.
+  bool _granted = AdminAuthService.isAdmin.value;
+  bool _verifying = false;
 
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
@@ -36,7 +35,7 @@ class _HousingAdminScreenState extends State<HousingAdminScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadAdminPassword();
+    if (!_granted) _recheckGrant();
   }
 
   @override
@@ -46,36 +45,30 @@ class _HousingAdminScreenState extends State<HousingAdminScreen>
     super.dispose();
   }
 
-  Future<void> _loadAdminPassword() async {
-    final pw = await ClubEventService.fetchAdminPassword();
+  /// 앱이 막 켜졌다면 권한 확인이 아직 안 끝났을 수 있다. 한 번 더 물어보고
+  /// 이미 권한이 있으면 비밀번호 없이 통과시킨다.
+  Future<void> _recheckGrant() async {
+    final ok = await AdminAuthService.refreshAdminStatus();
+    if (!mounted || !ok) return;
+    setState(() => _granted = true);
+  }
+
+  /// 비밀번호가 맞는지는 **서버(보안 규칙)가** 판단한다. 앱은 정답을 갖고
+  /// 있지 않으므로 쓰기가 받아들여졌는지로만 통과 여부를 안다.
+  Future<void> _submitPassword() async {
+    if (_verifying) return;
+    setState(() => _verifying = true);
+    final result = await AdminAuthService.unlock(_passwordController.text);
     if (!mounted) return;
     setState(() {
-      _remotePassword = pw;
-      _passwordFetched = true;
+      _verifying = false;
+      _granted = result == AdminUnlockResult.ok;
     });
-    if (pw == null) {
-      _leaveScreen("관리자 설정이 없습니다");
-    }
-  }
-
-  void _leaveScreen(String message) {
-    if (_leaveHandled) return;
-    _leaveHandled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showToast(context, message);
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-    });
-  }
-
-  void _submitPassword() {
-    if (_passwordController.text == _remotePassword) {
-      setState(() => _granted = true);
-    } else {
+    if (result == AdminUnlockResult.wrongPassword) {
       _passwordController.clear();
       showToast(context, "비밀번호가 일치하지 않습니다");
+    } else if (result == AdminUnlockResult.failed) {
+      showToast(context, "확인에 실패했습니다. 연결을 확인해주세요");
     }
   }
 
@@ -110,28 +103,6 @@ class _HousingAdminScreenState extends State<HousingAdminScreen>
   }
 
   Widget _buildBody(Color color, bool isDark) {
-    if (!_passwordFetched) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_remotePassword == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.lock_outline,
-                size: 40,
-                color: isDark ? Colors.white38 : Colors.black38,
-              ),
-              const SizedBox(height: 12),
-              const Text("관리자 설정이 없습니다"),
-            ],
-          ),
-        ),
-      );
-    }
     if (!_granted) {
       return _buildPasswordGate(color, isDark);
     }
@@ -181,13 +152,22 @@ class _HousingAdminScreenState extends State<HousingAdminScreen>
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _submitPassword,
+                onPressed: _verifying ? null : _submitPassword,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: color,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                child: const Text("확인"),
+                child: _verifying
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text("확인"),
               ),
             ),
           ],
