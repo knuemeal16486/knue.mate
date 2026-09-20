@@ -730,6 +730,7 @@ List<Pt> regularize(
   double minEdge = 1.4,
   double maxAreaDrift = 0.28,
 }) {
+  regularizeTried++;
   if (poly.length < 4) return poly;
   final theta = dominantAngle(poly);
   final snapRad = snapDeg * math.pi / 180;
@@ -808,7 +809,35 @@ List<Pt> regularize(
   }
 
   var pts = cornersOf(ls);
-  if (pts == null) return poly;
+
+  // 이웃한 두 직선이 나란하면 교점이 없다. 예전엔 여기서 통째로 포기하고
+  // **물결치는 원본을 그대로 내보냈다** — 118동 중 36동(31%)이 그 길로
+  // 빠져서 건물이 흐물흐물해 보였다.
+  //
+  // 나란한 이웃은 둘 중 하나가 군더더기다(같은 방향인데 사이에 잇는 변이
+  // 없다). 짧은 쪽을 빼고 다시 구하면 나머지는 멀쩡히 각이 잡힌다.
+  for (var guard = 0; pts == null && ls.length > 4 && guard < 40; guard++) {
+    var drop = -1;
+    var dropW = double.infinity;
+    for (var i = 0; i < ls.length; i++) {
+      final a = ls[i], b = ls[(i + 1) % ls.length];
+      if ((a.dx * b.dy - a.dy * b.dx).abs() >= 1e-4) continue;
+      final j = (i + 1) % ls.length;
+      final cand = a.w <= b.w ? i : j;
+      if (ls[cand].w < dropW) {
+        dropW = ls[cand].w;
+        drop = cand;
+      }
+    }
+    if (drop < 0) break;
+    ls.removeAt(drop);
+    pts = cornersOf(ls);
+  }
+
+  if (pts == null) {
+    regularizeNoCorners++;
+    return poly;
+  }
 
   // 4) 너무 짧은 변은 그 직선을 빼고 다시 계산한다.
   //
@@ -844,6 +873,7 @@ List<Pt> regularize(
 
   final before = polyArea(poly), after = polyArea(pts!);
   if (before <= 0 || (after - before).abs() / before > maxAreaDrift) {
+    regularizeGaveUp++;
     return poly;
   }
   return pts;
@@ -1073,3 +1103,11 @@ Mask darkerThanLocal(Uint8List lum, int w, int h, int r, double delta,
 /// [straighten]이 몇 번이나 포기했는지. 면적 한도에 걸려 원본을 그대로
 /// 돌려주면 도로가 편 티가 안 난다 — 그걸 눈치채려고 센다.
 int straightenTried = 0, straightenGaveUp = 0;
+
+/// [regularize]가 몇 번 불렸고 몇 번 포기했는지. 포기하면 물결치는 원본이
+/// 그대로 나가므로, 이 숫자가 크면 건물이 흐물흐물해 보인다.
+int regularizeTried = 0, regularizeGaveUp = 0;
+
+/// 이웃한 두 직선이 나란해 꼭짓점을 못 구한 횟수. 뭉개진 등고선에서는
+/// 같은 방향 직선이 나란히 여러 개 남아 여기서 걸린다.
+int regularizeNoCorners = 0;

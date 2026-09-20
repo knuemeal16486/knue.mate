@@ -540,7 +540,9 @@ List<List<double>>? unionRings(List<List<List<double>>> polys) {
     for (final p in loops.first) mt.Pt(ox + p.x * res, oy + p.y * res)
   ];
   // 건물은 각져야 건물처럼 보인다.
-  final reg = mt.regularize(world, snapDeg: 38, minEdge: 4.0, maxAreaDrift: 0.35);
+  // 합친 건물도 각져야 한다. snapDeg 45 = 모든 변을 직각 격자에 세운다
+  // (trace_map의 건물 추출과 같은 이유 — 거기 주석 참고).
+  final reg = mt.regularize(world, snapDeg: 45, minEdge: 4.0, maxAreaDrift: 0.35);
   return [
     for (final p in reg) [(p.x * 10).roundToDouble() / 10, (p.y * 10).roundToDouble() / 10]
   ];

@@ -309,7 +309,18 @@ void main() {
       for (final p in loops.first)
         Pt(ox + (p.x + o[0]) * res, oy + (p.y + o[1]) * res)
     ];
-    final poly = regularize(raw);
+    // snapDeg는 45 — **모든 변을 직각 격자에 세운다.**
+    //
+    // 기본값 32로 두면 32°보다 많이 틀어진 변이 제 각도를 유지하는데,
+    // 물확산 경계는 온갖 각도의 짧은 변으로 이뤄져 있어 그게 그대로 남는다.
+    // 실측: 32°에서는 54동 중 47동이 직각률 75% 미만(여럿은 0%)이었다.
+    // 45°로 세우면 1동만 남고 평균 직각률이 98%가 된다. 원본 픽셀과의
+    // IoU는 61.3%→59.6%로 1.7%p 내려가지만, 그 '원본'이란 게 뭉개진
+    // 등고선이지 건물의 실제 모양이 아니다. 건물은 각져야 건물로 보인다.
+    //
+    // 비스듬히 앉은 건물은 dominantAngle(θ)이 통째로 기울여 잡아 주므로
+    // 여기서 45로 세워도 사선 건물이 억지로 똑바로 서지 않는다.
+    final poly = regularize(raw, snapDeg: 45, minEdge: 2.5);
     if (poly.length < 4 || !insidePoly(poly)) continue;
     // 운동시설이냐 건물이냐 — **잔디를 품고 있는가**로 가른다. 트랙·코트
     // 블록은 가운데가 초록이라, 구멍을 메우고 나서 재야 겹침이 잡힌다.
@@ -785,6 +796,11 @@ void main() {
   stdout.writeln('  포장면 ${(iou(road, outers, minus: holes) * 100).toStringAsFixed(1)}%');
   stdout.writeln('  녹지   ${(iou(L.green, greens) * 100).toStringAsFixed(1)}%');
   stdout.writeln('  부지   ${(iou(closeM(coarse, 18).upscaleTo(gw, gh, cf), boundary) * 100).toStringAsFixed(1)}%');
+  // 직각화·직선펴기가 포기하면 물결치는 원본이 그대로 나간다. 건물이
+  // 흐물흐물해 보이면 여기부터 본다.
+  stdout.writeln('  직각화 시도 $regularizeTried '
+      '· 면적포기 $regularizeGaveUp · 꼭짓점실패 $regularizeNoCorners'
+      ' | 직선펴기 포기 $straightenGaveUp/$straightenTried');
 
   emit(boundary, greens, greenOutside, waters, facils, parks, blds, outers, holes, majors,
       fieldLines, stalls, crosswalks, pois);
