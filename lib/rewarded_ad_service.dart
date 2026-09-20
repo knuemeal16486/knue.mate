@@ -70,9 +70,12 @@ class RewardedAdService {
   }) async {
     var ad = _cached;
     _cached = null;
-    preload(); // 다음 번을 위해 미리 하나 더 불러둔다
 
+    // 캐시가 비었을 때만 즉석 로드. preload를 여기서 먼저 부르면 즉석
+    // 로드와 겹쳐 **광고를 두 개 불러놓고 하나만 쓰게 된다** — 요청 대비
+    // 노출 비율이 나빠지므로, 보여줄 것을 확보한 뒤에 다음 몫을 부른다.
     ad ??= await _loadOnDemand();
+    preload();
 
     if (ad == null) {
       onUnavailable();
@@ -100,7 +103,18 @@ class RewardedAdService {
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
-          if (!completer.isCompleted) completer.complete(ad);
+          if (!completer.isCompleted) {
+            completer.complete(ad);
+            return;
+          }
+          // 8초 타임아웃으로 포기한 뒤에 도착했다. 그냥 두면 dispose되지
+          // 않아 광고 객체가 샌다 — 다음 번 몫으로 넣어두고, 자리가 이미
+          // 찼으면 버린다.
+          if (_cached == null) {
+            _cached = ad;
+          } else {
+            ad.dispose();
+          }
         },
         onAdFailedToLoad: (error) {
           debugPrint('RewardedAdService: 즉석 로드 실패: $error');
