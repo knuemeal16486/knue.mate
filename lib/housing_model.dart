@@ -154,3 +154,54 @@ final List<OneRoomName> kOneRoomNames = [
 final Map<String, OneRoomName> kOneRoomNameById = {
   for (final n in kOneRoomNames) n.id: n,
 };
+
+/// 기숙사 한 학기 비용. 자취 시세와 견줄 수 있게 월 단위로 환산해 둔다.
+///
+/// 자취는 "월세 + 관리비"로 이야기하고 식비는 따로 치므로, 비교할 때는
+/// [monthlyHousing](주거비만)을 쓰는 게 맞다. [monthlyWithMeals]는 실제로
+/// 한 달에 나가는 총액이 궁금할 때 같이 보여준다.
+class DormCost {
+  final String name;
+
+  /// 학기 관리비(원) — 기숙사에서 "주거비"에 해당하는 금액.
+  final int semesterHousingWon;
+
+  /// 학기 식비(원).
+  final int semesterMealWon;
+
+  /// 관리비가 적용되는 일수(예: 212일).
+  final int days;
+
+  const DormCost({
+    required this.name,
+    required this.semesterHousingWon,
+    required this.semesterMealWon,
+    required this.days,
+  });
+
+  int get semesterTotalWon => semesterHousingWon + semesterMealWon;
+
+  /// 하루치 주거비(원).
+  double get dailyHousingWon => semesterHousingWon / days;
+
+  /// 월 환산 주거비(만원). 한 달을 30.4일로 본다.
+  int get monthlyHousing => (dailyHousingWon * 30.4 / 10000).round();
+
+  /// 월 환산 식비(만원).
+  int get monthlyMeal => (semesterMealWon / days * 30.4 / 10000).round();
+
+  /// 월 환산 총액(만원, 식비 포함).
+  int get monthlyWithMeals => monthlyHousing + monthlyMeal;
+}
+
+/// 학기 중 기숙사 희망입사 비용. 출처: 학교 공지(1·2학기 다감관 기준).
+///
+/// ⚠️ 학기마다 바뀌는 값이다. 공지가 갱신되면 여기 숫자를 고쳐야 한다.
+const List<DormCost> kDormCosts = [
+  DormCost(
+    name: '다감관 1인실',
+    semesterHousingWon: 2387120,
+    semesterMealWon: 1684200, // 2식 420식
+    days: 212,
+  ),
+];

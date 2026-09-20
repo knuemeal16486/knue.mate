@@ -6,6 +6,30 @@ import 'housing_iso.dart' show BaseBuilding;
 import 'housing_model.dart';
 import 'offline_cache.dart';
 
+/// 방 구조. "내 조건 찾기"에서 제일 먼저 거르는 조건이라 따로 둔다.
+///
+/// ⚠️ [key]는 Firestore에 그대로 저장되는 값이다. 바꾸면 이미 등록된 제보의
+/// 방 구조가 전부 "모름"으로 떨어진다. 라벨만 고칠 것.
+enum HousingRoomType {
+  oneRoom('원룸', 'oneRoom'),
+  onePointFive('1.5룸', 'onePointFive'),
+  twoRoom('2룸', 'twoRoom'),
+  threeRoomPlus('3룸 이상', 'threeRoomPlus');
+
+  final String label;
+  final String key;
+  const HousingRoomType(this.label, this.key);
+
+  /// 저장값 → 방 구조. 방 구조가 없던 시절 제보는 null(모름)이다.
+  static HousingRoomType? fromKey(String? key) {
+    if (key == null) return null;
+    for (final t in values) {
+      if (t.key == key) return t;
+    }
+    return null;
+  }
+}
+
 /// 자취방 시세 제보 한 건.
 ///
 /// 학교 주변 원룸은 공개된 시세표가 없어서 학생들이 서로 물어보는 수밖에 없다.
@@ -37,6 +61,9 @@ class HousingReport {
   /// 관리자 화면이 개별 제보를 수정·삭제할 때만 필요해서 읽어올 때만 채운다.
   final String? id;
 
+  /// 방 구조. 이 필드가 생기기 전 제보는 null(모름).
+  final HousingRoomType? roomType;
+
   const HousingReport({
     required this.buildingId,
     required this.deposit,
@@ -46,7 +73,11 @@ class HousingReport {
     this.maintenanceFee,
     this.oneRoomId,
     this.id,
+    this.roomType,
   });
+
+  /// 관리비까지 포함한 월 부담액. 관리비를 안 적었으면 월세만.
+  int get monthlyTotal => monthlyRent + (maintenanceFee ?? 0);
 
   Map<String, dynamic> toFirestore() => {
         'buildingId': buildingId,
@@ -54,6 +85,7 @@ class HousingReport {
         'monthlyRent': monthlyRent,
         if (maintenanceFee != null) 'maintenanceFee': maintenanceFee,
         if (oneRoomId != null) 'oneRoomId': oneRoomId,
+        if (roomType != null) 'roomType': roomType!.key,
         'features': features,
         'reportedAt': FieldValue.serverTimestamp(),
       };
@@ -71,6 +103,7 @@ class HousingReport {
       monthlyRent: rent.toInt(),
       maintenanceFee: (d['maintenanceFee'] as num?)?.toInt(),
       oneRoomId: d['oneRoomId'] as String?,
+      roomType: HousingRoomType.fromKey(d['roomType'] as String?),
       features: (d['features'] as List?)?.whereType<String>().toList() ?? const [],
       reportedAt: ts is Timestamp ? ts.toDate() : DateTime.now(),
     );
@@ -158,8 +191,12 @@ class HousingSummary {
   final int? medianDeposit;
   final int? medianRent;
 
-  /// 많이 언급된 특징 순.
+  /// 많이 언급된 특징 순. **상위 5개만** — 화면 표시용이다.
   final List<String> topFeatures;
+
+  /// 한 번이라도 언급된 특징 전부. 필터는 이걸 봐야 한다 —
+  /// [topFeatures]로 거르면 6번째로 밀린 특징은 조건에 영영 안 걸린다.
+  final Set<String> allFeatures;
 
   /// 가장 최근 제보 시점.
   final DateTime? latestReport;
@@ -168,6 +205,14 @@ class HousingSummary {
   /// 건축물대장에 원룸 이름이 없어 학생 제보로만 채워진다.
   final String? oneRoomId;
 
+  /// 관리비 중앙값(만원). 아무도 안 적었으면 null.
+  final int? medianMaintenance;
+
+  /// 이 건물에서 제보된 방 구조들. 한 건물에 원룸과 2룸이 섞여 있을 수 있어
+  /// 다수결로 하나만 고르지 않고 **전부** 들고 있는다 — "2룸 찾기"를 눌렀을 때
+  /// 2룸 제보가 하나라도 있으면 후보로 보여줘야 한다.
+  final Set<HousingRoomType> roomTypes;
+
   const HousingSummary({
     required this.reportCount,
     required this.medianDeposit,
@@ -175,6 +220,9 @@ class HousingSummary {
     required this.topFeatures,
     required this.latestReport,
     this.oneRoomId,
+    this.medianMaintenance,
+    this.roomTypes = const {},
+    this.allFeatures = const {},
   });
 
   static const empty = HousingSummary(
@@ -186,6 +234,14 @@ class HousingSummary {
   );
 
   bool get hasData => reportCount > 0;
+
+  /// 관리비까지 포함한 월 부담액 중앙값(만원). 월세 정보가 없으면 null.
+  /// 관리비를 아무도 안 적었으면 월세만 돌려준다.
+  int? get medianMonthlyTotal {
+    final rent = medianRent;
+    if (rent == null) return null;
+    return rent + (medianMaintenance ?? 0);
+  }
 
   /// 제보가 적으면 화면에서 "참고용"이라고 알려주기 위한 기준.
   bool get isThin => reportCount < 3;
@@ -227,11 +283,21 @@ class HousingSummary {
             .first
             .key;
 
+    // 관리비는 적은 사람만 적는다 — null을 0으로 치면 중앙값이 아래로
+    // 끌려가므로, 적어 낸 제보만 모아 중앙값을 낸다.
+    final fees = list
+        .map((r) => r.maintenanceFee)
+        .whereType<int>()
+        .toList();
+
     return HousingSummary(
       reportCount: list.length,
       medianDeposit: median(list.map((r) => r.deposit).toList()),
       medianRent: median(list.map((r) => r.monthlyRent).toList()),
+      medianMaintenance: median(fees),
+      roomTypes: list.map((r) => r.roomType).whereType<HousingRoomType>().toSet(),
       topFeatures: sortedFeatures.take(5).map((e) => e.key).toList(),
+      allFeatures: featureCount.keys.toSet(),
       latestReport: list
           .map((r) => r.reportedAt)
           .reduce((a, b) => a.isAfter(b) ? a : b),
@@ -316,6 +382,9 @@ class HousingService {
 
   /// 제보 수정. 원문 그대로 덮어쓰면 reportedAt이 갱신 시각으로 밀리므로,
   /// 여기서는 바뀔 수 있는 필드만 골라 update한다.
+  ///
+  /// ⚠️ set()으로 바꾸지 말 것 — 여기 안 적힌 roomType 같은 필드가 통째로
+  /// 날아간다(관리자가 금액만 고쳐도 방 구조가 사라져 필터에서 빠진다).
   static Future<void> updateReport({
     required String id,
     required int deposit,
@@ -379,17 +448,116 @@ enum HousingSubmitResult { ok, alreadyReported, failed }
 /// 제보 화면에서 고르는 특징 목록.
 /// 자유 입력 대신 미리 정해두면 같은 뜻의 표현이 흩어지지 않아
 /// "많이 언급된 특징" 집계가 의미를 갖는다.
+/// ⚠️ 여기 문자열이 곧 Firestore에 저장되는 값이고, "내 조건 찾기"가 이 값으로
+/// 제보를 거른다. 철자를 바꾸면 **기존 제보가 그 조건에 영영 안 걸린다.**
+///
+/// 예전엔 목록이 두 벌이었다 — 제보 폼은 '방음 양호'를 저장하는데 관리자
+/// 화면은 '방음 좋음'을 보여줬고, 제보 폼에만 있던 '베란다'는 관리자
+/// 화면에 없었다. 같은 뜻인데 문자열이 달라 필터가 걸릴 수 없는 상태였다.
+/// 앞쪽 10개가 실제로 제보에 쌓여 있는 값이라 철자를 그대로 유지한다.
 const List<String> kHousingFeatures = [
+  // 제보 폼이 써 온 값 (기존 데이터와 일치해야 함)
   '풀옵션',
-  '복층',
-  '분리형',
-  '주차 가능',
   '엘리베이터',
-  '신축급',
-  '방음 좋음',
-  '벌레 적음',
+  '주차 가능',
+  '베란다',
+  '복층',
+  '심야전기',
+  '도시가스',
   '햇빛 잘 듦',
+  '방음 양호',
+  '벌레 적음',
+  // 이후 추가된 항목
+  '분리형',
+  '신축급',
   '관리비 저렴',
   '학교와 가까움',
   '조용함',
 ];
+
+/// "내 조건 찾기" 조건 묶음.
+///
+/// 비어 있는(=아무 조건도 안 건) 항목은 거르지 않는다. 전부 비면 [isEmpty].
+class HousingFilter {
+  /// 비어 있으면 방 구조를 안 따진다.
+  final Set<HousingRoomType> roomTypes;
+
+  /// 보증금 상한(만원). null이면 안 따진다.
+  final int? maxDeposit;
+
+  /// 월 부담 상한(만원). null이면 안 따진다.
+  final int? maxMonthly;
+
+  /// true면 [maxMonthly]를 **월세+관리비**와 비교하고, false면 월세만 본다.
+  /// 관리비가 월 10만원씩 붙는 집이 흔해서 이 토글이 결과를 크게 바꾼다.
+  final bool includeMaintenance;
+
+  /// 전부 갖춰야 하는 조건. 하나라도 빠지면 제외한다.
+  final Set<String> requiredFeatures;
+
+  const HousingFilter({
+    this.roomTypes = const {},
+    this.maxDeposit,
+    this.maxMonthly,
+    this.includeMaintenance = true,
+    this.requiredFeatures = const {},
+  });
+
+  bool get isEmpty =>
+      roomTypes.isEmpty &&
+      maxDeposit == null &&
+      maxMonthly == null &&
+      requiredFeatures.isEmpty;
+
+  HousingFilter copyWith({
+    Set<HousingRoomType>? roomTypes,
+    int? maxDeposit,
+    int? maxMonthly,
+    bool? includeMaintenance,
+    Set<String>? requiredFeatures,
+    bool clearDeposit = false,
+    bool clearMonthly = false,
+  }) =>
+      HousingFilter(
+        roomTypes: roomTypes ?? this.roomTypes,
+        maxDeposit: clearDeposit ? null : (maxDeposit ?? this.maxDeposit),
+        maxMonthly: clearMonthly ? null : (maxMonthly ?? this.maxMonthly),
+        includeMaintenance: includeMaintenance ?? this.includeMaintenance,
+        requiredFeatures: requiredFeatures ?? this.requiredFeatures,
+      );
+}
+
+/// 이 건물이 조건에 맞는지.
+///
+/// 제보가 없는 건물은 비교할 값이 없으므로 **항상 제외**한다 — 조건을 걸었는데
+/// 정보가 없는 건물이 섞여 나오면 "조건에 맞다"고 오해하게 된다.
+///
+/// 순수 함수 — 테스트 대상.
+bool housingMatchesFilter(HousingSummary s, HousingFilter f) {
+  if (!s.hasData) return false;
+  if (f.isEmpty) return true;
+
+  if (f.roomTypes.isNotEmpty) {
+    // 방 구조를 아무도 안 적은 건물은 알 수 없으므로 제외한다.
+    if (s.roomTypes.isEmpty) return false;
+    if (!s.roomTypes.any(f.roomTypes.contains)) return false;
+  }
+
+  final maxDeposit = f.maxDeposit;
+  if (maxDeposit != null) {
+    final d = s.medianDeposit;
+    if (d == null || d > maxDeposit) return false;
+  }
+
+  final maxMonthly = f.maxMonthly;
+  if (maxMonthly != null) {
+    final m = f.includeMaintenance ? s.medianMonthlyTotal : s.medianRent;
+    if (m == null || m > maxMonthly) return false;
+  }
+
+  if (f.requiredFeatures.isNotEmpty) {
+    if (!f.requiredFeatures.every(s.allFeatures.contains)) return false;
+  }
+
+  return true;
+}

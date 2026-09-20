@@ -2,11 +2,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'constants.dart';
+import 'housing_filter_sheet.dart';
 import 'housing_iso.dart';
 import 'housing_model.dart';
 import 'housing_service.dart';
 import 'ui_utils.dart';
-import 'geo_utils.dart';
 /// 자취방 지도.
 ///
 /// OpenStreetMap 타일을 쓰지 않고 건물을 직접 360도 2.5D 아이소메트릭으로 그린다.
@@ -46,6 +46,18 @@ class _HousingScreenState extends State<HousingScreen>
 
   /// 관리자가 바로잡은 건물 정보. 있으면 학생 제보 다수결보다 우선한다.
   Map<String, HousingBuildingOverride> _overrides = const {};
+
+  /// "내 조건 찾기"로 건 조건. 비어 있으면 아무것도 안 거른다.
+  HousingFilter _filter = const HousingFilter();
+
+  /// 조건에 맞는 건물 id. 지도에서 강조하고, 결과 목록의 근거가 된다.
+  Set<String> get _matchingBuildingIds {
+    if (_filter.isEmpty) return const {};
+    return {
+      for (final e in _summaries.entries)
+        if (housingMatchesFilter(e.value, _filter)) e.key,
+    };
+  }
 
   final TransformationController _transformController =
       TransformationController();
@@ -183,14 +195,12 @@ class _HousingScreenState extends State<HousingScreen>
       }
     }
 
-    final selectedZoneBuildings = <String>{};
-    if (_selectedZone != null) {
-      for (final b in _base.buildings) {
-        final known = _resolvedKnown(b.id);
-        if (known != null && known.zone == _selectedZone) {
-          selectedZoneBuildings.add(b.id);
-        }
-      }
+    // 조건을 걸어 두면 맞는 건물만 구역색을 남기고 나머지는 색을 빼서,
+    // 지도에서도 후보가 바로 눈에 띄게 한다.
+    final matches = _matchingBuildingIds;
+    if (matches.isNotEmpty) {
+      zoneColors.removeWhere((id, _) => !matches.contains(id));
+      displayNames.removeWhere((id, _) => !matches.contains(id));
     }
 
     _buildings = layoutBuildings(
@@ -312,6 +322,15 @@ class _HousingScreenState extends State<HousingScreen>
                 AppleAppBarFlexibleSpace(themeColor: color, isDark: isDark),
             iconTheme: const IconThemeData(color: Colors.white),
             actions: [
+              IconButton(
+                onPressed: () => _openFilterSheet(isDark),
+                icon: Icon(
+                  _filter.isEmpty
+                      ? Icons.tune_rounded
+                      : Icons.filter_alt_rounded,
+                ),
+                tooltip: "내 조건 찾기",
+              ),
               IconButton(
                 onPressed: () => _showHelp(isDark),
                 icon: const Icon(Icons.help_outline_rounded),
@@ -853,6 +872,310 @@ class _HousingScreenState extends State<HousingScreen>
     });
   }
 
+  Future<void> _openFilterSheet(bool isDark) async {
+    final result = await showModalBottomSheet<HousingFilter>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => HousingFilterSheet(
+        initial: _filter,
+        isDark: isDark,
+        countMatches: (f) => _summaries.values
+            .where((s) => housingMatchesFilter(s, f))
+            .length,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _filter = result;
+      _rebuild();
+    });
+    if (!_filter.isEmpty) _showFilterResults(isDark);
+  }
+
+  /// 조건에 맞는 원룸 목록. 지도에서 찾아 헤매는 대신 시세를 나란히 비교하고,
+  /// 기숙사 비용과도 견줄 수 있게 한다.
+  void _showFilterResults(bool isDark) {
+    final matches = _matchingBuildingIds;
+    final rows =
+        <({String name, HousingSummary summary, BaseBuilding building})>[];
+    for (final b in _base.buildings) {
+      if (!matches.contains(b.id)) continue;
+      final s = _summaries[b.id];
+      if (s == null) continue;
+      rows.add((
+        name: _resolvedKnown(b.id)?.name ?? b.officialName ?? '이름 미확인 건물',
+        summary: s,
+        building: b,
+      ));
+    }
+    // 월 부담이 싼 순. 같으면 보증금이 싼 순.
+    rows.sort((a, b) {
+      final am = a.summary.medianMonthlyTotal ?? 1 << 30;
+      final bm = b.summary.medianMonthlyTotal ?? 1 << 30;
+      if (am != bm) return am.compareTo(bm);
+      return (a.summary.medianDeposit ?? 1 << 30)
+          .compareTo(b.summary.medianDeposit ?? 1 << 30);
+    });
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.92,
+        expand: false,
+        builder: (_, controller) => Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF161618) : Colors.white,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: ListView(
+            controller: controller,
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      "조건에 맞는 원룸 ${rows.length}곳",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.4,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      _openFilterSheet(isDark);
+                    },
+                    child: const Text("조건 수정"),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "제보가 있는 건물만 비교할 수 있어요. 시세는 제보 중앙값이에요.",
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: isDark ? Colors.white38 : Colors.black45,
+                ),
+              ),
+              const SizedBox(height: 14),
+              _buildDormComparison(rows.map((r) => r.summary).toList(), isDark),
+              const SizedBox(height: 14),
+              if (rows.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 28),
+                  child: Text(
+                    "조건에 맞는 곳이 없어요.\n금액을 조금 올리거나 조건을 줄여보세요.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: isDark ? Colors.white38 : Colors.black45,
+                    ),
+                  ),
+                )
+              else
+                ...rows.map((r) => _buildFilterResultRow(
+                      r.name,
+                      r.summary,
+                      r.building,
+                      isDark,
+                      sheetCtx,
+                    )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterResultRow(
+    String name,
+    HousingSummary s,
+    BaseBuilding building,
+    bool isDark,
+    BuildContext sheetCtx,
+  ) {
+    final monthly = s.medianMonthlyTotal;
+    final known = _resolvedKnown(building.id);
+    return InkWell(
+      onTap: () {
+        Navigator.pop(sheetCtx);
+        _focusBuilding(building);
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: known?.zone.color ?? Colors.grey,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      if (s.roomTypes.isNotEmpty)
+                        s.roomTypes.map((t) => t.label).join('/'),
+                      "제보 ${s.reportCount}건",
+                      if (s.isThin) "참고용",
+                    ].join(' · '),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white38 : Colors.black45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  monthly == null ? "-" : "월 $monthly만원",
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontFeatures: KnueTokens.tabularFigures,
+                  ),
+                ),
+                Text(
+                  s.medianDeposit == null ? "" : "보증금 ${s.medianDeposit}만원",
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.white38 : Colors.black45,
+                    fontFeatures: KnueTokens.tabularFigures,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 기숙사와의 비교 카드. 자취는 식비가 따로 나가므로 **주거비끼리** 견준다.
+  Widget _buildDormComparison(List<HousingSummary> matched, bool isDark) {
+    final dorm = kDormCosts.first;
+    final monthlies = matched
+        .map((s) => s.medianMonthlyTotal)
+        .whereType<int>()
+        .toList()
+      ..sort();
+    final int? cheapest = monthlies.isEmpty ? null : monthlies.first;
+    final diff = cheapest == null ? null : cheapest - dorm.monthlyHousing;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.apartment_rounded, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                "기숙사 ${dorm.name}과 비교",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "월 ${dorm.monthlyHousing}만원 (주거비만) · 식비 포함 ${dorm.monthlyWithMeals}만원",
+            style: TextStyle(
+              fontSize: 12.5,
+              color: isDark ? Colors.white70 : Colors.black87,
+              fontFeatures: KnueTokens.tabularFigures,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            "한 학기 ${(dorm.semesterTotalWon / 10000).round()}만원 · ${dorm.days}일 기준",
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? Colors.white38 : Colors.black45,
+              fontFeatures: KnueTokens.tabularFigures,
+            ),
+          ),
+          if (diff != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              diff <= 0
+                  ? "조건에 맞는 가장 싼 곳이 기숙사보다 월 ${-diff}만원 저렴해요."
+                  : "조건에 맞는 가장 싼 곳도 기숙사보다 월 $diff만원 비싸요.",
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: diff <= 0
+                    ? (isDark ? Colors.greenAccent : Colors.green.shade700)
+                    : (isDark ? Colors.orangeAccent : Colors.deepOrange),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "자취는 식비가 따로 들고 보증금도 묶여요. 주거비끼리만 견준 값이에요.",
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.white38 : Colors.black45,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   void _showHelp(bool isDark) {
     showModalBottomSheet(
       context: context,
@@ -1260,21 +1583,9 @@ class _ReportSheetState extends State<_ReportSheet> {
   final _rent = TextEditingController();
   final _fee = TextEditingController();
   String? _selectedOneRoomId;
+  HousingRoomType? _roomType;
   final Set<String> _features = {};
   bool _submitting = false;
-
-  static const _featureOptions = [
-    '풀옵션',
-    '엘리베이터',
-    '주차 가능',
-    '베란다',
-    '복층',
-    '심야전기',
-    '도시가스',
-    '햇빛 잘 듦',
-    '방음 양호',
-    '벌레 적음',
-  ];
 
   @override
   void dispose() {
@@ -1298,6 +1609,7 @@ class _ReportSheetState extends State<_ReportSheet> {
             : int.tryParse(_fee.text.trim()),
         features: _features.toList(),
         oneRoomId: _selectedOneRoomId,
+        roomType: _roomType,
         reportedAt: DateTime.now(),
       );
       await HousingService.submit(report);
@@ -1370,6 +1682,30 @@ class _ReportSheetState extends State<_ReportSheet> {
                     ],
                     onChanged: (v) => setState(() => _selectedOneRoomId = v),
                   ),
+                  const SizedBox(height: 14),
+
+                  // 방 구조 — "내 조건 찾기"가 제일 먼저 거르는 조건이라
+                  // 제보에서 받아두지 않으면 필터가 아무것도 못 한다.
+                  Text('방 구조',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      )),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: HousingRoomType.values.map((t) {
+                      return ChoiceChip(
+                        label: Text(t.label,
+                            style: const TextStyle(fontSize: 11.5)),
+                        selected: _roomType == t,
+                        onSelected: (sel) =>
+                            setState(() => _roomType = sel ? t : null),
+                      );
+                    }).toList(),
+                  ),
                   const SizedBox(height: 12),
 
                   // 보증금 / 월세
@@ -1435,7 +1771,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children: _featureOptions.map((f) {
+                    children: kHousingFeatures.map((f) {
                       final selected = _features.contains(f);
                       return FilterChip(
                         label: Text(f, style: const TextStyle(fontSize: 11.5)),
