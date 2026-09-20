@@ -879,6 +879,13 @@ Map<String, dynamic> parseCafeHtml(String html, DateTime date) {
   return {'meals': meals};
 }
 
+/// iOS 홈 위젯의 WidgetKit kind 문자열.
+///
+/// ios/MealWidget/MealWidget.swift의 `let kind`와 **반드시 같아야 한다**.
+/// 다르면 앱이 데이터를 저장해도 위젯이 다시 그려지지 않아, 예전 메뉴가
+/// 그대로 남아 있는 것처럼 보인다(조용히 틀리는 종류의 버그).
+const String kIosMealWidgetKind = 'MealWidget';
+
 // [핵심] 위젯 데이터 가공 및 저장
 Future<void> _updateWidgetDataInternal(
   Map<String, dynamic> data,
@@ -967,10 +974,13 @@ Future<void> _updateWidgetDataInternal(
     );
 
     // [수정] 위젯 업데이트 시 전체 패키지명 사용 (가장 확실한 방법)
+    // iOSName은 WidgetKit의 kind 문자열 — ios/MealWidget/MealWidget.swift의
+    // `let kind`와 같아야 앱이 갱신할 때 위젯이 다시 그려진다.
     await HomeWidget.updateWidget(
       name: 'MealWidgetProvider',
       androidName: 'MealWidgetProvider',
       qualifiedAndroidName: 'com.knue.knuemate.MealWidgetProvider',
+      iOSName: kIosMealWidgetKind,
     );
 
     debugPrint("위젯 업데이트 완료: $sourceName / $timeText");
@@ -1001,6 +1011,7 @@ Future<void> saveWidgetSettingsAndUpdate(
     await HomeWidget.updateWidget(
       name: 'MealWidgetProvider',
       androidName: 'MealWidgetProvider',
+      iOSName: kIosMealWidgetKind,
     );
 
     // 실제 데이터 호출
@@ -1030,6 +1041,7 @@ Future<void> testBasicWidgetFunction() async {
   await HomeWidget.updateWidget(
     name: 'MealWidgetProvider',
     androidName: 'MealWidgetProvider',
+    iOSName: kIosMealWidgetKind,
   );
 }
 
