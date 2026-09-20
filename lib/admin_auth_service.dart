@@ -63,6 +63,7 @@ class AdminAuthService {
     try {
       final auth = _auth;
       if (auth == null) return;
+      _watchForLostAccount(auth);
       if (auth.currentUser == null) {
         await auth.signInAnonymously();
       }
@@ -70,6 +71,34 @@ class AdminAuthService {
     } catch (e) {
       debugPrint('AdminAuthService.initialize 실패(앱은 계속 동작): $e');
     }
+  }
+
+  static bool _watching = false;
+
+  /// 계정이 사라지면 다시 익명 로그인한다.
+  ///
+  /// Firebase 콘솔의 **익명 계정 자동 정리**를 켜 두면 오래된 익명 계정이
+  /// 서버에서 지워진다. 그때 기기에는 로그인 상태가 남아 있는데 토큰은
+  /// 무효라, 그대로 두면 Firestore 쓰기가 전부 권한 오류로 떨어진다.
+  /// SDK가 토큰 갱신에 실패해 로그아웃 상태로 떨어뜨리는 순간을 잡아
+  /// 새 익명 계정을 만든다.
+  ///
+  /// uid가 바뀌므로 기존 `admin_grants` 문서는 쓸모없어진다 — 관리자는
+  /// 비밀번호를 한 번 더 넣으면 된다(새 기기에 권한을 여는 것과 같은 흐름).
+  static void _watchForLostAccount(FirebaseAuth auth) {
+    if (_watching) return;
+    _watching = true;
+    auth.authStateChanges().listen((user) async {
+      if (user != null) return;
+      isAdmin.value = false;
+      try {
+        await auth.signInAnonymously();
+      } catch (e) {
+        // 실패하면 그대로 둔다. 여기서 되풀이하면 네트워크가 없을 때
+        // 재시도가 끝없이 돈다 — 다음 앱 실행의 initialize가 다시 해 준다.
+        debugPrint('AdminAuthService: 익명 재로그인 실패: $e');
+      }
+    });
   }
 
   /// 이 기기에 grant 문서가 있는지 다시 확인한다.
