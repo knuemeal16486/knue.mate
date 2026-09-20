@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:math' as math;
-import 'housing_model.dart';
 import 'geo_utils.dart';
 
 /// VWorld API 서비스 – 건물, 도로, 녹지, 물 등 GeoJSON 데이터를 가져옴

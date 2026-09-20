@@ -407,21 +407,25 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     try {
       final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final events = await _scraper.fetchCalendarEvents(now.year, now.month);
-      // 3칸뿐이라 중복 하나가 자리를 통째로 먹는다. 학사일정 화면과 같은
-      // 기준으로 합친 뒤 자른다.
-      final upcoming = dedupeCalendarEvents(events).where((e) {
-        final end = DateTime(e.endDate.year, e.endDate.month, e.endDate.day);
-        return !end.isBefore(today);
-      }).toList()..sort((a, b) => a.startDate.compareTo(b.startDate));
+      // 이번 달만 보면 **월말마다 카드가 빈다** — 9월 28일에 9월 일정은 이미
+      // 다 지났는데 10월 것은 안 가져오니까. "다가오는" 카드니 다음 달까지
+      // 본다. (DateTime이 month+1=13을 이듬해 1월로 정규화해 주므로 연말도
+      // 그대로 넘어간다.) 두 달 모두 캐시가 있어 대개 네트워크를 안 탄다.
+      final nextMonth = DateTime(now.year, now.month + 1);
+      final months = await Future.wait([
+        _scraper.fetchCalendarEvents(now.year, now.month),
+        _scraper.fetchCalendarEvents(nextMonth.year, nextMonth.month),
+      ]);
 
       final ddays = List<DdayItem>.from(PreferencesService.ddayItems.value)
         ..sort((a, b) => a.daysLeft(now).compareTo(b.daysLeft(now)));
 
       if (!mounted) return;
       setState(() {
-        _upcomingAcademic = upcoming.take(3).toList();
+        _upcomingAcademic = upcomingAcademicEvents([
+          ...months[0],
+          ...months[1],
+        ], now);
         _upcomingDdays = ddays.take(3).toList();
         _upcomingLoading = false;
       });

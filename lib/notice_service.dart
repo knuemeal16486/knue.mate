@@ -45,6 +45,24 @@ List<CalendarEvent> dedupeCalendarEvents(List<CalendarEvent> events) {
       .toList();
 }
 
+/// 홈 카드의 "다가오는 학사일정" 고르기.
+///
+/// 오늘 아직 안 끝난 일정만 남겨 시작이 이른 순으로 [take]개.
+/// 여러 달치를 받아 넘기는 걸 전제로 한다 — 이번 달만 넘기면 월말에
+/// 빈 카드가 된다. 순수 함수 — 테스트 대상.
+List<CalendarEvent> upcomingAcademicEvents(
+  List<CalendarEvent> events,
+  DateTime now, {
+  int take = 3,
+}) {
+  final today = DateTime(now.year, now.month, now.day);
+  final upcoming = dedupeCalendarEvents(events).where((e) {
+    final end = DateTime(e.endDate.year, e.endDate.month, e.endDate.day);
+    return !end.isBefore(today);
+  }).toList()..sort((a, b) => a.startDate.compareTo(b.startDate));
+  return upcoming.take(take).toList();
+}
+
 class KnueScraper {
   // 모든 게시판 그룹 (기존과 동일)
   final Map<String, Map<String, String>> boardGroups = {

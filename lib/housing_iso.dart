@@ -688,7 +688,6 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     final rad = cw.angleDeg * math.pi / 180;
     final cosA = math.cos(rad), sinA = math.sin(rad);
     final hw = cw.width / 2;
-    final hl = cw.length / 2;
     const numStripes = 6;
     for (var i = 0; i < numStripes; i++) {
       final t = (i / (numStripes - 1) - 0.5) * cw.length;

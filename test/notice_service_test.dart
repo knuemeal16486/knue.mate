@@ -103,6 +103,72 @@ void main() {
     });
   });
 
+  group('upcomingAcademicEvents', () {
+    CalendarEvent ev(String title, DateTime start, [DateTime? end]) =>
+        CalendarEvent(startDate: start, endDate: end ?? start, title: title);
+
+    test('오늘 끝나는 일정은 아직 남는다', () {
+      final now = DateTime(2026, 9, 20, 14, 0);
+      final today = ev('오늘까지', DateTime(2026, 9, 18), DateTime(2026, 9, 20));
+      expect(upcomingAcademicEvents([today], now), [today]);
+    });
+
+    test('어제 끝난 일정은 빠진다', () {
+      final now = DateTime(2026, 9, 20, 14, 0);
+      final past = ev('어제까지', DateTime(2026, 9, 18), DateTime(2026, 9, 19));
+      expect(upcomingAcademicEvents([past], now), isEmpty);
+    });
+
+    test('시작이 이른 순으로 3개까지', () {
+      final now = DateTime(2026, 9, 1);
+      final events = [
+        ev('넷', DateTime(2026, 9, 25)),
+        ev('하나', DateTime(2026, 9, 5)),
+        ev('셋', DateTime(2026, 9, 20)),
+        ev('둘', DateTime(2026, 9, 10)),
+      ];
+      expect(upcomingAcademicEvents(events, now).map((e) => e.title), [
+        '하나',
+        '둘',
+        '셋',
+      ]);
+    });
+
+    test('월말에도 다음 달 일정으로 카드가 찬다', () {
+      // 이게 실제 버그였다: 이번 달만 넘기면 9/28에 9월 일정이 다 지나
+      // "다가오는 일정 없음"이 떴다. 매달 말 되풀이되던 증상.
+      final now = DateTime(2026, 9, 28);
+      final september = [ev('추석', DateTime(2026, 9, 24), DateTime(2026, 9, 26))];
+      final october = [
+        ev('개천절', DateTime(2026, 10, 3)),
+        ev('중간고사', DateTime(2026, 10, 19), DateTime(2026, 10, 23)),
+      ];
+      expect(
+        upcomingAcademicEvents([...september, ...october], now).map(
+          (e) => e.title,
+        ),
+        ['개천절', '중간고사'],
+      );
+    });
+
+    test('달 경계에 걸친 일정이 두 달에서 와도 한 번만 센다', () {
+      // scopeEventsToMonth가 8/31~9/4 같은 일정을 양쪽 달에 모두 남기므로
+      // 두 달을 합치면 반드시 중복이 생긴다.
+      final now = DateTime(2026, 8, 30);
+      final boundary = ev('수강정정', DateTime(2026, 8, 31), DateTime(2026, 9, 4));
+      final merged = [boundary, boundary];
+      expect(upcomingAcademicEvents(merged, now).length, 1);
+    });
+
+    test('남은 일정이 없으면 빈 목록', () {
+      final now = DateTime(2026, 12, 31);
+      expect(
+        upcomingAcademicEvents([ev('옛날', DateTime(2026, 1, 1))], now),
+        isEmpty,
+      );
+    });
+  });
+
   test('KNUE 표준 게시판 HTML 파싱', () {
     const html = '''
 <table class="bbs_list"><tbody>

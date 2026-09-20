@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'housing_iso.dart';
-import 'housing_model.dart';
 import 'geo_utils.dart';
 
 /// VWorld에서 제공하는 GeoJSON 피처를 앱 내부 모델로 변환하는 유틸리티
