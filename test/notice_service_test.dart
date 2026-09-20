@@ -45,6 +45,64 @@ void main() {
     });
   });
 
+  group('dedupeCalendarEvents', () {
+    CalendarEvent ev(String title, DateTime start, DateTime end) =>
+        CalendarEvent(startDate: start, endDate: end, title: title);
+
+    test('제목·기간이 모두 같으면 하나만 남는다', () {
+      final s = DateTime(2026, 9, 10);
+      final e = DateTime(2026, 9, 14);
+      final events = [ev('중간고사', s, e), ev('중간고사', s, e), ev('중간고사', s, e)];
+      expect(dedupeCalendarEvents(events).length, 1);
+    });
+
+    test('앞선 것이 남고 순서는 그대로다', () {
+      final events = [
+        ev('개강', DateTime(2026, 9, 1), DateTime(2026, 9, 1)),
+        ev('수강정정', DateTime(2026, 9, 3), DateTime(2026, 9, 5)),
+        ev('개강', DateTime(2026, 9, 1), DateTime(2026, 9, 1)),
+      ];
+      expect(dedupeCalendarEvents(events).map((e) => e.title), [
+        '개강',
+        '수강정정',
+      ]);
+    });
+
+    test('제목이 같아도 기간이 다르면 다른 일정이다', () {
+      // "중간고사"처럼 학기마다 되풀이되는 이름을 제목만 보고 지우면
+      // 2학기 일정이 통째로 사라진다.
+      final events = [
+        ev('중간고사', DateTime(2026, 4, 20), DateTime(2026, 4, 24)),
+        ev('중간고사', DateTime(2026, 10, 19), DateTime(2026, 10, 23)),
+      ];
+      expect(dedupeCalendarEvents(events).length, 2);
+    });
+
+    test('제목 앞뒤 공백 차이는 같은 일정으로 본다', () {
+      final s = DateTime(2026, 9, 10);
+      final e = DateTime(2026, 9, 10);
+      expect(dedupeCalendarEvents([ev(' 개강 ', s, e), ev('개강', s, e)]).length, 1);
+    });
+
+    test('홈 카드 3칸이 같은 일정으로 채워지지 않는다', () {
+      // 이게 실제로 났던 버그다: 중복을 안 걷어내고 take(3)을 해서 같은
+      // 일정만 세 줄 뜨고 정작 다음 일정이 밀려났다.
+      final dup = ev('추석 연휴', DateTime(2026, 9, 24), DateTime(2026, 9, 26));
+      final events = [
+        dup,
+        dup,
+        dup,
+        ev('개천절', DateTime(2026, 10, 3), DateTime(2026, 10, 3)),
+      ];
+      final top3 = dedupeCalendarEvents(events).take(3).map((e) => e.title);
+      expect(top3, ['추석 연휴', '개천절']);
+    });
+
+    test('빈 목록은 빈 목록', () {
+      expect(dedupeCalendarEvents([]), isEmpty);
+    });
+  });
+
   test('KNUE 표준 게시판 HTML 파싱', () {
     const html = '''
 <table class="bbs_list"><tbody>

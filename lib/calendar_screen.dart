@@ -517,16 +517,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final raw =
         _academicCache[_monthKey(_focusedDay.year, _focusedDay.month)] ?? [];
 
-    // 학교 페이지가 기간 일정을 행마다 반복해 싣는 탓에 같은 일정이 여러 번
-    // 잡힌다. 제목+기간이 같으면 하나로 본다.
-    final seen = <String>{};
-    final events =
-        raw
-            .where(
-              (e) => seen.add("${e.title.trim()}|${e.startDate}|${e.endDate}"),
-            )
-            .toList()
-          ..sort((a, b) => a.startDate.compareTo(b.startDate));
+    final events = dedupeCalendarEvents(raw)
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
 
     final now = DateTime.now();
     return Container(

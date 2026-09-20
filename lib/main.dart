@@ -149,6 +149,7 @@ void main() async {
       PreferencesService.loadSettings().catchError((e) {
         debugPrint("loadSettings warning: $e");
       }),
+      loadAppVersion(),
     ]);
 
     try {

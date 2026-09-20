@@ -1374,7 +1374,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _forceUpdateWidget(BuildContext context) async {
-    ScaffoldMessenger.of(context).showSnackBar(
+    // 갱신을 기다리는 동안 화면이 닫힐 수 있으므로 messenger를 미리 잡는다.
+    // 넘어온 context가 이 State의 것이라는 보장이 없어 mounted로는 못 가린다.
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
       const SnackBar(
         content: Text("위젯 갱신 중..."),
         duration: Duration(milliseconds: 800),
@@ -1382,10 +1385,10 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     try {
       await fetchMealApi(DateTime.now(), widgetSource.value);
-      if (mounted) showToast(context, "위젯 업데이트 완료!");
+      showToastOn(messenger, "위젯 업데이트 완료!");
     } catch (e) {
       await forceUpdateWidgetWithCurrentSettings();
-      if (mounted) showToast(context, "위젯 설정 업데이트 완료!");
+      showToastOn(messenger, "위젯 설정 업데이트 완료!");
     }
   }
 
@@ -1993,7 +1996,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       onTap: () => showLicensePage(
                         context: context,
                         applicationName: "KNUE All-in-One",
-                        applicationVersion: "5.8.0",
+                        applicationVersion: appVersionLabel.value,
                       ),
                     ),
 
@@ -2005,8 +2008,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       iconColor: Colors.redAccent,
                       onTap: () async {
                         await PreferencesService.clearAll();
+                        if (!mounted) return;
                         setState(() => _localTransparency = 0.0);
                         await forceUpdateWidgetWithCurrentSettings();
+                        // 여기 context는 State의 것이 아니라 바깥
+                        // ValueListenableBuilder의 것이라 State.mounted로는
+                        // 살아 있는지 알 수 없다.
+                        if (!context.mounted) return;
                         showToast(context, "초기화되었습니다.");
                       },
                     ),
@@ -2020,11 +2028,14 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: GestureDetector(
                         onTap: _onVersionTap,
                         behavior: HitTestBehavior.opaque,
-                        child: Text(
-                          "버전 5.8.0 (Final)",
-                          style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 12,
+                        child: ValueListenableBuilder<String>(
+                          valueListenable: appVersionLabel,
+                          builder: (context, version, _) => Text(
+                            version.isEmpty ? "버전 정보" : "버전 $version",
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ),

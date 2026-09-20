@@ -27,6 +27,24 @@ List<CalendarEvent> scopeEventsToMonth(
       .toList();
 }
 
+/// 같은 일정이 여러 번 실려 오는 걸 하나로 합친다.
+///
+/// 학교 페이지가 기간 일정을 행마다 반복해 싣거나, 기간이 겹치는 같은
+/// 일정이 따로 등록돼 있어서 같은 제목이 두세 번씩 잡힌다. 학사일정 화면은
+/// 목록이 길어 중복이 눈에만 거슬리는 정도지만, **홈 카드는 앞의 3개만
+/// 보여주므로 중복 하나가 자리를 통째로 먹는다** — 같은 일정만 세 줄 뜨고
+/// 정작 다음 일정은 안 보이는 일이 생긴다.
+///
+/// 제목만이 아니라 기간까지 같아야 같은 일정으로 본다. 제목만 보면
+/// "중간고사" 같은 이름이 학기마다 반복될 때 뒤쪽을 잘못 지운다.
+/// 순수 함수 — 테스트 대상.
+List<CalendarEvent> dedupeCalendarEvents(List<CalendarEvent> events) {
+  final seen = <String>{};
+  return events
+      .where((e) => seen.add('${e.title.trim()}|${e.startDate}|${e.endDate}'))
+      .toList();
+}
+
 class KnueScraper {
   // 모든 게시판 그룹 (기존과 동일)
   final Map<String, Map<String, String>> boardGroups = {

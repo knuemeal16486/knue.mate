@@ -12,6 +12,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:home_widget/home_widget.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
 import 'offline_cache.dart';
@@ -614,9 +615,39 @@ Future<void> shareMenu(
   await SharePlus.instance.share(ShareParams(text: shareText.trim()));
 }
 
+/// 설정 화면에 보여줄 앱 버전. [loadAppVersion]이 채운다.
+///
+/// 예전엔 설정 화면 두 곳에 "5.8.0"이 손으로 박혀 있었다. pubspec은 1.6.1인데
+/// 화면은 5.8.0을 보여줬고, 릴리스마다 어긋남이 커지기만 했다. 이제 빌드된
+/// 값을 그대로 읽는다.
+final ValueNotifier<String> appVersionLabel = ValueNotifier<String>('');
+
+/// 앱 시작 시 한 번. 실패해도 라벨이 빈 문자열로 남을 뿐 화면은 멀쩡하다.
+Future<void> loadAppVersion() async {
+  try {
+    final info = await PackageInfo.fromPlatform();
+    appVersionLabel.value = info.buildNumber.isEmpty
+        ? info.version
+        : '${info.version} (${info.buildNumber})';
+  } catch (e) {
+    debugPrint('loadAppVersion 실패: $e');
+  }
+}
+
 void showToast(BuildContext context, String msg) {
-  ScaffoldMessenger.of(context).clearSnackBars();
-  ScaffoldMessenger.of(context).showSnackBar(
+  showToastOn(ScaffoldMessenger.of(context), msg);
+}
+
+/// 화면을 닫으면서 토스트를 띄울 때 쓴다.
+///
+/// [showToast]는 `ScaffoldMessenger.of(context)`를 그 자리에서 부르는데,
+/// `Navigator.pop` 뒤의 context는 이미 트리에서 떨어져 있어서 그때 부르면
+/// "deactivated widget's ancestor" 예외가 난다. pop **전에** messenger를
+/// 잡아 두었다가 이 함수에 넘기면 된다 — messenger는 닫히는 화면이 아니라
+/// 그 위쪽에 살아 있으므로 토스트가 그대로 보인다.
+void showToastOn(ScaffoldMessengerState messenger, String msg) {
+  messenger.clearSnackBars();
+  messenger.showSnackBar(
     SnackBar(
       content: Text(msg, textAlign: TextAlign.center),
       duration: const Duration(seconds: 1),

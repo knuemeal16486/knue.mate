@@ -189,7 +189,6 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
     }
   }
 
-  /// 광고주 모집 문구의 연락처를 눌렀을 때 전화 앱을 연다.
   /// 광고주 모집 문구의 연락처를 눌렀을 때 문자 앱을 연다(전화 걸기 아님).
   Future<void> _messageSponsorContact(BuildContext context) async {
     final uri = Uri(

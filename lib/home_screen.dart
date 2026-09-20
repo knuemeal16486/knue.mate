@@ -409,7 +409,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final events = await _scraper.fetchCalendarEvents(now.year, now.month);
-      final upcoming = events.where((e) {
+      // 3칸뿐이라 중복 하나가 자리를 통째로 먹는다. 학사일정 화면과 같은
+      // 기준으로 합친 뒤 자른다.
+      final upcoming = dedupeCalendarEvents(events).where((e) {
         final end = DateTime(e.endDate.year, e.endDate.month, e.endDate.day);
         return !end.isBefore(today);
       }).toList()..sort((a, b) => a.startDate.compareTo(b.startDate));
@@ -441,13 +443,12 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final all = await ClubEventService.fetchAll();
       final now = DateTime.now();
-      final upcoming = all
-          .where((e) => (e.endDate ?? e.startDate).isAfter(now))
-          .toList();
-      upcoming.sort((a, b) {
-        if (a.isFeatured != b.isFeatured) return a.isFeatured ? -1 : 1;
-        return a.startDate.compareTo(b.startDate);
-      });
+      // 직접 `(endDate ?? startDate).isAfter(now)`로 거르면, 시각 없이 등록된
+      // 행사는 끝이 그 날 0시가 되어 **정작 행사 당일에 홈에서 사라진다.**
+      // 모델의 hasEnded가 그 날 자정까지로 봐 주므로 그걸 쓴다.
+      final upcoming = all.where((e) => !e.hasEnded(now)).toList();
+      // 정렬도 행사 탭과 같은 기준으로 — 오늘 열리는 행사가 맨 위에 온다.
+      upcoming.sort((a, b) => ClubEvent.compareForList(a, b, now));
       if (!mounted) return;
       setState(() {
         _clubEvents = upcoming.take(3).toList();
