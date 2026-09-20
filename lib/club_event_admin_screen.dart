@@ -485,7 +485,15 @@ class _EventFormPageState extends State<_EventFormPage> {
 
   Future<void> _pickPoster() async {
     try {
-      final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+      // 원본 그대로 올리면 요즘 폰 사진은 5MB를 쉽게 넘는데, storage.rules가
+      // 5MB 초과를 거부해서 업로드가 조용히 실패했다. 고르는 시점에 줄여서
+      // 들어오게 한다 — 포스터는 목록 썸네일과 상세 이미지로만 쓰여서
+      // 1600px이면 충분하다.
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        imageQuality: 85,
+      );
       if (picked != null) {
         setState(() => _localPoster = File(picked.path));
       }

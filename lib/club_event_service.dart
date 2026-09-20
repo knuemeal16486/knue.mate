@@ -7,6 +7,44 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'club_event_model.dart';
 import 'offline_cache.dart';
 
+/// 포스터 파일 경로에서 확장자를 뽑는다(소문자, 점 제외).
+/// 알 수 없으면 'jpg' — 갤러리에서 고른 사진은 사실상 대부분 JPEG다.
+///
+/// 순수 함수 — 테스트 대상.
+String posterFileExtension(String path) {
+  // 쿼리스트링이나 경로 구분자가 섞여 들어오는 경우를 먼저 털어낸다.
+  final name = path.split(RegExp(r'[/\\]')).last.split('?').first;
+  final dot = name.lastIndexOf('.');
+  if (dot < 0 || dot == name.length - 1) return 'jpg';
+  final ext = name.substring(dot + 1).toLowerCase();
+  // 확장자처럼 안 생긴 건(너무 길거나 영숫자가 아님) 믿지 않는다.
+  if (ext.length > 5 || !RegExp(r'^[a-z0-9]+$').hasMatch(ext)) return 'jpg';
+  return ext;
+}
+
+/// 포스터 파일의 contentType. storage.rules가 image/* 만 허용하므로
+/// 모르는 확장자는 image/jpeg로 보낸다(규칙에 걸려 통째로 거부되는 것보다 낫다).
+///
+/// 순수 함수 — 테스트 대상.
+String posterContentType(String path) {
+  switch (posterFileExtension(path)) {
+    case 'png':
+      return 'image/png';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'heic':
+      return 'image/heic';
+    case 'heif':
+      return 'image/heif';
+    case 'bmp':
+      return 'image/bmp';
+    default:
+      return 'image/jpeg';
+  }
+}
+
 /// 동아리 행사 Firestore CRUD + Storage 포스터 업로드 + 로컬 캐시.
 class ClubEventService {
   static FirebaseFirestore get _db => FirebaseFirestore.instance;
@@ -121,11 +159,21 @@ class ClubEventService {
   }
 
   /// 로컬 파일 경로의 포스터를 Storage에 올리고 다운로드 URL 반환. 실패 시 null.
+  ///
+  /// ⚠️ contentType을 **반드시 직접 넣어야 한다.** storage.rules가
+  /// `contentType.matches('image/.*')`를 요구하는데, putFile은 (putBlob과 달리)
+  /// 메타데이터를 추론해 주지 않고 받은 그대로 넘긴다. 예전엔 아무것도 안 넘겨서
+  /// contentType이 비거나 application/octet-stream으로 올라갔고, 규칙에 걸려
+  /// 업로드가 조용히 거부됐다 — 화면엔 "포스터 업로드 실패"만 떴다.
   static Future<String?> uploadPoster(String localPath) async {
     try {
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final ref = FirebaseStorage.instance.ref('club_posters/$ts.jpg');
-      await ref.putFile(File(localPath));
+      final ext = posterFileExtension(localPath);
+      final ref = FirebaseStorage.instance.ref('club_posters/$ts.$ext');
+      await ref.putFile(
+        File(localPath),
+        SettableMetadata(contentType: posterContentType(localPath)),
+      );
       return await ref.getDownloadURL();
     } catch (e) {
       debugPrint('ClubEventService.uploadPoster error: $e');

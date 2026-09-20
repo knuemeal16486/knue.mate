@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
+import 'club_event_service.dart' show posterContentType, posterFileExtension;
 import 'sponsor_model.dart';
 
 /// 제휴/광고 Firestore CRUD + Storage 이미지 업로드.
@@ -42,11 +43,18 @@ class SponsorService {
       _db.collection(_collection).doc(id).update({'isActive': active});
 
   /// 로컬 파일 경로의 이미지를 Storage에 올리고 다운로드 URL 반환. 실패 시 null.
+  ///
+  /// ⚠️ 포스터 업로드와 같은 이유로 contentType을 직접 넣는다 — putFile은
+  /// 메타데이터를 추론해 주지 않는데 storage.rules는 image/* 를 요구한다.
   static Future<String?> uploadImage(String localPath) async {
     try {
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final ref = FirebaseStorage.instance.ref('sponsor_images/$ts.jpg');
-      await ref.putFile(File(localPath));
+      final ext = posterFileExtension(localPath);
+      final ref = FirebaseStorage.instance.ref('sponsor_images/$ts.$ext');
+      await ref.putFile(
+        File(localPath),
+        SettableMetadata(contentType: posterContentType(localPath)),
+      );
       return await ref.getDownloadURL();
     } catch (e) {
       debugPrint('SponsorService.uploadImage error: $e');

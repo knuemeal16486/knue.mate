@@ -461,7 +461,12 @@ class _SponsorFormPageState extends State<_SponsorFormPage> {
 
   Future<void> _pickImage() async {
     try {
-      final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+      // 원본 그대로면 5MB 제한(storage.rules)에 걸려 조용히 실패한다.
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        imageQuality: 85,
+      );
       if (picked != null) {
         setState(() => _localImage = File(picked.path));
       }
