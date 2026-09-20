@@ -71,3 +71,8 @@ android/app/*.keystore
 
 # 호스팅에 올리는 테스트 APK — 41MB 바이너리를 git에 넣지 않는다
 public/download/*.apk
+
+# 지도 미리보기/디버그 렌더 — 생성물이라 저장소에 두지 않는다
+tool/mapsrc/zoom_*.png
+tool/mapsrc/iso_preview.png
+tool/mapsrc/debug.png
