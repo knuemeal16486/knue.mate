@@ -208,7 +208,10 @@ Widget _buildLoadingScreen(BuildContext context, Widget? child) {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Image.asset('assets/icons/knue_icon.png', width: 100, height: 100, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
+          // 원본이 2048×2048이라 그냥 그리면 100×100으로 보여주면서도
+          // 디코드는 원본 크기로 한다 — 한 장에 램 16MB. cacheWidth를 주면
+          // 디코드 단계에서 줄여 받는다(화면 배율을 고려해 넉넉히 300).
+          Image.asset('assets/icons/knue_icon.png', width: 100, height: 100, cacheWidth: 300, cacheHeight: 300, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
           const SizedBox(height: 24),
           const CircularProgressIndicator(strokeWidth: 3),
           const SizedBox(height: 16),

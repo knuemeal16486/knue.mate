@@ -109,7 +109,9 @@ flutter:
     - .env
     - assets/buildings/knue_buildings.json
     - assets/icons/knue_icon.png
-    - assets/icons/knuesquare.png
+    # knuesquare.png(7MB)는 여기 등록만 돼 있고 코드에서 한 번도 안 쓴다.
+    # 등록돼 있는 것만으로 모든 사용자 APK에 그대로 들어가므로 뺀다.
+    # 파일은 원본 보관용으로 assets/icons에 남겨 둔다.
     - assets/housing/campus_base.json
     - assets/housing/campus_traced.json
   #   - images/a_dot_burr.jpeg
