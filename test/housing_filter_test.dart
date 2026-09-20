@@ -37,9 +37,37 @@ void main() {
       expect(s.medianMonthlyTotal, 35);
     });
 
-    test('월 부담 = 월세 중앙값 + 관리비 중앙값', () {
+    test('월 부담은 제보마다 더한 뒤 중앙값을 낸다', () {
       final s = HousingSummary.from([_r(rent: 40, fee: 7), _r(rent: 40, fee: 7)]);
       expect(s.medianMonthlyTotal, 47);
+    });
+
+    test('두 중앙값을 더하지 않는다 — 모집단이 다르다', () {
+      // medianRent는 전체 제보에서, medianMaintenance는 관리비를 적어 낸
+      // 제보만에서 나온다. 더하면 5명 중 4명이 40을 내는 건물이 60으로
+      // 잡혀 "월 50 이하" 검색에서 빠졌다.
+      final s = HousingSummary.from([
+        _r(rent: 40),
+        _r(rent: 40),
+        _r(rent: 40),
+        _r(rent: 40),
+        _r(rent: 40, fee: 20),
+      ]);
+      expect(s.medianRent, 40);
+      expect(s.medianMaintenance, 20); // 적어 낸 건 한 건뿐
+      expect(s.medianMonthlyTotal, 40, reason: '40+20=60이 되면 안 된다');
+    });
+
+    test('월 부담 중앙값으로 걸러진다', () {
+      final s = HousingSummary.from([
+        _r(rent: 40),
+        _r(rent: 40),
+        _r(rent: 40),
+        _r(rent: 40),
+        _r(rent: 40, fee: 20),
+      ]);
+      const f = HousingFilter(maxMonthly: 50, includeMaintenance: true);
+      expect(housingMatchesFilter(s, f), isTrue);
     });
 
     test('방 구조는 다수결이 아니라 나온 것 전부를 들고 있는다', () {
@@ -75,6 +103,10 @@ void main() {
           medianDeposit: deposit,
           medianRent: rent,
           medianMaintenance: fee,
+          // 제보가 전부 같은 값인 건물을 가정하므로 월 부담 중앙값도
+          // 월세+관리비다. 실제 집계는 HousingSummary.from이 제보별로
+          // 더한 뒤 중앙값을 낸다.
+          medianMonthlyTotal: rent == null ? null : rent + (fee ?? 0),
           roomTypes: types,
           allFeatures: features,
           topFeatures: features.toList(),

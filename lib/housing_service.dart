@@ -206,7 +206,21 @@ class HousingSummary {
   final String? oneRoomId;
 
   /// 관리비 중앙값(만원). 아무도 안 적었으면 null.
+  ///
+  /// ⚠️ 이 값은 **관리비를 적어 낸 제보만** 모은 것이라 [medianRent]와
+  /// 모집단이 다르다. 둘을 더하면 안 된다 — 그건 [medianMonthlyTotal]이
+  /// 따로 있는 이유다.
   final int? medianMaintenance;
+
+  /// 관리비까지 포함한 월 부담액 중앙값(만원). 제보가 없으면 null.
+  ///
+  /// 제보마다 월세+관리비를 먼저 더한 뒤 그 값들의 중앙값을 낸다.
+  /// 예전엔 `medianRent + medianMaintenance`로 구했는데, 중앙값은 더할 수
+  /// 있는 값이 아닌 데다 두 값의 모집단까지 달라서 실제로 없는 금액이
+  /// 나왔다. 5건 중 4건이 관리비 미기재(월세 40)이고 1건만 40+20이면
+  /// 40+20=60이 되어, 5명 중 4명이 40을 내는 건물이 "월 50 이하"
+  /// 검색에서 빠졌다.
+  final int? medianMonthlyTotal;
 
   /// 이 건물에서 제보된 방 구조들. 한 건물에 원룸과 2룸이 섞여 있을 수 있어
   /// 다수결로 하나만 고르지 않고 **전부** 들고 있는다 — "2룸 찾기"를 눌렀을 때
@@ -221,6 +235,7 @@ class HousingSummary {
     required this.latestReport,
     this.oneRoomId,
     this.medianMaintenance,
+    this.medianMonthlyTotal,
     this.roomTypes = const {},
     this.allFeatures = const {},
   });
@@ -234,14 +249,6 @@ class HousingSummary {
   );
 
   bool get hasData => reportCount > 0;
-
-  /// 관리비까지 포함한 월 부담액 중앙값(만원). 월세 정보가 없으면 null.
-  /// 관리비를 아무도 안 적었으면 월세만 돌려준다.
-  int? get medianMonthlyTotal {
-    final rent = medianRent;
-    if (rent == null) return null;
-    return rent + (medianMaintenance ?? 0);
-  }
 
   /// 제보가 적으면 화면에서 "참고용"이라고 알려주기 위한 기준.
   bool get isThin => reportCount < 3;
@@ -295,6 +302,9 @@ class HousingSummary {
       medianDeposit: median(list.map((r) => r.deposit).toList()),
       medianRent: median(list.map((r) => r.monthlyRent).toList()),
       medianMaintenance: median(fees),
+      // 제보마다 먼저 더한 뒤 중앙값. 두 중앙값을 더하면 안 되는 이유는
+      // medianMonthlyTotal 문서 주석 참고.
+      medianMonthlyTotal: median(list.map((r) => r.monthlyTotal).toList()),
       roomTypes: list.map((r) => r.roomType).whereType<HousingRoomType>().toSet(),
       topFeatures: sortedFeatures.take(5).map((e) => e.key).toList(),
       allFeatures: featureCount.keys.toSet(),
