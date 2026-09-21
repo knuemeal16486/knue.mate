@@ -356,17 +356,49 @@ void main() {
   group('사람 교정', () {
     // tool/mapsrc/manual_fixes.json이 조용히 안 먹으면 지도가 조각난 채로
     // 돌아간다. 좌표로 맞추는 방식이라 추출 임계값을 건드리면 못 찾을 수 있다.
-    test('통합·삭제가 실제로 적용됐다', () {
+    test('통합 항목이 실제로 한 동으로 합쳐졌다', () {
+      // 예전 검사는 "손질 항목이 60개는 넘는다"였다. 추출이 한 건물을
+      // 여러 조각으로 쪼개던 시절의 전제라, 그걸 고치자(trace_map의
+      // paleJoined) 항목이 22그룹→4그룹으로 줄면서 뜻을 잃었다.
+      //
+      // 정작 잡고 싶은 건 "손질이 조용히 안 먹는 것"이므로 그걸 직접 본다:
+      // 한 그룹이 가리키는 조각 자리들이 **같은 건물 안에** 들어가야 한다.
       final fx = jsonDecode(
           File('tool/mapsrc/manual_fixes.json').readAsStringSync());
-      final campus =
-          (traced['buildings'] as List).where((b) => b['campus'] == true);
-      final before = (fx['merge'] as List)
-              .fold<int>(0, (a, g) => a + (g['at'] as List).length) +
-          (fx['delete'] as List).length;
-      // 통합 전 108동에서 71동이 22개로, 5동은 삭제 → 54동
-      expect(before, greaterThan(60));
-      expect(campus.length, lessThan(70));
+      final campus = [
+        for (final b in (traced['buildings'] as List))
+          if ((b as Map<String, dynamic>)['campus'] == true) ring(b['ring'])
+      ];
+
+      bool inside(List<List<double>> poly, double x, double y) {
+        var c = false;
+        for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          final xi = poly[i][0], yi = poly[i][1];
+          final xj = poly[j][0], yj = poly[j][1];
+          if (((yi > y) != (yj > y)) &&
+              (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+            c = !c;
+          }
+        }
+        return c;
+      }
+
+      var checked = 0;
+      for (final g in (fx['merge'] as List)) {
+        final hits = <int>{};
+        for (final at in (g['at'] as List)) {
+          final x = (at[0] as num).toDouble(), y = (at[1] as num).toDouble();
+          for (var i = 0; i < campus.length; i++) {
+            if (inside(campus[i], x, y)) hits.add(i);
+          }
+        }
+        if (hits.isEmpty) continue; // 그 자리에 건물이 없으면 검사 대상 아님
+        checked++;
+        expect(hits.length, 1,
+            reason: '한 그룹의 조각들이 ${hits.length}개 건물로 갈려 있다 — '
+                '통합이 안 먹었다: ${g['at']}');
+      }
+      expect(checked, greaterThan(0), reason: '검사된 통합 그룹이 하나도 없다');
     });
 
     test('통합된 건물이 각져 있다', () {

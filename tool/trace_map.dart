@@ -289,7 +289,88 @@ void main() {
   // 붙어 있는 동 사이에는 부지색 외곽선이 한 줄 지나간다. 0.3m 격자에서는
   // 그 선이 2셀쯤 되어 살아 있으므로, 살짝만 깎아도 서로 떨어진다.
   final paleIn = L.pale & inCampus;
-  final seeds = label4(erode(paleIn, 3), minArea: 800); // 800셀 ≈ 72㎡
+  // ⚠️ 네이버는 **한 건물 안에도** 날개를 나누는 칸막이 선을 긋는다.
+  // 그 선까지 '건물 사이 틈'으로 읽으면 한 동이 여러 조각으로 쪼개지고,
+  // 조각마다 층수가 달리 잡혀 3D로 세우면 블록을 쌓아 놓은 더미가 된다
+  // (교원문화관이 4조각, 호연관·종합교육관·국제연수관도 같은 꼴이었다).
+  //
+  // 둘은 **폭**으로 갈린다. 칸막이는 원본 1px(≈2셀)이고, 진짜 건물 사이
+  // 틈은 3~5px(≈6~10셀)이다. 반지름 2셀(0.6m)로 닫으면 4셀까지 메워지니
+  // 칸막이만 사라지고 진짜 틈은 남는다.
+  final paleJoined = closeM(paleIn, 2);
+
+  // 다만 닫기만 하면 **진짜로 붙어 있는 두 동**까지 하나가 된다. 호연관과
+  // 미래도서관, 체육관과 제2체육관 사이가 그렇게 좁다.
+  //
+  // 그건 캡처가 알려준다 — 건물 이름표는 동마다 하나씩 찍혀 있다
+  // (tool/mapsrc/seeds.json). 한 덩어리 안에 이름표가 둘 이상 들어 있으면
+  // 서로 다른 동이 붙은 것이므로, 이름표 자리마다 씨앗을 놓아 도로 가른다.
+  final labelPts = <List<int>>[];
+  {
+    final raw = jsonDecode(
+        File('tool/mapsrc/seeds.json').readAsStringSync()) as Map<String, dynamic>;
+    for (final v in raw.values) {
+      final x = ((v[0] as num).toDouble() - ox) / res;
+      final y = ((v[1] as num).toDouble() - oy) / res;
+      labelPts.add([x.round(), y.round()]);
+    }
+  }
+
+  final eroded = erode(paleJoined, 3);
+  final comp = label4(eroded, minArea: 800); // 800셀 ≈ 72㎡
+  // 이름표 자리를 그대로 찍으면 안 된다 — **글자 픽셀이 건물 채움색이
+  // 아니라서 마스크에 구멍이 난다.** 실제로 27개 중 16개가 그렇게 빗나갔다
+  // (호연관·체육관·교원문화관 등 대부분). 주변에서 가장 가까운 건물 셀을
+  // 찾아 그 덩어리에 넣는다. 10m까지만 본다 — 그보다 멀면 이름표가 건물
+  // 위가 아니라 옆에 놓인 경우라 어느 동인지 단정할 수 없다.
+  final ptsOf = <int, List<List<int>>>{};
+  const maxR = 34; // 34셀 ≈ 10m
+  for (final c in labelPts) {
+    var found = false;
+    for (var r = 0; r <= maxR && !found; r++) {
+      for (var dy = -r; dy <= r && !found; dy++) {
+        for (var dx = -r; dx <= r; dx++) {
+          // 껍데기만 훑는다(이미 안쪽은 앞선 반지름에서 봤다)
+          if (r > 0 && dx.abs() != r && dy.abs() != r) continue;
+          final x = c[0] + dx, y = c[1] + dy;
+          if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
+          final id = comp.labels[y * gw + x];
+          if (id == 0) continue;
+          (ptsOf[id] ??= []).add([x, y]);
+          found = true;
+          break;
+        }
+      }
+    }
+  }
+
+  final seedMask = Mask(gw, gh);
+  for (var i = 0; i < seedMask.bits.length; i++) {
+    final id = comp.labels[i];
+    // 이름표가 둘 이상인 덩어리는 통째 씨앗으로 쓰지 않는다 — 아래에서
+    // 이름표 자리에 작은 씨앗을 따로 놓는다.
+    if (id == 0 || (ptsOf[id]?.length ?? 0) >= 2) continue;
+    seedMask.bits[i] = 1;
+  }
+  var reSplit = 0;
+  for (final e in ptsOf.entries) {
+    if (e.value.length < 2) continue;
+    reSplit++;
+    for (final c in e.value) {
+      for (var dy = -3; dy <= 3; dy++) {
+        for (var dx = -3; dx <= 3; dx++) {
+          if (dx * dx + dy * dy > 9) continue;
+          final x = c[0] + dx, y = c[1] + dy;
+          if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
+          // 씨앗은 건물 안에만 놓는다.
+          if (paleIn.bits[y * gw + x] != 0) seedMask.bits[y * gw + x] = 1;
+        }
+      }
+    }
+  }
+  stdout.writeln('칸막이 메움 · 이름표가 둘 이상이라 도로 가른 덩어리 $reSplit개');
+
+  final seeds = label4(seedMask, minArea: 1);
   // 씨앗을 원래 영역으로 되돌린다. 요소마다 따로 부풀리면 옆 동과 겹친다.
   growInto(seeds, paleIn);
 
@@ -331,7 +412,16 @@ void main() {
     //
     // 비스듬히 앉은 건물은 dominantAngle(θ)이 통째로 기울여 잡아 주므로
     // 여기서 45로 세워도 사선 건물이 억지로 똑바로 서지 않는다.
-    final poly = deSpike(regularize(raw, snapDeg: 38, minEdge: 0.8));
+    // 짧은 변을 걷어내는 기준을 **건물 크기에 비례**하게 잡는다.
+    //
+    // 0.8m 고정으로 두면 큰 건물에는 적당한데 작은 건물에는 그게 잡음
+    // 크기다 — 격자가 0.3m라 17m짜리 건물은 한 변이 57칸뿐이고, 경계가
+    // 한두 칸만 흔들려도 전체 모양의 3%가 흔들린다(큰 건물은 1%).
+    // 실제로 작은 건물(<600㎡)이 큰 건물보다 급한 꺾임이 1.6배 많았고,
+    // 교원문화관(556㎡)은 꼭짓점이 47개였다.
+    final side = math.sqrt(polyArea(raw));
+    final poly = deSpike(regularize(raw,
+        snapDeg: 38, minEdge: (side * 0.11).clamp(0.8, 3.5)));
     if (poly.length < 4 || !insidePoly(poly)) continue;
     // 운동시설이냐 건물이냐 — **잔디를 품고 있는가**로 가른다. 트랙·코트
     // 블록은 가운데가 초록이라, 구멍을 메우고 나서 재야 겹침이 잡힌다.

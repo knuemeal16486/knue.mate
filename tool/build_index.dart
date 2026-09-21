@@ -468,7 +468,13 @@ List<List<List<double>>> applyManualFixes(List<List<List<double>>> rings) {
   final drop = <int>{};
   final merged = <List<List<double>>>[];
   var mergedN = 0, missing = 0;
+  // 어느 항목이 아직 쓰이는지 찍어 둔다. 추출이 좋아지면 예전에 손으로
+  // 이어 붙이던 조각이 애초에 안 생기므로 항목이 죽는다 — 그걸 모르면
+  // 죽은 항목이 쌓여 "왜 안 먹지"를 반복하게 된다.
+  final liveGroups = <String>[];
+  var gi = -1;
   for (final g in (fx['merge'] as List)) {
+    gi++;
     final idx = <int>[];
     for (final at in (g['at'] as List)) {
       final i = find(at);
@@ -485,6 +491,10 @@ List<List<List<double>>> applyManualFixes(List<List<List<double>>> rings) {
     drop.addAll(idx);
     merged.add(u);
     mergedN++;
+    liveGroups.add('$gi(${idx.length}조각)');
+  }
+  if (liveGroups.isNotEmpty) {
+    stdout.writeln('  아직 쓰이는 merge 항목: ${liveGroups.join(', ')}');
   }
   var deleted = 0;
   for (final d in (fx['delete'] as List)) {
