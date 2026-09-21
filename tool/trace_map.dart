@@ -352,6 +352,13 @@ void main() {
     if (id == 0 || (ptsOf[id]?.length ?? 0) >= 2) continue;
     seedMask.bits[i] = 1;
   }
+  // 이름표 자리마다 작은 씨앗을 놓는다. 경계는 두 씨앗에서 동시에 자란
+  // 것이 만나는 자리에 생긴다.
+  //
+  // 칸막이 이전 조각을 통째로 씨앗으로 쓰는 방법도 대봤지만 더 나빴다 —
+  // 한 동의 날개가 여러 조각으로 갈려 있어서, 조각 하나를 통째로 집으면
+  // 옆 동의 씨앗과 뒤엉켜 호연관·미래도서관이 같은 영역을 중복으로 덮었다
+  // (둘 다 3241㎡로 나왔다).
   var reSplit = 0;
   for (final e in ptsOf.entries) {
     if (e.value.length < 2) continue;
@@ -372,7 +379,15 @@ void main() {
 
   final seeds = label4(seedMask, minArea: 1);
   // 씨앗을 원래 영역으로 되돌린다. 요소마다 따로 부풀리면 옆 동과 겹친다.
+  //
+  // 두 번에 나눠 키운다.
+  //  1) 칸막이가 살아 있는 원본(paleIn)에서 먼저 — 이름표가 앉은 칸을
+  //     제 것으로 확보한다. 실제 경계선이 있는 자리는 그대로 지켜진다.
+  //  2) 칸막이를 메운 것(paleJoined)에서 한 번 더 — 아무도 못 닿은 칸을
+  //     가까운 쪽이 가져간다. 이 단계가 없으면 이름표로 가른 동이 제
+  //     칸 하나에 갇힌다(제2체육관이 254㎡로 쪼그라들었다).
   growInto(seeds, paleIn);
+  growInto(seeds, paleJoined);
 
   final greenGrown = dilate(L.green, 3);
   final facils = <List<Pt>>[];
