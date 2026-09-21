@@ -808,36 +808,49 @@ List<Pt> regularize(
     return out;
   }
 
-  var pts = cornersOf(ls);
-
-  // 이웃한 두 직선이 나란하면 교점이 없다. 예전엔 여기서 통째로 포기하고
-  // **물결치는 원본을 그대로 내보냈다** — 118동 중 36동(31%)이 그 길로
-  // 빠져서 건물이 흐물흐물해 보였다.
+  // 나란한 이웃이 생기면 교점이 없다. 그때 통째로 포기하면 **물결치거나
+  // 톱니진 원본이 그대로 나간다.** 나란한 이웃은 둘 중 하나가 군더더기이므로
+  // (같은 방향인데 사이에 잇는 변이 없다) 짧은 쪽을 빼고 다시 구한다.
   //
-  // 나란한 이웃은 둘 중 하나가 군더더기다(같은 방향인데 사이에 잇는 변이
-  // 없다). 짧은 쪽을 빼고 다시 구하면 나머지는 멀쩡히 각이 잡힌다.
-  for (var guard = 0; pts == null && ls.length > 4 && guard < 40; guard++) {
-    var drop = -1;
-    var dropW = double.infinity;
-    for (var i = 0; i < ls.length; i++) {
-      final a = ls[i], b = ls[(i + 1) % ls.length];
-      if ((a.dx * b.dy - a.dy * b.dx).abs() >= 1e-4) continue;
-      final j = (i + 1) % ls.length;
-      final cand = a.w <= b.w ? i : j;
-      if (ls[cand].w < dropW) {
-        dropW = ls[cand].w;
-        drop = cand;
+  // 이 처리가 [cornersOf]를 부르는 **모든 자리**에 필요하다. 예전엔 맨 처음
+  // 한 번만 했는데, 짧은 변을 걷어내는 4)에서 훨씬 자주 터진다 — 계단은
+  // 0°/90°가 번갈아 나와서 하나 걸러 지우면 남은 직선이 전부 나란해지기
+  // 때문이다. 거기서 break로 빠져나가는 바람에 minEdge가 계단에 대해
+  // 아예 안 먹었다(1.0이든 2.5든 결과가 똑같았던 이유).
+  List<_Line>? resolved;
+  List<Pt>? solve(List<_Line> src) {
+    var cur = src;
+    for (var guard = 0; guard < 80; guard++) {
+      final got = cornersOf(cur);
+      if (got != null) {
+        resolved = cur;
+        return got;
       }
+      if (cur.length <= 4) return null;
+      var drop = -1;
+      var dropW = double.infinity;
+      for (var i = 0; i < cur.length; i++) {
+        final a = cur[i], b = cur[(i + 1) % cur.length];
+        if ((a.dx * b.dy - a.dy * b.dx).abs() >= 1e-4) continue;
+        final j = (i + 1) % cur.length;
+        final cand = a.w <= b.w ? i : j;
+        if (cur[cand].w < dropW) {
+          dropW = cur[cand].w;
+          drop = cand;
+        }
+      }
+      if (drop < 0) return null;
+      cur = [...cur]..removeAt(drop);
     }
-    if (drop < 0) break;
-    ls.removeAt(drop);
-    pts = cornersOf(ls);
+    return null;
   }
 
+  var pts = solve(ls);
   if (pts == null) {
     regularizeNoCorners++;
     return poly;
   }
+  ls = resolved!;
 
   // 4) 너무 짧은 변은 그 직선을 빼고 다시 계산한다.
   //
@@ -865,9 +878,9 @@ List<Pt> regularize(
       if (next.length <= 4) break;
       next.removeAt(k);
     }
-    final np = cornersOf(next);
+    final np = solve(next);
     if (np == null) break;
-    ls = next;
+    ls = resolved!;
     pts = np;
   }
 

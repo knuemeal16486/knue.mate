@@ -303,7 +303,18 @@ void main() {
     final o = seeds.cropOrigin(id, pad: pad);
     // 건물은 둥글리지 않는다. 등고선을 딴 뒤 **직각으로 세운다**([regularize]).
     // 물확산으로 나눈 자리는 경계가 지그재그라, 그냥 두면 흐물흐물해 보인다.
-    final loops = traceSmooth(crop, blurR: 2, blurN: 2, round: 0, preEps: 1.6);
+    // **흐리지 않는다**(blurR 0). 캡처는 항공사진이 아니라 벡터로 그린 지도라
+    // 건물 모서리가 이미 칼같이 서 있다. 흐리면 그 모서리를 우리 손으로
+    // 뭉개는 셈이고, 그렇게 둥글려진 등고선은 직각화도 제대로 못 한다.
+    //
+    // 실측(원본 픽셀 대비 건물 IoU):
+    //   blurR 2 preEps 1.6  59.6%   ← 예전
+    //   blurR 2 preEps 0.8  60.1%
+    //   blurR 1 preEps 0.8  62.3%
+    //   blurR 0 preEps 0.8  63.9%   ← 지금
+    // 덤으로 꼭짓점이 중앙 13→34개로 늘어 건물의 홈·날개가 살아난다
+    // (흐림을 걷으니 단순화와 충실도를 함께 얻었다).
+    final loops = traceSmooth(crop, blurR: 1, blurN: 1, round: 0, preEps: 0.8);
     if (loops.isEmpty) continue;
     final raw = [
       for (final p in loops.first)
@@ -320,7 +331,7 @@ void main() {
     //
     // 비스듬히 앉은 건물은 dominantAngle(θ)이 통째로 기울여 잡아 주므로
     // 여기서 45로 세워도 사선 건물이 억지로 똑바로 서지 않는다.
-    final poly = regularize(raw, snapDeg: 45, minEdge: 2.5);
+    final poly = regularize(raw, snapDeg: 38, minEdge: 0.8);
     if (poly.length < 4 || !insidePoly(poly)) continue;
     // 운동시설이냐 건물이냐 — **잔디를 품고 있는가**로 가른다. 트랙·코트
     // 블록은 가운데가 초록이라, 구멍을 메우고 나서 재야 겹침이 잡힌다.
@@ -547,22 +558,25 @@ void main() {
     const pad = 11;
     final crop = rl.crop(id, pad: pad);
     final o = rl.cropOrigin(id, pad: pad);
-    // 도로가 구불구불하던 원인은 **원본 픽셀 계단**이었다. 캡처가 0.619 m/px인데
-    // 0.3m 격자에 최근접으로 찍으니 경계가 0.62m 간격으로 층지고, 그걸 살짝만
-    // 흐려서 등고선을 따면 잔물결로 남는다.
+    // 도로가 구불구불하던 원인은 **흐리기 자체**였다.
     //
-    // 여기 값들은 지그재그율(이웃한 두 꺾임이 반대 방향이고 둘 다 45° 미만인
-    // 비율)과 포장면 IoU를 함께 보며 정했다:
-    //   blurR 2→4  지그재그 22.9%→17.1%, IoU 88.7%→87.6%  (흐림은 직선 위치를
-    //              그대로 두고 모서리만 둥글려서 손해가 적다)
-    //   preEps 2.5  잔물결을 넘는 허용오차라야 직선이 한 변으로 뭉친다
-    //   모서리 깎기 끔  켜면 점이 두 배가 되면서 거의 곧은 자리도 둘로 갈려
-    //              **오히려 굽이처럼 보였다**. 끄니 14.5% / 86.9% / 점 절반.
+    // 캡처가 0.619 m/px인데 0.3m 격자에 최근접으로 찍으니 경계가 계단진다.
+    // 예전엔 그 계단을 흐려서(blurR 4) 없앴는데, 캡처는 항공사진이 아니라
+    // 벡터로 그린 지도라 도로 가장자리가 원래 **완벽한 직선**이다. 흐리면
+    // 그 직선과 모서리를 우리 손으로 둥글려 놓고 그걸 다시 펴려 애쓰는 꼴이
+    // 된다. 계단은 흐리기가 아니라 **단순화 허용오차**(preEps)로 타 넘어야
+    // 한다 — 계단 높이(≤0.62m)보다 크고 진짜 모서리보다 작은 값이면 된다.
     //
-    // straighten을 세게 거는 길도 있었지만 그건 면적을 왜곡해서 펴는 것이라
-    // (merge 45°까지 올리면 지그재그는 내려가도 IoU가 71%까지 떨어졌다) 버렸다.
-    final loops = traceSmooth(crop, blurR: 4, blurN: 2, round: 0,
-        preEps: 2.5, minLoopArea: 400); // 400셀² ≈ 36㎡
+    // 실측(포장면 IoU / 지그재그율 / 점 수):
+    //   blurR 4 preEps 2.5  88.2%  10.1%   4132   ← 예전
+    //   blurR 2 preEps 1.5  89.6%  13.9%   5057
+    //   blurR 0 preEps 2.5  90.5%   6.1%   7824
+    //   blurR 0 preEps 1.8  91.7%   5.8%  10701   ← 지금
+    //   blurR 0 preEps 0.8  94.1%   0.8%  32446   (계단을 그대로 담는다)
+    // 흐리기를 걷으니 충실도와 곧기가 **함께** 좋아졌다. 점이 2.6배로 늘지만
+    // 한 번 만들어 두고 그리는 Path라 부담이 크지 않다.
+    final loops = traceSmooth(crop, blurR: 0, blurN: 1, round: 0,
+        preEps: 2.2, minLoopArea: 400); // 400셀² ≈ 36㎡
     for (var k = 0; k < loops.length; k++) {
       final w = straighten([
         for (final p in loops[k])

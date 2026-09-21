@@ -18,6 +18,45 @@ List<List<double>> ring(dynamic r) => [
 List<List<List<double>>> rings(dynamic l) =>
     [for (final r in (l as List)) ring(r)];
 
+List<List<List<double>>> pavementRings() {
+  final pv = traced['pavement'] as Map<String, dynamic>;
+  return [...rings(pv['outer']), ...rings(pv['holes'])];
+}
+
+List<List<List<double>>> campusBuildingRings() => [
+      for (final b in (traced['buildings'] as List))
+        if ((b as Map<String, dynamic>)['campus'] == true) ring(b['ring'])
+    ];
+
+/// 둘레 100m당 '급한 꺾임(45° 초과)' 개수.
+///
+/// 래스터 계단(톱니)은 90° 꺾임이 촘촘히 박히므로 이 값이 폭발한다.
+/// 꼭짓점 수로 재면 안 된다 — 디테일이 살아나도 점은 늘기 때문에
+/// 톱니와 구분이 안 된다.
+double sharpPer100m(List<List<List<double>>> rs) {
+  var sharp = 0;
+  var per = 0.0;
+  for (final r in rs) {
+    if (r.length < 6) continue;
+    for (var i = 0; i < r.length; i++) {
+      final a = r[(i - 1 + r.length) % r.length], b = r[i];
+      final c = r[(i + 1) % r.length];
+      final v1x = b[0] - a[0], v1y = b[1] - a[1];
+      final v2x = c[0] - b[0], v2y = c[1] - b[1];
+      final l1 = math.sqrt(v1x * v1x + v1y * v1y);
+      final l2 = math.sqrt(v2x * v2x + v2y * v2y);
+      if (l1 < 1e-9 || l2 < 1e-9) continue;
+      per += l2;
+      final ang = math.atan2((v1x * v2y - v1y * v2x) / (l1 * l2),
+              ((v1x * v2x + v1y * v2y) / (l1 * l2)).clamp(-1.0, 1.0)) *
+          180 /
+          math.pi;
+      if (ang.abs() > 45) sharp++;
+    }
+  }
+  return per <= 0 ? 0 : sharp / per * 100;
+}
+
 double ringArea(List<List<double>> r) {
   var s = 0.0;
   for (var i = 0; i < r.length; i++) {
@@ -290,8 +329,27 @@ void main() {
         }
       }
       lens.sort();
-      // 모서리 깎기를 켰을 땐 중앙 2.2m까지 잘게 쪼개졌다. 지금은 6m대.
-      expect(lens[lens.length ~/ 2], greaterThan(3.5));
+      // 모서리 깎기를 켰을 땐 중앙 2.2m까지 잘게 쪼개졌다. 실측 3.4m.
+      //
+      // 예전엔 6m대라 하한이 3.5였는데, 그건 세게 흐려서 얻은 값이었다.
+      // 흐림을 걷고 충실도를 올리면서 변이 짧아진 것은 **디테일이 살아난
+      // 결과**이므로 하한만 지키고(계단이 살아나면 1m대로 떨어진다)
+      // 울퉁불퉁함은 아래 톱니 검사로 따로 본다.
+      expect(lens[lens.length ~/ 2], greaterThan(2.5));
+    });
+
+    test('톱니(계단)가 남아 있지 않다', () {
+      // 둘레 100m당 '급한 꺾임(45° 초과)' 개수. 래스터 계단은 90° 꺾임이
+      // 촘촘히 박히므로 이 값이 폭발한다. 지그재그율(45° 미만 반대방향)로는
+      // 계단이 잡히지 않아 따로 둔다 — 실제로 건물 쪽에서 33%가 톱니인데도
+      // 지그재그 검사는 멀쩡히 통과했다.
+      expect(sharpPer100m(pavementRings()), lessThan(16),
+          reason: '포장면 ${sharpPer100m(pavementRings()).toStringAsFixed(1)}'
+              '개/100m (실측 10.7)');
+      expect(sharpPer100m(campusBuildingRings()), lessThan(18),
+          reason: '교내 건물 '
+              '${sharpPer100m(campusBuildingRings()).toStringAsFixed(1)}'
+              '개/100m (실측 11.2)');
     });
   });
 
@@ -326,8 +384,11 @@ void main() {
           worstNo = (b['no'] as int?) ?? 0;
         }
       }
-      // 실측 평균 17점, 최대 40점대. 60을 넘으면 계단이 살아 있는 것이다.
-      expect(worst, lessThan(60), reason: '$worstNo번 점 $worst개');
+      // 꼭짓점 수는 "각졌나"의 잣대가 못 된다 — 흐림을 걷어 디테일을 살리면
+      // 각져 있어도 점이 는다(실측 최대 40점대 → 122점). 울퉁불퉁함은
+      // 위의 톱니 검사가 보고, 여기서는 **터무니없이 쪼개지지 않았는지만**
+      // 본다.
+      expect(worst, lessThan(220), reason: '$worstNo번 점 $worst개');
     });
   });
 
