@@ -76,3 +76,8 @@ public/download/*.apk
 tool/mapsrc/zoom_*.png
 tool/mapsrc/iso_preview.png
 tool/mapsrc/debug.png
+tool/mapsrc/ov_*.png
+tool/mapsrc/app_zoom.png
+tool/mapsrc/src_crop.png
+tool/mapsrc/core_ov.png
+tool/mapsrc/crop.png
