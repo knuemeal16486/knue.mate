@@ -433,13 +433,53 @@ void main() {
       expect(o.where((v) => v != true).length, greaterThan(5));
     });
 
-    test('포장면이 지적 도로까지 합쳐 넓어졌다', () {
+    test('포장면이 OSM 도로를 다시 덮지 않는다', () {
+      // 도로는 OSM 중심선을 굵기로 그어 따로 그린다. 포장면이 도로 통로까지
+      // 품고 있으면 깔끔한 도로선 옆으로 옛 가장자리가 비어져 나온다.
+      // 그래서 포장면은 광장·마당만 맡는다 — 교내 OSM 중심점이 포장면
+      // 안에 떨어지면 안 된다(통로를 빼기 전엔 46%였다).
+      //
+      // 예전 검사는 "지적 도로까지 합쳐 25만㎡를 넘는다"였다. 포장면이
+      // 도로망을 책임지던 시절의 전제라 버렸다.
       final pave = traced['pavement'] as Map<String, dynamic>;
-      final area =
-          rings(pave['outer']).fold<double>(0, (a, r) => a + ringArea(r)) -
-              rings(pave['holes']).fold<double>(0, (a, r) => a + ringArea(r));
-      // 사진만 쓰던 시절 21만㎡ → 지적 도로 8만㎡를 더해 30만㎡ 가까이.
-      expect(area, greaterThan(250000));
+      final outer = rings(pave['outer']);
+      final holes = rings(pave['holes']);
+
+      bool inside(List<List<double>> poly, double x, double y) {
+        var c = false;
+        for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          final xi = poly[i][0], yi = poly[i][1];
+          final xj = poly[j][0], yj = poly[j][1];
+          if (((yi > y) != (yj > y)) &&
+              (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+            c = !c;
+          }
+        }
+        return c;
+      }
+
+      final osm = jsonDecode(
+          File('assets/housing/campus_roads.json').readAsStringSync());
+      var n = 0, hit = 0;
+      for (final r in (osm['roads'] as List)) {
+        for (final p in (r['pts'] as List)) {
+          final x = (p[0] as num).toDouble(), y = (p[1] as num).toDouble();
+          if (x < -120 || x > 720 || y < -620 || y > 320) continue; // 교내만
+          n++;
+          if (outer.any((o) => inside(o, x, y)) &&
+              !holes.any((h) => inside(h, x, y))) {
+            hit++;
+          }
+        }
+      }
+      expect(n, greaterThan(300), reason: 'OSM 교내 도로가 너무 적다');
+      expect(hit / n, lessThan(0.05),
+          reason: '포장면이 OSM 도로를 ${(hit * 100 / n).toStringAsFixed(1)}% 덮는다');
+
+      // 광장·마당은 남아 있어야 한다(전부 빠지면 포장면이 사라진 것).
+      final area = outer.fold<double>(0, (a, r) => a + ringArea(r)) -
+          holes.fold<double>(0, (a, r) => a + ringArea(r));
+      expect(area, greaterThan(120000));
     });
   });
 

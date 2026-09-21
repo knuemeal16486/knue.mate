@@ -653,9 +653,22 @@ void main() {
   final road = openM(closeM(paveIn, 3), 2);
   stdout.writeln('포장면 ${(road.count * res * res).round()} ㎡');
 
+  // 도로는 이제 OSM 중심선을 굵기로 그어 따로 그린다. 캡처에서 뜬 포장면이
+  // 도로 통로까지 품고 있으면, 깔끔한 도로선 옆으로 **들쭉날쭉한 옛 가장자리가
+  // 비어져 나온다.** 포장면이 맡을 건 광장·주차 앞마당 같은 너른 면뿐이므로
+  // OSM 도로가 덮는 통로를 빼고 남는 것만 추적한다.
+  //
+  // 뺀 뒤에는 도로 옆에 가는 띠가 남는다(캡처의 길이 OSM 폭보다 조금 넓은
+  // 자리). 반지름 3셀(0.9m)로 열어 폭 2m 안쪽 띠는 걷어낸다.
+  //
+  // 원본 road는 그대로 둔다 — 횡단보도 검출은 도로 위를 봐야 한다.
+  final plaza = openM(road & osmCorridor().inverted, 3);
+  stdout.writeln('도로를 뺀 포장면(광장·마당) '
+      '${(plaza.count * res * res).round()} ㎡');
+
   // 도로 가장자리는 실제로 곡선이다. 계단 모양을 없애려고 흐린 뒤 0.5
   // 등고선을 따고([traceSmooth]) 모서리를 두 번 깎는다.
-  final rl = label4(road, minArea: 3000); // 3000셀 ≈ 270㎡
+  final rl = label4(plaza, minArea: 3000); // 3000셀 ≈ 270㎡
   final outers = <List<Pt>>[];
   final holes = <List<Pt>>[];
   for (var id = 1; id <= rl.count; id++) {
@@ -948,7 +961,7 @@ void main() {
   stdout.writeln('── 씽크로율(IoU, 원본 픽셀 분류 대비) ──');
   // 운동시설도 원본에서는 같은 '옅은 채움'이라 함께 비교해야 공평하다
   stdout.writeln('  건물   ${(iou(bldSrc, [...blds, ...facils]) * 100).toStringAsFixed(1)}%');
-  stdout.writeln('  포장면 ${(iou(road, outers, minus: holes) * 100).toStringAsFixed(1)}%');
+  stdout.writeln('  포장면 ${(iou(plaza, outers, minus: holes) * 100).toStringAsFixed(1)}%  (도로 뺀 광장·마당 대비)');
   stdout.writeln('  녹지   ${(iou(L.green, greens) * 100).toStringAsFixed(1)}%');
   stdout.writeln('  부지   ${(iou(closeM(coarse, 18).upscaleTo(gw, gh, cf), boundary) * 100).toStringAsFixed(1)}%');
   // 직각화·직선펴기가 포기하면 물결치는 원본이 그대로 나간다. 건물이
@@ -1193,4 +1206,48 @@ List<Map<String, dynamic>> extractPois() {
     if (!dup) uniq.add(p);
   }
   return uniq;
+}
+
+/// OSM 도로가 덮는 통로를 격자에 칠한다(assets/housing/campus_roads.json).
+///
+/// 앱은 이 도로를 실제 폭(m)으로 긋는다 — 같은 폭의 반을 반지름으로 원을
+/// 찍어 나가면 앱에서 도로 노면이 덮는 자리와 같아진다. 에셋이 없으면
+/// 빈 마스크를 돌려 예전처럼 포장면 전체를 추적한다.
+Mask osmCorridor() {
+  final m = Mask(gw, gh);
+  final f = File('assets/housing/campus_roads.json');
+  if (!f.existsSync()) return m;
+  final j = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+  for (final r in (j['roads'] as List)) {
+    final w = (r['w'] as num).toDouble();
+    final rad = (w / 2) / res; // 셀 단위 반지름
+    final ri = rad.ceil();
+    final pts = [
+      for (final p in (r['pts'] as List))
+        [((p[0] as num).toDouble() - ox) / res, ((p[1] as num).toDouble() - oy) / res]
+    ];
+    for (var k = 0; k + 1 < pts.length; k++) {
+      final ax = pts[k][0], ay = pts[k][1];
+      final bx = pts[k + 1][0], by = pts[k + 1][1];
+      final len = math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+      // 반지름의 절반 간격으로 원을 찍으면 선분이 빈틈없이 덮인다.
+      final steps = math.max(1, (len / math.max(1.0, rad / 2)).ceil());
+      for (var s = 0; s <= steps; s++) {
+        final cx = ax + (bx - ax) * s / steps;
+        final cy = ay + (by - ay) * s / steps;
+        final x0 = cx.round(), y0 = cy.round();
+        for (var dy = -ri; dy <= ri; dy++) {
+          final y = y0 + dy;
+          if (y < 0 || y >= gh) continue;
+          for (var dx = -ri; dx <= ri; dx++) {
+            final x = x0 + dx;
+            if (x < 0 || x >= gw) continue;
+            if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > rad * rad) continue;
+            m.bits[y * gw + x] = 1;
+          }
+        }
+      }
+    }
+  }
+  return m;
 }
