@@ -7,6 +7,7 @@ import 'housing_iso.dart';
 import 'housing_model.dart';
 import 'housing_service.dart';
 import 'ui_utils.dart';
+
 /// 자취방 지도.
 ///
 /// OpenStreetMap 타일을 쓰지 않고 건물을 직접 360도 2.5D 아이소메트릭으로 그린다.
@@ -22,6 +23,10 @@ class HousingScreen extends StatefulWidget {
 class _HousingScreenState extends State<HousingScreen>
     with SingleTickerProviderStateMixin {
   CampusBase _base = CampusBase.empty;
+
+  /// OSM 도로 중심선(ODbL). 화면 하단에 출처를 표기한다.
+  List<OsmRoad> _osmRoads = const [];
+  IsoOsmRoads _isoOsmRoads = IsoOsmRoads.empty;
   bool _loading = true;
 
   double _rotationAngle = 0.0; // radian (0 ~ 2*PI)
@@ -84,9 +89,13 @@ class _HousingScreenState extends State<HousingScreen>
     //  - 쿼터·장애에 영향받지 않는다
     // 데이터를 갱신하려면 VWORLD_KEY=... node tool/fetch_vworld.js 를 다시 돌린다.
     final base = await CampusBase.load();
+    // 도로는 OSM 중심선(ODbL)을 굵기로 그어 만든다 — 캡처에서 면으로
+    // 떠내던 방식은 곧게 펼수록 길이 제자리를 벗어나는 천장이 있었다.
+    final osm = await CampusBase.loadOsmRoads();
     if (!mounted) return;
     setState(() {
       _base = base;
+      _osmRoads = osm;
       _loading = false;
       _rebuild();
     });
@@ -120,10 +129,14 @@ class _HousingScreenState extends State<HousingScreen>
     if (_canvas == Size.zero || _viewportSize == Size.zero) return;
 
     // 뷰포트 크기에 맞춰 캔버스가 잘리지 않고 전체가 완벽히 들어오도록 스케일 계산
-    final fitScale = math.min(
-      _viewportSize.width / _canvas.width,
-      _viewportSize.height / _canvas.height,
-    ).clamp(0.15, 2.5) * 0.95;
+    final fitScale =
+        math
+            .min(
+              _viewportSize.width / _canvas.width,
+              _viewportSize.height / _canvas.height,
+            )
+            .clamp(0.15, 2.5) *
+        0.95;
 
     final tx = (_viewportSize.width - _canvas.width * fitScale) / 2;
     final ty = (_viewportSize.height - _canvas.height * fitScale) / 2;
@@ -149,7 +162,10 @@ class _HousingScreenState extends State<HousingScreen>
       targetPt = proj.project(250, 45) + _origin;
     }
 
-    final currentScale = _transformController.value.getMaxScaleOnAxis().clamp(0.4, 3.5);
+    final currentScale = _transformController.value.getMaxScaleOnAxis().clamp(
+      0.4,
+      3.5,
+    );
     final tx = (_viewportSize.width / 2) - (targetPt.dx * currentScale);
     final ty = (_viewportSize.height * 0.45) - (targetPt.dy * currentScale);
 
@@ -166,8 +182,10 @@ class _HousingScreenState extends State<HousingScreen>
     final scaleChange = targetScale / currentScale;
 
     final center = Offset(_viewportSize.width / 2, _viewportSize.height / 2);
-    final tx = center.dx - (center.dx - matrix.getTranslation().x) * scaleChange;
-    final ty = center.dy - (center.dy - matrix.getTranslation().y) * scaleChange;
+    final tx =
+        center.dx - (center.dx - matrix.getTranslation().x) * scaleChange;
+    final ty =
+        center.dy - (center.dy - matrix.getTranslation().y) * scaleChange;
 
     _transformController.value = Matrix4.identity()
       ..translate(tx, ty)
@@ -233,6 +251,7 @@ class _HousingScreenState extends State<HousingScreen>
       displayNames: displayNames,
     );
     _roadPaths = projectRoads(_base.roads, proj);
+    _isoOsmRoads = projectOsmRoads(_osmRoads, proj);
     _isoTerrain = projectTerrain(_base.terrain, proj);
     _landuse = projectLandUse(_base.landuse, proj);
 
@@ -339,8 +358,10 @@ class _HousingScreenState extends State<HousingScreen>
           appBar: AppBar(
             title: const Text("자취방 구하기"),
             backgroundColor: Colors.transparent,
-            flexibleSpace:
-                AppleAppBarFlexibleSpace(themeColor: color, isDark: isDark),
+            flexibleSpace: AppleAppBarFlexibleSpace(
+              themeColor: color,
+              isDark: isDark,
+            ),
             iconTheme: const IconThemeData(color: Colors.white),
             actions: [
               IconButton(
@@ -440,14 +461,19 @@ class _HousingScreenState extends State<HousingScreen>
               ),
             ],
             border: Border.all(
-              color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
+              color: isDark
+                  ? Colors.white12
+                  : Colors.black.withValues(alpha: 0.06),
               width: 0.8,
             ),
           ),
           child: Row(
             children: [
-              Icon(Icons.search_rounded,
-                  size: 20, color: isDark ? Colors.white60 : Colors.black45),
+              Icon(
+                Icons.search_rounded,
+                size: 20,
+                color: isDark ? Colors.white60 : Colors.black45,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(
@@ -468,7 +494,11 @@ class _HousingScreenState extends State<HousingScreen>
                     _searchController.clear();
                     setState(() => _searchQuery = '');
                   },
-                  child: const Icon(Icons.close_rounded, size: 18, color: Colors.grey),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: Colors.grey,
+                  ),
                 ),
             ],
           ),
@@ -503,13 +533,20 @@ class _HousingScreenState extends State<HousingScreen>
                       shape: BoxShape.circle,
                     ),
                   ),
-                  title: Text(item.name,
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
-                  subtitle: Text(item.subtitle,
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? Colors.white54 : Colors.black54)),
+                  title: Text(
+                    item.name,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    item.subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white54 : Colors.black54,
+                    ),
+                  ),
                   onTap: () {
                     _searchController.clear();
                     setState(() => _searchQuery = '');
@@ -547,12 +584,14 @@ class _HousingScreenState extends State<HousingScreen>
     for (final b in _base.buildings.where((elem) => elem.isCampus)) {
       final name = b.officialName ?? b.id;
       if (name.toLowerCase().contains(q)) {
-        results.add(_SearchResultItem(
-          name: name,
-          subtitle: '교원대 캠퍼스 · 지상 ${b.floors}층',
-          color: const Color(0xFF3F51B5),
-          building: b,
-        ));
+        results.add(
+          _SearchResultItem(
+            name: name,
+            subtitle: '교원대 캠퍼스 · 지상 ${b.floors}층',
+            color: const Color(0xFF3F51B5),
+            building: b,
+          ),
+        );
       }
     }
 
@@ -566,12 +605,14 @@ class _HousingScreenState extends State<HousingScreen>
             orElse: () => _base.buildings.first,
           ),
         );
-        results.add(_SearchResultItem(
-          name: item.name,
-          subtitle: '${item.zone.label} · ${item.builtYear ?? 0}년 준공',
-          color: item.zone.color,
-          building: b,
-        ));
+        results.add(
+          _SearchResultItem(
+            name: item.name,
+            subtitle: '${item.zone.label} · ${item.builtYear ?? 0}년 준공',
+            color: item.zone.color,
+            building: b,
+          ),
+        );
       }
     }
 
@@ -589,19 +630,25 @@ class _HousingScreenState extends State<HousingScreen>
         }
       }
       if (b == null) continue;
-      results.add(_SearchResultItem(
-        name: o.name,
-        subtitle: '${o.zone.label} · ${o.builtYear ?? 0}년 준공',
-        color: o.zone.color,
-        building: b,
-      ));
+      results.add(
+        _SearchResultItem(
+          name: o.name,
+          subtitle: '${o.zone.label} · ${o.builtYear ?? 0}년 준공',
+          color: o.zone.color,
+          building: b,
+        ),
+      );
     }
 
     return results.take(8).toList();
   }
 
-  Widget _buildZoneChip(String label, HousingZone? zone, bool isDark,
-      {Color? dotColor}) {
+  Widget _buildZoneChip(
+    String label,
+    HousingZone? zone,
+    bool isDark, {
+    Color? dotColor,
+  }) {
     final isSelected = _selectedZone == zone;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
@@ -615,8 +662,8 @@ class _HousingScreenState extends State<HousingScreen>
             color: isSelected
                 ? (dotColor ?? const Color(0xFF007AFF))
                 : (isDark
-                    ? const Color(0xFF2C2C2E).withValues(alpha: 0.88)
-                    : Colors.white.withValues(alpha: 0.92)),
+                      ? const Color(0xFF2C2C2E).withValues(alpha: 0.88)
+                      : Colors.white.withValues(alpha: 0.92)),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isSelected
@@ -692,7 +739,9 @@ class _HousingScreenState extends State<HousingScreen>
                 height: 38,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+                  color: isDark
+                      ? const Color(0xFF2C2C2E)
+                      : const Color(0xFFF2F2F7),
                 ),
                 child: Center(
                   child: Transform.rotate(
@@ -700,8 +749,11 @@ class _HousingScreenState extends State<HousingScreen>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.navigation_rounded,
-                            size: 18, color: Color(0xFFFF3B30)),
+                        const Icon(
+                          Icons.navigation_rounded,
+                          size: 18,
+                          color: Color(0xFFFF3B30),
+                        ),
                         Text(
                           '$deg°',
                           style: TextStyle(
@@ -756,9 +808,7 @@ class _HousingScreenState extends State<HousingScreen>
           ),
           const SizedBox(height: 4),
           _hudIconButton(
-            icon: _showBuildingNumbers
-                ? Icons.pin_rounded
-                : Icons.pin_outlined,
+            icon: _showBuildingNumbers ? Icons.pin_rounded : Icons.pin_outlined,
             tooltip: _showBuildingNumbers ? "건물 번호 끄기" : "건물 번호 켜기",
             onTap: () =>
                 setState(() => _showBuildingNumbers = !_showBuildingNumbers),
@@ -789,8 +839,11 @@ class _HousingScreenState extends State<HousingScreen>
                 ? Colors.white.withValues(alpha: 0.06)
                 : Colors.black.withValues(alpha: 0.04),
           ),
-          child: Icon(icon,
-              size: 18, color: isDark ? Colors.white70 : Colors.black87),
+          child: Icon(
+            icon,
+            size: 18,
+            color: isDark ? Colors.white70 : Colors.black87,
+          ),
         ),
       ),
     );
@@ -817,33 +870,69 @@ class _HousingScreenState extends State<HousingScreen>
           color: mapBg,
           width: constraints.maxWidth,
           height: constraints.maxHeight,
-          child: InteractiveViewer(
-            transformationController: _transformController,
-            constrained: false,
-            minScale: 0.05,
-            maxScale: 8.0,
-            boundaryMargin: const EdgeInsets.all(4000),
-            clipBehavior: Clip.hardEdge,
-            child: GestureDetector(
-              onTapUp: (d) => _onTapMap(d.localPosition),
-              child: CustomPaint(
-                size: _canvas,
-                painter: HousingMapPainter(
-                  buildings: _buildings,
-                  roads: _roadPaths,
-                  terrain: _isoTerrain,
-                  landuse: _landuse,
-                  isDark: isDark,
-                  origin: _origin,
-                  showBuildingNumbers: _showBuildingNumbers,
-                  // 이름표를 화면 고정 크기로 그리려면 지금 배율을 알아야 한다.
-                  view: _transformController,
+          child: Stack(
+            children: [
+              Positioned.fill(child: _buildMapCanvas(isDark)),
+              // 도로는 OpenStreetMap 데이터(ODbL)다. 출처 표기는 선택이
+              // 아니라 라이선스 조건이므로 지도가 보이는 동안 늘 띄운다.
+              Positioned(
+                right: 6,
+                bottom: 4,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: (isDark ? Colors.black : Colors.white).withValues(
+                      alpha: 0.55,
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    child: Text(
+                      '도로 © OpenStreetMap 기여자',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMapCanvas(bool isDark) {
+    return InteractiveViewer(
+      transformationController: _transformController,
+      constrained: false,
+      minScale: 0.05,
+      maxScale: 8.0,
+      boundaryMargin: const EdgeInsets.all(4000),
+      clipBehavior: Clip.hardEdge,
+      child: GestureDetector(
+        onTapUp: (d) => _onTapMap(d.localPosition),
+        child: CustomPaint(
+          size: _canvas,
+          painter: HousingMapPainter(
+            buildings: _buildings,
+            roads: _roadPaths,
+            terrain: _isoTerrain,
+            landuse: _landuse,
+            isDark: isDark,
+            origin: _origin,
+            osmRoads: _isoOsmRoads,
+            showBuildingNumbers: _showBuildingNumbers,
+            // 이름표를 화면 고정 크기로 그리려면 지금 배율을 알아야 한다.
+            view: _transformController,
+          ),
+        ),
+      ),
     );
   }
 
@@ -904,9 +993,8 @@ class _HousingScreenState extends State<HousingScreen>
       builder: (_) => HousingFilterSheet(
         initial: _filter,
         isDark: isDark,
-        countMatches: (f) => _summaries.values
-            .where((s) => housingMatchesFilter(s, f))
-            .length,
+        countMatches: (f) =>
+            _summaries.values.where((s) => housingMatchesFilter(s, f)).length,
       ),
     );
     if (result == null || !mounted) return;
@@ -938,8 +1026,9 @@ class _HousingScreenState extends State<HousingScreen>
       final am = a.summary.medianMonthlyTotal ?? 1 << 30;
       final bm = b.summary.medianMonthlyTotal ?? 1 << 30;
       if (am != bm) return am.compareTo(bm);
-      return (a.summary.medianDeposit ?? 1 << 30)
-          .compareTo(b.summary.medianDeposit ?? 1 << 30);
+      return (a.summary.medianDeposit ?? 1 << 30).compareTo(
+        b.summary.medianDeposit ?? 1 << 30,
+      );
     });
 
     showModalBottomSheet(
@@ -954,8 +1043,7 @@ class _HousingScreenState extends State<HousingScreen>
         builder: (_, controller) => Container(
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF161618) : Colors.white,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: ListView(
             controller: controller,
@@ -1019,13 +1107,15 @@ class _HousingScreenState extends State<HousingScreen>
                   ),
                 )
               else
-                ...rows.map((r) => _buildFilterResultRow(
-                      r.name,
-                      r.summary,
-                      r.building,
-                      isDark,
-                      sheetCtx,
-                    )),
+                ...rows.map(
+                  (r) => _buildFilterResultRow(
+                    r.name,
+                    r.summary,
+                    r.building,
+                    isDark,
+                    sheetCtx,
+                  ),
+                ),
             ],
           ),
         ),
@@ -1123,11 +1213,9 @@ class _HousingScreenState extends State<HousingScreen>
   /// 기숙사와의 비교 카드. 자취는 식비가 따로 나가므로 **주거비끼리** 견준다.
   Widget _buildDormComparison(List<HousingSummary> matched, bool isDark) {
     final dorm = kDormCosts.first;
-    final monthlies = matched
-        .map((s) => s.medianMonthlyTotal)
-        .whereType<int>()
-        .toList()
-      ..sort();
+    final monthlies =
+        matched.map((s) => s.medianMonthlyTotal).whereType<int>().toList()
+          ..sort();
     final int? cheapest = monthlies.isEmpty ? null : monthlies.first;
     final diff = cheapest == null ? null : cheapest - dorm.monthlyHousing;
 
@@ -1217,17 +1305,25 @@ class _HousingScreenState extends State<HousingScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('자취방 지도 안내',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: isDark ? Colors.white : Colors.black87,
-                    )),
+                Text(
+                  '자취방 지도 안내',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 _line('건물 모양·층수·도로는 VWorld(국토교통부) 실측 공간 데이터입니다.', isDark),
-                _line('우측 하단 나침반과 회전 버튼을 통해 360도 어느 방향에서든 시점을 돌려볼 수 있습니다.', isDark),
+                _line(
+                  '우측 하단 나침반과 회전 버튼을 통해 360도 어느 방향에서든 시점을 돌려볼 수 있습니다.',
+                  isDark,
+                ),
                 _line('상단 검색창과 구역 칩을 누르면 원하는 원룸으로 즉시 이동합니다.', isDark),
-                _line('건물을 탭하면 층수, 준공연도, 보증금/월세 시세(중앙값)를 확인하고 직접 제보할 수 있습니다.', isDark),
+                _line(
+                  '건물을 탭하면 층수, 준공연도, 보증금/월세 시세(중앙값)를 확인하고 직접 제보할 수 있습니다.',
+                  isDark,
+                ),
               ],
             ),
           ),
@@ -1237,24 +1333,27 @@ class _HousingScreenState extends State<HousingScreen>
   }
 
   Widget _line(String t, bool isDark) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('· ',
-                style:
-                    TextStyle(color: isDark ? Colors.white54 : Colors.black54)),
-            Expanded(
-              child: Text(t,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: isDark ? Colors.white70 : Colors.black87,
-                  )),
-            ),
-          ],
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '· ',
+          style: TextStyle(color: isDark ? Colors.white54 : Colors.black54),
         ),
-      );
+        Expanded(
+          child: Text(
+            t,
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.45,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SearchResultItem {
@@ -1357,13 +1456,16 @@ class _DetailSheetState extends State<_DetailSheet> {
                   if (b.isCampus)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF3F51B5).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: const Color(0xFF3F51B5).withValues(alpha: 0.4),
-                            width: 0.8),
+                          color: const Color(0xFF3F51B5).withValues(alpha: 0.4),
+                          width: 0.8,
+                        ),
                       ),
                       child: const Text(
                         '교원대 캠퍼스',
@@ -1427,14 +1529,18 @@ class _DetailSheetState extends State<_DetailSheet> {
                     spacing: 6,
                     runSpacing: 6,
                     children: s.topFeatures
-                        .map((f) => Chip(
-                              label: Text(f,
-                                  style: const TextStyle(fontSize: 11.5)),
-                              visualDensity: VisualDensity.compact,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              side: BorderSide.none,
-                            ))
+                        .map(
+                          (f) => Chip(
+                            label: Text(
+                              f,
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            side: BorderSide.none,
+                          ),
+                        )
                         .toList(),
                   ),
                 ],
@@ -1449,11 +1555,13 @@ class _DetailSheetState extends State<_DetailSheet> {
                           : Icons.add_comment_outlined,
                       size: 18,
                     ),
-                    label: Text(_already
-                        ? '이미 제보함'
-                        : known == null
-                            ? '이 건물 이름·시세 알려주기'
-                            : '내가 아는 시세 알려주기'),
+                    label: Text(
+                      _already
+                          ? '이미 제보함'
+                          : known == null
+                          ? '이 건물 이름·시세 알려주기'
+                          : '내가 아는 시세 알려주기',
+                    ),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 13),
                       shape: RoundedRectangleBorder(
@@ -1474,8 +1582,11 @@ class _DetailSheetState extends State<_DetailSheet> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.school_rounded,
-                          size: 20, color: Color(0xFF3F51B5)),
+                      const Icon(
+                        Icons.school_rounded,
+                        size: 20,
+                        color: Color(0xFF3F51B5),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -1508,21 +1619,28 @@ class _DetailSheetState extends State<_DetailSheet> {
         ),
         child: Column(
           children: [
-            Icon(Icons.help_outline_rounded,
-                size: 26, color: isDark ? Colors.white24 : Colors.black26),
+            Icon(
+              Icons.help_outline_rounded,
+              size: 26,
+              color: isDark ? Colors.white24 : Colors.black26,
+            ),
             const SizedBox(height: 8),
-            Text('아직 제보가 없어요',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white54 : Colors.black54,
-                )),
+            Text(
+              '아직 제보가 없어요',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white54 : Colors.black54,
+              ),
+            ),
             const SizedBox(height: 3),
-            Text('살아봤다면 아래에서 알려주세요',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: isDark ? Colors.white38 : Colors.black38,
-                )),
+            Text(
+              '살아봤다면 아래에서 알려주세요',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: isDark ? Colors.white38 : Colors.black38,
+              ),
+            ),
           ],
         ),
       );
@@ -1558,22 +1676,26 @@ class _DetailSheetState extends State<_DetailSheet> {
   }
 
   Widget _priceItem(String label, String value, bool isDark) => Column(
-        children: [
-          Text(label,
-              style: TextStyle(
-                fontSize: 11.5,
-                color: isDark ? Colors.white54 : Colors.black54,
-              )),
-          const SizedBox(height: 3),
-          Text(value,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: isDark ? Colors.white : Colors.black87,
-                fontFeatures: KnueTokens.tabularFigures,
-              )),
-        ],
-      );
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 11.5,
+          color: isDark ? Colors.white54 : Colors.black54,
+        ),
+      ),
+      const SizedBox(height: 3),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          color: isDark ? Colors.white : Colors.black87,
+          fontFeatures: KnueTokens.tabularFigures,
+        ),
+      ),
+    ],
+  );
 
   void _openForm() {
     showModalBottomSheet(
@@ -1651,14 +1773,14 @@ class _ReportSheetState extends State<_ReportSheet> {
       Navigator.pop(context); // 폼 닫기
       await widget.onSubmitted();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('제보가 등록되었습니다. 감사합니다!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('제보가 등록되었습니다. 감사합니다!')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('제보 등록에 실패했습니다: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('제보 등록에 실패했습니다: $e')));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -1688,12 +1810,14 @@ class _ReportSheetState extends State<_ReportSheet> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('원룸 이름·시세 제보',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? Colors.white : Colors.black87,
-                      )),
+                  Text(
+                    '원룸 이름·시세 제보',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
                   const SizedBox(height: 14),
 
                   // 이름 선택
@@ -1709,10 +1833,12 @@ class _ReportSheetState extends State<_ReportSheet> {
                         value: null,
                         child: Text('목록에 없음 / 모름'),
                       ),
-                      ...kOneRoomNames.map((r) => DropdownMenuItem(
-                            value: r.id,
-                            child: Text('${r.name} (${r.zone.label})'),
-                          )),
+                      ...kOneRoomNames.map(
+                        (r) => DropdownMenuItem(
+                          value: r.id,
+                          child: Text('${r.name} (${r.zone.label})'),
+                        ),
+                      ),
                     ],
                     onChanged: (v) => setState(() => _selectedOneRoomId = v),
                   ),
@@ -1720,20 +1846,24 @@ class _ReportSheetState extends State<_ReportSheet> {
 
                   // 방 구조 — "내 조건 찾기"가 제일 먼저 거르는 조건이라
                   // 제보에서 받아두지 않으면 필터가 아무것도 못 한다.
-                  Text('방 구조',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : Colors.black87,
-                      )),
+                  Text(
+                    '방 구조',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
                     children: HousingRoomType.values.map((t) {
                       return ChoiceChip(
-                        label: Text(t.label,
-                            style: const TextStyle(fontSize: 11.5)),
+                        label: Text(
+                          t.label,
+                          style: const TextStyle(fontSize: 11.5),
+                        ),
                         selected: _roomType == t,
                         onSelected: (sel) =>
                             setState(() => _roomType = sel ? t : null),
@@ -1795,12 +1925,14 @@ class _ReportSheetState extends State<_ReportSheet> {
                   const SizedBox(height: 14),
 
                   // 특징 선택 태그
-                  Text('특징 (선택)',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : Colors.black87,
-                      )),
+                  Text(
+                    '특징 (선택)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 6,
@@ -1841,8 +1973,10 @@ class _ReportSheetState extends State<_ReportSheet> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('제보하기',
-                              style: TextStyle(fontWeight: FontWeight.w700)),
+                          : const Text(
+                              '제보하기',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
                     ),
                   ),
                 ],

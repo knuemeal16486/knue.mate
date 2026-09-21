@@ -114,6 +114,8 @@ flutter:
     # 파일은 원본 보관용으로 assets/icons에 남겨 둔다.
     - assets/housing/campus_base.json
     - assets/housing/campus_traced.json
+    # OSM 도로 중심선(ODbL) — 화면에 "© OpenStreetMap 기여자" 표기 필수
+    - assets/housing/campus_roads.json
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

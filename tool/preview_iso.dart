@@ -120,6 +120,57 @@ void main(List<String> args) {
   for (final r in paveHoles) {
     stroke(r, img.ColorRgb8(201, 194, 176));
   }
+  // OSM 도로 중심선을 굵기로 긋는다(앱의 _paintOsmRoads와 같은 방식).
+  // 케이싱을 모두 먼저 긋고 노면을 나중에 — 한 줄씩 번갈아 그으면 뒤에
+  // 그린 케이싱이 앞선 노면을 가로지른다.
+  {
+    final f = File('assets/housing/campus_roads.json');
+    if (f.existsSync()) {
+      final rj = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      final lanes = <({List<List<P>> lines, double w, String kind})>[];
+      for (final r in (rj['roads'] as List)) {
+        final pts = [
+          for (final p in (r['pts'] as List))
+            P((p[0] as num).toDouble(), (p[1] as num).toDouble())
+        ];
+        if (pts.length < 2) continue;
+        lanes.add((
+          lines: [pts],
+          w: ((r['w'] as num).toDouble() * _scale * 0.75).clamp(1.0, 60.0),
+          kind: r['k'] as String
+        ));
+      }
+      lanes.sort((a, b) => a.w.compareTo(b.w));
+      void run(bool casing) {
+        for (final l in lanes) {
+          final c = casing
+              ? img.ColorRgb8(226, 221, 213)
+              : (l.kind == 'major'
+                  ? img.ColorRgb8(253, 246, 227)
+                  : (l.kind == 'road'
+                      ? img.ColorRgb8(255, 255, 255)
+                      : img.ColorRgb8(250, 247, 242)));
+          final th = (casing ? l.w + 1.6 : l.w).round().clamp(1, 80);
+          for (final line in l.lines) {
+            for (var i = 0; i + 1 < line.length; i++) {
+              final a = sc(proj(line[i].x, line[i].y));
+              final b = sc(proj(line[i + 1].x, line[i + 1].y));
+              img.drawLine(im,
+                  x1: a.x.round(),
+                  y1: a.y.round(),
+                  x2: b.x.round(),
+                  y2: b.y.round(),
+                  color: c,
+                  thickness: th);
+            }
+          }
+        }
+      }
+
+      run(true);
+      run(false);
+    }
+  }
   for (final r in parks) {
     fill(r, img.ColorRgb8(237, 224, 192));
     stroke(r, img.ColorRgb8(191, 172, 124));

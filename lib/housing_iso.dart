@@ -6,14 +6,21 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import 'ui_utils.dart' show KnueTokens;
 
-
 /// 건물 용도 — 지붕 색이 여기서 갈린다.
 ///
 /// 예전에는 이름에 '본부'·'도서관'이 들어있나 훑어서 색을 정했다. 이름이 안 붙은
 /// 동은 전부 기본색으로 빠져 들쭉날쭉해 보였다. 이제 대장에 못박아 둔다.
 enum BuildingUse {
-  academic, library, student, dorm, sports, culture, training, admin,
-  affiliate, etc;
+  academic,
+  library,
+  student,
+  dorm,
+  sports,
+  culture,
+  training,
+  admin,
+  affiliate,
+  etc;
 
   static BuildingUse from(String? k) {
     for (final v in values) {
@@ -83,6 +90,36 @@ class BaseBuilding {
 }
 
 /// 도로 또는 보행로 중심선
+/// OpenStreetMap 도로 중심선 한 줄(ODbL).
+///
+/// 캡처에서 포장면을 **면으로** 떠내던 방식은 천장이 있었다 — 충실도를
+/// 올리면 가장자리가 굽고, 곧게 펴면 길이 제자리를 벗어났다(IoU 91%→80%).
+/// 실제 지도는 도로를 면이 아니라 **중심선을 굵기로 그어** 그린다. 그래야
+/// 양 가장자리가 정확히 평행하고 교차점이 깔끔하다.
+///
+/// OSM 중심선은 사람이 측량해 그려 둔 것이라 애초에 곧다. 정합도 확인했다 —
+/// OSM 도로 점이 우리 교내 건물 안에 떨어지는 비율 0.6%.
+///
+/// ⚠️ ODbL이라 화면에 "© OpenStreetMap 기여자" 표기가 있어야 한다.
+@immutable
+class OsmRoad {
+  /// road(차도) · walk(보행로) · steps(계단) · path(오솔길) · major(간선)
+  final String kind;
+
+  /// 실제 도로 폭(m). 화면 폭은 여기에 배율을 곱해 낸다 — 확대하면 길도
+  /// 같이 넓어져야 한다.
+  final double widthM;
+  final List<Offset> points;
+  final String? name;
+
+  const OsmRoad({
+    required this.kind,
+    required this.widthM,
+    required this.points,
+    this.name,
+  });
+}
+
 class BaseRoad {
   final List<Offset> points;
   final String type; // 'major', 'campus_main', 'campus_sec', 'walkway'
@@ -107,10 +144,7 @@ class BaseCrosswalk {
 class BaseRoundaboutIsland {
   final Offset center;
   final double radius;
-  const BaseRoundaboutIsland({
-    required this.center,
-    required this.radius,
-  });
+  const BaseRoundaboutIsland({required this.center, required this.radius});
 }
 
 /// 캠퍼스 지형/녹지/수계/부지경계/체육시설/조경 데이터
@@ -292,19 +326,44 @@ class CampusBase {
     landuse: [],
   );
 
+  /// OSM 도로 중심선(ODbL). 별도 에셋이라 따로 읽는다.
+  static Future<List<OsmRoad>> loadOsmRoads() async {
+    try {
+      final raw = await rootBundle.loadString(
+        'assets/housing/campus_roads.json',
+      );
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      return [
+        for (final r in (j['roads'] as List))
+          OsmRoad(
+            kind: r['k'] as String? ?? 'road',
+            widthM: (r['w'] as num?)?.toDouble() ?? 5,
+            name: r['n'] as String?,
+            points: [
+              for (final p in (r['pts'] as List))
+                Offset((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+            ],
+          ),
+      ];
+    } catch (e) {
+      // 도로가 없어도 지도는 떠야 한다.
+      debugPrint('campus_roads.json 로드 실패: $e');
+      return const [];
+    }
+  }
+
   static Future<CampusBase> load() async {
     final raw = await rootBundle.loadString('assets/housing/campus_base.json');
     final json = jsonDecode(raw) as Map<String, dynamic>;
     // 사진에서 뽑은 지형. 이쪽이 정답이고 campus_base(VWorld)는 사진 밖 여백용이다.
-    final tr = jsonDecode(
-            await rootBundle.loadString('assets/housing/campus_traced.json'))
-        as Map<String, dynamic>;
+    final tr =
+        jsonDecode(
+              await rootBundle.loadString('assets/housing/campus_traced.json'),
+            )
+            as Map<String, dynamic>;
 
     List<Offset> pts(dynamic list) => (list as List)
-        .map((p) => Offset(
-              (p[0] as num).toDouble(),
-              (p[1] as num).toDouble(),
-            ))
+        .map((p) => Offset((p[0] as num).toDouble(), (p[1] as num).toDouble()))
         .toList();
 
     List<List<Offset>> listOfPts(dynamic list) {
@@ -321,7 +380,7 @@ class CampusBase {
       pavementHoles: listOfPts(pave['holes']),
       greens: listOfPts(tr['greens']),
       greensOutside: [
-        for (final v in (tr['greensOutside'] as List? ?? [])) v == true
+        for (final v in (tr['greensOutside'] as List? ?? [])) v == true,
       ],
       sportsFacilities: listOfPts(tr['facilities']),
       parking: listOfPts(tr['parking']),
@@ -330,25 +389,32 @@ class CampusBase {
       fieldLines: listOfPts(tr['fieldLines']),
       parkingStalls: {
         for (final s in (tr['parkingStalls'] as List? ?? []))
-          (s['i'] as num).toInt():
-              ParkingStall((s['a'] as num).toDouble(), (s['p'] as num).toDouble())
+          (s['i'] as num).toInt(): ParkingStall(
+            (s['a'] as num).toDouble(),
+            (s['p'] as num).toDouble(),
+          ),
       },
       crosswalks: [
         for (final c in (tr['crosswalks'] as List? ?? []))
           BaseCrosswalk(
-            center: Offset((c['c'][0] as num).toDouble(),
-                (c['c'][1] as num).toDouble()),
+            center: Offset(
+              (c['c'][0] as num).toDouble(),
+              (c['c'][1] as num).toDouble(),
+            ),
             width: (c['w'] as num).toDouble(),
             length: (c['l'] as num).toDouble(),
             angleDeg: (c['a'] as num).toDouble(),
-          )
+          ),
       ],
       pois: [
         for (final p in (tr['pois'] as List? ?? []))
           MapPoi(
             p['k'] as String,
-            Offset((p['p'][0] as num).toDouble(), (p['p'][1] as num).toDouble()),
-          )
+            Offset(
+              (p['p'][0] as num).toDouble(),
+              (p['p'][1] as num).toDouble(),
+            ),
+          ),
       ],
     );
     BaseTerrain parsedTerrain = BaseTerrain(traced: traced);
@@ -361,12 +427,17 @@ class CampusBase {
         for (final cw in t['crosswalks'] as List) {
           final m = cw as Map<String, dynamic>;
           final c = m['center'] as List;
-          cwList.add(BaseCrosswalk(
-            center: Offset((c[0] as num).toDouble(), (c[1] as num).toDouble()),
-            width: (m['width'] as num).toDouble(),
-            length: (m['length'] as num).toDouble(),
-            angleDeg: (m['angle'] as num).toDouble(),
-          ));
+          cwList.add(
+            BaseCrosswalk(
+              center: Offset(
+                (c[0] as num).toDouble(),
+                (c[1] as num).toDouble(),
+              ),
+              width: (m['width'] as num).toDouble(),
+              length: (m['length'] as num).toDouble(),
+              angleDeg: (m['angle'] as num).toDouble(),
+            ),
+          );
         }
       }
 
@@ -375,30 +446,40 @@ class CampusBase {
         for (final ri in t['roundaboutIslands'] as List) {
           final m = ri as Map<String, dynamic>;
           final c = m['center'] as List;
-          riList.add(BaseRoundaboutIsland(
-            center: Offset((c[0] as num).toDouble(), (c[1] as num).toDouble()),
-            radius: (m['radius'] as num).toDouble(),
-          ));
+          riList.add(
+            BaseRoundaboutIsland(
+              center: Offset(
+                (c[0] as num).toDouble(),
+                (c[1] as num).toDouble(),
+              ),
+              radius: (m['radius'] as num).toDouble(),
+            ),
+          );
         }
       }
 
       parsedTerrain = BaseTerrain(
         // 캡처에서 뽑은 바닥은 에셋 terrain이 있어도 그대로 유지한다
         traced: traced,
-        campusBoundary:
-            t['campusBoundary'] != null ? pts(t['campusBoundary']) : [],
-        athleticTrack:
-            af != null && af['track'] != null ? pts(af['track']) : [],
-        athleticPitch:
-            af != null && af['pitch'] != null ? pts(af['pitch']) : [],
+        campusBoundary: t['campusBoundary'] != null
+            ? pts(t['campusBoundary'])
+            : [],
+        athleticTrack: af != null && af['track'] != null
+            ? pts(af['track'])
+            : [],
+        athleticPitch: af != null && af['pitch'] != null
+            ? pts(af['pitch'])
+            : [],
         grandstand: t['grandstand'] != null ? pts(t['grandstand']) : [],
         pond: t['pond'] != null ? pts(t['pond']) : [],
         pondBridge: t['pondBridge'] != null ? pts(t['pondBridge']) : [],
         centralPlaza: t['centralPlaza'] != null ? pts(t['centralPlaza']) : [],
-        dormCourtyard:
-            t['dormCourtyard'] != null ? pts(t['dormCourtyard']) : [],
-        basketballCourt:
-            t['basketballCourt'] != null ? pts(t['basketballCourt']) : [],
+        dormCourtyard: t['dormCourtyard'] != null
+            ? pts(t['dormCourtyard'])
+            : [],
+        basketballCourt: t['basketballCourt'] != null
+            ? pts(t['basketballCourt'])
+            : [],
         tennisCourt: t['tennisCourt'] != null ? pts(t['tennisCourt']) : [],
         forestAreas: listOfPts(t['forestAreas']),
         contours: listOfPts(t['contours']),
@@ -435,14 +516,12 @@ class CampusBase {
       // 비어 있다. 부지 안은 campus_traced.dart 하나만 그리고, VWorld는 부지
       // **밖**(원룸촌·논밭·국도)에만 남긴다. 정합·검증용으로는 계속 쓴다.
       roads: [
-        ...(json['roads'] as List)
-            .map((r) {
-              final m = r as Map<String, dynamic>;
-              final p = pts(m['pts']);
-              if (p.isEmpty || p.every(_inShots)) return null;
-              return BaseRoad(p, type: (m['type'] as String?) ?? 'campus_main');
-            })
-            .whereType<BaseRoad>(),
+        ...(json['roads'] as List).map((r) {
+          final m = r as Map<String, dynamic>;
+          final p = pts(m['pts']);
+          if (p.isEmpty || p.every(_inShots)) return null;
+          return BaseRoad(p, type: (m['type'] as String?) ?? 'campus_main');
+        }).whereType<BaseRoad>(),
       ],
       landuse: ((json['landuse'] as List?) ?? [])
           .map((l) {
@@ -711,10 +790,12 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     final islandPts = <Offset>[];
     for (var deg = 0; deg < 360; deg += 30) {
       final rad = deg * math.pi / 180;
-      islandPts.add(Offset(
-        ri.center.dx + ri.radius * math.cos(rad),
-        ri.center.dy + ri.radius * math.sin(rad),
-      ));
+      islandPts.add(
+        Offset(
+          ri.center.dx + ri.radius * math.cos(rad),
+          ri.center.dy + ri.radius * math.sin(rad),
+        ),
+      );
     }
     roundaboutCombined.addPath(_poly(projPts(islandPts)), Offset.zero);
   }
@@ -750,43 +831,65 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     final t = p.project(terrain.trees[i].dx, terrain.trees[i].dy);
 
     // 1. 부드러운 타원형 드롭 섀도우
-    treeShadows.addOval(Rect.fromCenter(
-      center: Offset(t.dx + 1.5, t.dy + 2.0),
-      width: 11,
-      height: 6,
-    ));
+    treeShadows.addOval(
+      Rect.fromCenter(
+        center: Offset(t.dx + 1.5, t.dy + 2.0),
+        width: 11,
+        height: 6,
+      ),
+    );
 
     // 2. 나무 기둥 (Trunk)
-    treeTrunks.addRRect(RRect.fromRectAndRadius(
-      Rect.fromLTWH(t.dx - 1.0, t.dy - 5.5, 2.0, 5.5),
-      const Radius.circular(0.8),
-    ));
+    treeTrunks.addRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(t.dx - 1.0, t.dy - 5.5, 2.0, 5.5),
+        const Radius.circular(0.8),
+      ),
+    );
 
     // 3. 수종별 정갈한 네이버 지도 스타일 캐노피
     if (i % 6 == 0) {
       // 은행나무 (Ginkgo - 화사하고 맑은 골든 옐로우 톤)
-      ginkgoBase.addOval(Rect.fromCircle(center: Offset(t.dx, t.dy - 6.5), radius: 5.5));
-      ginkgoHighlight.addOval(Rect.fromCircle(center: Offset(t.dx - 1.5, t.dy - 8.0), radius: 3.2));
+      ginkgoBase.addOval(
+        Rect.fromCircle(center: Offset(t.dx, t.dy - 6.5), radius: 5.5),
+      );
+      ginkgoHighlight.addOval(
+        Rect.fromCircle(center: Offset(t.dx - 1.5, t.dy - 8.0), radius: 3.2),
+      );
     } else if (i % 8 == 0) {
       // 벚나무 / 단풍 (Cherry / Maple - 소프트 코랄 핑크 톤)
-      cherryBase.addOval(Rect.fromCircle(center: Offset(t.dx, t.dy - 6.5), radius: 5.5));
-      cherryHighlight.addOval(Rect.fromCircle(center: Offset(t.dx - 1.5, t.dy - 8.0), radius: 3.2));
+      cherryBase.addOval(
+        Rect.fromCircle(center: Offset(t.dx, t.dy - 6.5), radius: 5.5),
+      );
+      cherryHighlight.addOval(
+        Rect.fromCircle(center: Offset(t.dx - 1.5, t.dy - 8.0), radius: 3.2),
+      );
     } else if (i % 3 == 0) {
       // 소나무 (Pine - 2단 정갈한 상록수 콘)
-      pineBase.addPath(_poly([
-        Offset(t.dx - 5.0, t.dy - 4.5),
-        Offset(t.dx + 5.0, t.dy - 4.5),
-        Offset(t.dx, t.dy - 9.0),
-      ]), Offset.zero);
-      pineTop.addPath(_poly([
-        Offset(t.dx - 3.5, t.dy - 8.0),
-        Offset(t.dx + 3.5, t.dy - 8.0),
-        Offset(t.dx, t.dy - 13.0),
-      ]), Offset.zero);
+      pineBase.addPath(
+        _poly([
+          Offset(t.dx - 5.0, t.dy - 4.5),
+          Offset(t.dx + 5.0, t.dy - 4.5),
+          Offset(t.dx, t.dy - 9.0),
+        ]),
+        Offset.zero,
+      );
+      pineTop.addPath(
+        _poly([
+          Offset(t.dx - 3.5, t.dy - 8.0),
+          Offset(t.dx + 3.5, t.dy - 8.0),
+          Offset(t.dx, t.dy - 13.0),
+        ]),
+        Offset.zero,
+      );
     } else {
       // 느티나무 / 활엽수 (Zelkova - 네이버 지도 대표 세이지 그린 돔)
-      zelkovaBase.addOval(Rect.fromCircle(center: Offset(t.dx, t.dy - 6.5), radius: 5.8));
-      zelkovaHighlight.addOval(Rect.fromCircle(center: Offset(t.dx - 1.5, t.dy - 8.2), radius: 3.4));
+      zelkovaBase.addOval(
+        Rect.fromCircle(center: Offset(t.dx, t.dy - 6.5), radius: 5.8),
+      );
+      zelkovaHighlight.addOval(
+        Rect.fromCircle(center: Offset(t.dx - 1.5, t.dy - 8.2), radius: 3.4),
+      );
     }
   }
 
@@ -802,7 +905,10 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
   // 포장면은 바깥 윤곽과 구멍을 한 Path에 담고 evenOdd로 칠한다 —
   // 그래야 길 사이 건물 블록이 뚫린 채로 남는다.
   final pavement = Path()..fillType = PathFillType.evenOdd;
-  for (final r in [...terrain.traced.pavementOutlines, ...terrain.traced.pavementHoles]) {
+  for (final r in [
+    ...terrain.traced.pavementOutlines,
+    ...terrain.traced.pavementHoles,
+  ]) {
     if (r.length < 3) continue;
     pavement.addPath(_poly(projPts(r)), Offset.zero);
   }
@@ -816,19 +922,19 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     crosswalkBars: _crosswalkPath(terrain.traced, p),
     pois: [
       for (final poi in terrain.traced.pois)
-        MapEntry(poi.kind, p.project(poi.at.dx, poi.at.dy))
+        MapEntry(poi.kind, p.project(poi.at.dx, poi.at.dy)),
     ],
     greens: merged([
       for (var i = 0; i < terrain.traced.greens.length; i++)
         if (i >= terrain.traced.greensOutside.length ||
             !terrain.traced.greensOutside[i])
-          terrain.traced.greens[i]
+          terrain.traced.greens[i],
     ]),
     greensWood: merged([
       for (var i = 0; i < terrain.traced.greens.length; i++)
         if (i < terrain.traced.greensOutside.length &&
             terrain.traced.greensOutside[i])
-          terrain.traced.greens[i]
+          terrain.traced.greens[i],
     ]),
     sportsFacilities: merged(terrain.traced.sportsFacilities),
     parking: merged(terrain.traced.parking),
@@ -894,11 +1000,13 @@ IsoBuilding buildIso(
     final rdx = (dx * cosR - dy * sinR).abs();
     final rdy = (dx * sinR + dy * cosR).abs();
 
-    walls.add(_Wall(
-      _poly([topPts[i], topPts[j], bottomPts[j], bottomPts[i]]),
-      d,
-      rdx < rdy,
-    ));
+    walls.add(
+      _Wall(
+        _poly([topPts[i], topPts[j], bottomPts[j], bottomPts[i]]),
+        d,
+        rdx < rdy,
+      ),
+    );
   }
   walls.sort((x, y) => x.depth.compareTo(y.depth));
 
@@ -959,14 +1067,16 @@ List<IsoBuilding> layoutBuildings(
   final sorted = buildings.toList()
     ..sort((a, b) => p.depthKey(a).compareTo(p.depthKey(b)));
   return sorted
-      .map((b) => buildIso(
-            b,
-            p,
-            highlighted: b.id == selectedId,
-            isOneRoom: oneRoomIds.contains(b.id),
-            zoneColor: zoneColors[b.id],
-            displayName: displayNames[b.id],
-          ))
+      .map(
+        (b) => buildIso(
+          b,
+          p,
+          highlighted: b.id == selectedId,
+          isOneRoom: oneRoomIds.contains(b.id),
+          zoneColor: zoneColors[b.id],
+          displayName: displayNames[b.id],
+        ),
+      )
       .toList();
 }
 
@@ -1001,6 +1111,46 @@ CombinedRoads projectRoads(List<BaseRoad> roads, IsoProjection p) {
     }
   }
   return CombinedRoads(carRoads: car, walkways: walk);
+}
+
+/// 굵기별로 묶은 OSM 도로. 같은 굵기끼리 Path 하나로 합쳐 그린다 —
+/// 160줄을 따로 그리면 드로우콜이 그만큼 늘어난다.
+class IsoOsmRoads {
+  /// (종류, 화면 굵기) → 합쳐진 Path. 굵은 길이 뒤에 오도록 정렬돼 있다.
+  final List<({String kind, double width, Path path})> lanes;
+  const IsoOsmRoads(this.lanes);
+  static const empty = IsoOsmRoads([]);
+}
+
+IsoOsmRoads projectOsmRoads(List<OsmRoad> roads, IsoProjection p) {
+  // 굵기는 실제 폭(m) × 배율이다. 화면 고정 굵기로 그으면 확대했을 때
+  // 길만 가늘어져 건물 사이로 실처럼 보인다.
+  //
+  // 아이소메트릭에서 x축은 그대로, y축은 절반으로 눌린다. 길이 어느 방향을
+  // 향하든 굵기가 들쭉날쭉하면 안 되므로 **한 줄에 하나의 굵기**를 쓰고,
+  // 눌림의 평균(0.75)을 곱해 대략 맞춘다.
+  const squash = 0.75;
+  final byKey = <String, ({String kind, double width, Path path})>{};
+  for (final r in roads) {
+    if (r.points.length < 2) continue;
+    final w = (r.widthM * p.scale * squash).clamp(0.8, 60.0);
+    // 0.5px 단위로 묶어 Path 수를 줄인다.
+    final q = (w * 2).round() / 2;
+    final key = '${r.kind}|$q';
+    final lane = byKey.putIfAbsent(
+      key,
+      () => (kind: r.kind, width: q, path: Path()),
+    );
+    final pts = r.points.map((v) => p.project(v.dx, v.dy)).toList();
+    lane.path.moveTo(pts.first.dx, pts.first.dy);
+    for (final pt in pts.skip(1)) {
+      lane.path.lineTo(pt.dx, pt.dy);
+    }
+  }
+  final lanes = byKey.values.toList()
+    // 굵은 길을 나중에(위에) 그린다 — 좁은 샛길이 큰 길을 덮으면 안 된다.
+    ..sort((a, b) => a.width.compareTo(b.width));
+  return IsoOsmRoads(lanes);
 }
 
 /// 화면 좌표로 옮긴 용도별 바닥면. 용도마다 Path 하나로 합쳐 그린다 —
@@ -1084,6 +1234,9 @@ class HousingMapPainter extends CustomPainter {
   /// 지적 기반 용도별 바닥면. 가장 아래에 깔린다.
   final IsoLandUse landuse;
 
+  /// OSM 도로 중심선(ODbL). 화면에 출처 표기가 있어야 한다.
+  final IsoOsmRoads osmRoads;
+
   /// 교내 건물에 번호를 찍을지. 색을 눈으로 검수할 때 켠다.
   final bool showBuildingNumbers;
 
@@ -1107,6 +1260,7 @@ class HousingMapPainter extends CustomPainter {
     required this.isDark,
     required this.origin,
     this.landuse = IsoLandUse.empty,
+    this.osmRoads = IsoOsmRoads.empty,
     this.showBuildingNumbers = false,
     this.view,
   }) : super(repaint: view);
@@ -1297,8 +1451,6 @@ class HousingMapPainter extends CustomPainter {
     );
   }
 
-
-
   void _paintCampusBoundary(Canvas canvas) {
     if (terrain.campusBoundary.getBounds().isEmpty) return;
 
@@ -1359,7 +1511,9 @@ class HousingMapPainter extends CustomPainter {
       final plazaBorder = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0
-        ..color = isDark ? const Color(0xFF388E3C).withValues(alpha: 0.3) : const Color(0xFFA5D698);
+        ..color = isDark
+            ? const Color(0xFF388E3C).withValues(alpha: 0.3)
+            : const Color(0xFFA5D698);
       canvas.drawPath(terrain.centralPlaza, plazaPaint);
       canvas.drawPath(terrain.centralPlaza, plazaBorder);
     }
@@ -1434,9 +1588,7 @@ class HousingMapPainter extends CustomPainter {
       final pondBorder = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4
-        ..color = isDark
-            ? const Color(0xFF3282B8)
-            : const Color(0xFFA5CFEE);
+        ..color = isDark ? const Color(0xFF3282B8) : const Color(0xFFA5CFEE);
 
       canvas.drawPath(terrain.pond, pondPaint);
       canvas.drawPath(terrain.pond, pondBorder);
@@ -1521,6 +1673,41 @@ class HousingMapPainter extends CustomPainter {
 
     canvas.drawPath(roads.walkways, walkwayEdge);
     canvas.drawPath(roads.walkways, walkwaySurface);
+
+    _paintOsmRoads(canvas);
+  }
+
+  /// OSM 중심선을 굵기로 그어 도로를 만든다.
+  ///
+  /// 케이싱(테두리)을 먼저 굵게, 노면을 그 위에 얇게 — 두 번 그으면 길이
+  /// 이어지는 곳마다 테두리가 자연스레 이어지고 교차점이 깔끔해진다.
+  /// 모든 케이싱을 먼저 다 긋고 노면을 나중에 긋는 이유도 같다. 한 줄씩
+  /// 케이싱·노면을 번갈아 그으면 뒤에 그린 케이싱이 앞선 노면을 가로지른다.
+  void _paintOsmRoads(Canvas canvas) {
+    if (osmRoads.lanes.isEmpty) return;
+
+    Color surfaceOf(String kind) => switch (kind) {
+      'major' => isDark ? const Color(0xFF4A423A) : const Color(0xFFFDF6E3),
+      'walk' ||
+      'path' ||
+      'steps' => isDark ? const Color(0xFF40454E) : const Color(0xFFFAF7F2),
+      _ => isDark ? const Color(0xFF363A42) : const Color(0xFFFFFFFF),
+    };
+    final casing = isDark ? const Color(0xFF282B30) : const Color(0xFFE2DDD5);
+
+    Paint stroke(double w, Color c) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = w
+      ..color = c;
+
+    for (final l in osmRoads.lanes) {
+      canvas.drawPath(l.path, stroke(l.width + 1.6, casing));
+    }
+    for (final l in osmRoads.lanes) {
+      canvas.drawPath(l.path, stroke(l.width, surfaceOf(l.kind)));
+    }
   }
 
   void _paintCrosswalksAndIslands(Canvas canvas) {
@@ -1574,8 +1761,8 @@ class HousingMapPainter extends CustomPainter {
       ..color = b.highlighted
           ? Colors.white
           : (isDark
-              ? Colors.white.withValues(alpha: 0.18)
-              : const Color(0xFFD1CBC0));
+                ? Colors.white.withValues(alpha: 0.18)
+                : const Color(0xFFD1CBC0));
     canvas.drawPath(b.top, edge);
     if (b.highlighted) {
       canvas.drawPath(b.silhouette, edge);
@@ -1592,47 +1779,56 @@ class HousingMapPainter extends CustomPainter {
     // 2. 나무 원목 줄기
     canvas.drawPath(
       terrain.treeTrunksPath,
-      Paint()..color = isDark ? const Color(0xFF4A3B32) : const Color(0xFF9E8E81),
+      Paint()
+        ..color = isDark ? const Color(0xFF4A3B32) : const Color(0xFF9E8E81),
     );
 
     // 3. 느티나무 / 활엽수 (네이버 지도 세이지 에메랄드)
     canvas.drawPath(
       terrain.treeZelkovaBasePath,
-      Paint()..color = isDark ? const Color(0xFF1E4620) : const Color(0xFF66BB6A),
+      Paint()
+        ..color = isDark ? const Color(0xFF1E4620) : const Color(0xFF66BB6A),
     );
     canvas.drawPath(
       terrain.treeZelkovaHighlightPath,
-      Paint()..color = isDark ? const Color(0xFF2E7D32) : const Color(0xFFA5D6A7),
+      Paint()
+        ..color = isDark ? const Color(0xFF2E7D32) : const Color(0xFFA5D6A7),
     );
 
     // 4. 소나무 / 침엽수 (네이버 지도 딥 틸-포레스트)
     canvas.drawPath(
       terrain.treePineBasePath,
-      Paint()..color = isDark ? const Color(0xFF13381B) : const Color(0xFF388E3C),
+      Paint()
+        ..color = isDark ? const Color(0xFF13381B) : const Color(0xFF388E3C),
     );
     canvas.drawPath(
       terrain.treePineTopPath,
-      Paint()..color = isDark ? const Color(0xFF1E5227) : const Color(0xFF4CAF50),
+      Paint()
+        ..color = isDark ? const Color(0xFF1E5227) : const Color(0xFF4CAF50),
     );
 
     // 5. 은행나무 (네이버 지도 웜 골든 앰버)
     canvas.drawPath(
       terrain.treeGinkgoBasePath,
-      Paint()..color = isDark ? const Color(0xFFB45309) : const Color(0xFFFBBF24),
+      Paint()
+        ..color = isDark ? const Color(0xFFB45309) : const Color(0xFFFBBF24),
     );
     canvas.drawPath(
       terrain.treeGinkgoHighlightPath,
-      Paint()..color = isDark ? const Color(0xFFD97706) : const Color(0xFFFDE68A),
+      Paint()
+        ..color = isDark ? const Color(0xFFD97706) : const Color(0xFFFDE68A),
     );
 
     // 6. 벚나무 / 단풍 (네이버 지도 파스텔 핑크)
     canvas.drawPath(
       terrain.treeCherryBasePath,
-      Paint()..color = isDark ? const Color(0xFF9D174D) : const Color(0xFFF472B6),
+      Paint()
+        ..color = isDark ? const Color(0xFF9D174D) : const Color(0xFFF472B6),
     );
     canvas.drawPath(
       terrain.treeCherryHighlightPath,
-      Paint()..color = isDark ? const Color(0xFFBE185D) : const Color(0xFFFBCFE8),
+      Paint()
+        ..color = isDark ? const Color(0xFFBE185D) : const Color(0xFFFBCFE8),
     );
   }
 
@@ -1654,15 +1850,19 @@ class HousingMapPainter extends CustomPainter {
       if (st == null) continue;
       final c = e.value;
       canvas.drawCircle(
-          c.translate(0, 1), 5.4, Paint()..color = Colors.black.withValues(alpha: 0.18));
+        c.translate(0, 1),
+        5.4,
+        Paint()..color = Colors.black.withValues(alpha: 0.18),
+      );
       canvas.drawCircle(c, 5.2, Paint()..color = st[0] as Color);
       canvas.drawCircle(
-          c,
-          5.2,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 0.9
-            ..color = Colors.white.withValues(alpha: 0.9));
+        c,
+        5.2,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.9
+          ..color = Colors.white.withValues(alpha: 0.9),
+      );
       final tp = _poiPainters.putIfAbsent(
         e.key,
         () => TextPainter(
@@ -1739,22 +1939,22 @@ class HousingMapPainter extends CustomPainter {
     // 그리면 화면에서는 늘 같은 크기로 보인다.
     final k = 1.0 / viewScale;
 
-    final ordered = buildings.where((b) {
-      // 번호를 켜면 이름표는 감춘다. 둘 다 지붕 한가운데 놓여서 겹치면
-      // 어느 쪽도 안 읽힌다 — 번호로 짚으려면 이름이 비켜줘야 한다.
-      // (선택한 건물은 예외 — 무엇을 골랐는지는 늘 보여야 한다)
-      if (showBuildingNumbers && b.building.isCampus && !b.highlighted) {
-        return false;
-      }
-      return b.cachedBadgePainter != null;
-    }).toList()
-      ..sort((x, y) {
-        if (x.highlighted != y.highlighted) return x.highlighted ? -1 : 1;
-        final xn = x.building.officialName != null;
-        final yn = y.building.officialName != null;
-        if (xn != yn) return xn ? -1 : 1;
-        return y.building.footprintArea.compareTo(x.building.footprintArea);
-      });
+    final ordered =
+        buildings.where((b) {
+          // 번호를 켜면 이름표는 감춘다. 둘 다 지붕 한가운데 놓여서 겹치면
+          // 어느 쪽도 안 읽힌다 — 번호로 짚으려면 이름이 비켜줘야 한다.
+          // (선택한 건물은 예외 — 무엇을 골랐는지는 늘 보여야 한다)
+          if (showBuildingNumbers && b.building.isCampus && !b.highlighted) {
+            return false;
+          }
+          return b.cachedBadgePainter != null;
+        }).toList()..sort((x, y) {
+          if (x.highlighted != y.highlighted) return x.highlighted ? -1 : 1;
+          final xn = x.building.officialName != null;
+          final yn = y.building.officialName != null;
+          if (xn != yn) return xn ? -1 : 1;
+          return y.building.footprintArea.compareTo(x.building.footprintArea);
+        });
 
     final placed = <Rect>[];
     for (final b in ordered) {
@@ -1829,8 +2029,6 @@ class HousingMapPainter extends CustomPainter {
       old.isDark != isDark ||
       old.origin != origin;
 }
-
-
 
 /// 교내 건물 지붕 색 — **용도별로 고정**한다.
 ///
@@ -1934,10 +2132,22 @@ Path _crosswalkPath(TracedGround g, IsoProjection p) {
       final t = -c.length / 2 + (i + 0.5) * (barW + gap);
       final bx = c.center.dx + dx * t, by = c.center.dy + dy * t;
       final quad = [
-        [bx - dx * barW / 2 - nx * c.width / 2, by - dy * barW / 2 - ny * c.width / 2],
-        [bx + dx * barW / 2 - nx * c.width / 2, by + dy * barW / 2 - ny * c.width / 2],
-        [bx + dx * barW / 2 + nx * c.width / 2, by + dy * barW / 2 + ny * c.width / 2],
-        [bx - dx * barW / 2 + nx * c.width / 2, by - dy * barW / 2 + ny * c.width / 2],
+        [
+          bx - dx * barW / 2 - nx * c.width / 2,
+          by - dy * barW / 2 - ny * c.width / 2,
+        ],
+        [
+          bx + dx * barW / 2 - nx * c.width / 2,
+          by + dy * barW / 2 - ny * c.width / 2,
+        ],
+        [
+          bx + dx * barW / 2 + nx * c.width / 2,
+          by + dy * barW / 2 + ny * c.width / 2,
+        ],
+        [
+          bx - dx * barW / 2 + nx * c.width / 2,
+          by - dy * barW / 2 + ny * c.width / 2,
+        ],
       ];
       final proj = [for (final q in quad) p.project(q[0], q[1])];
       path
