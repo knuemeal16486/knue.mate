@@ -1508,6 +1508,11 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                   'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.knue.knuemate',
             ),
+            // 타일이 OpenStreetMap 데이터(ODbL)라 출처 표기가 **필수**다.
+            // 예전엔 표기 없이 타일만 받아 쓰고 있었다.
+            const SimpleAttributionWidget(
+              source: Text('© OpenStreetMap 기여자'),
+            ),
             // 저장된 산책로
             ..._savedTrails.asMap().entries.map(
               (e) => PolylineLayer(
@@ -5278,6 +5283,10 @@ class _ScreenshotShareDialogState extends State<_ScreenshotShareDialog> {
                             urlTemplate:
                                 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
                             userAgentPackageName: 'com.knue.knuemate',
+                          ),
+                          // ODbL 출처 표기는 지도가 보이는 모든 곳에 있어야 한다.
+                          const SimpleAttributionWidget(
+                            source: Text('© OpenStreetMap 기여자'),
                           ),
                           PolylineLayer(
                             polylines: [
