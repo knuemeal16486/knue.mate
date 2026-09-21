@@ -331,7 +331,7 @@ void main() {
     //
     // 비스듬히 앉은 건물은 dominantAngle(θ)이 통째로 기울여 잡아 주므로
     // 여기서 45로 세워도 사선 건물이 억지로 똑바로 서지 않는다.
-    final poly = regularize(raw, snapDeg: 38, minEdge: 0.8);
+    final poly = deSpike(regularize(raw, snapDeg: 38, minEdge: 0.8));
     if (poly.length < 4 || !insidePoly(poly)) continue;
     // 운동시설이냐 건물이냐 — **잔디를 품고 있는가**로 가른다. 트랙·코트
     // 블록은 가운데가 초록이라, 구멍을 메우고 나서 재야 겹침이 잡힌다.
@@ -591,15 +591,26 @@ void main() {
         // 실측(둘레 중 8m 이상 긴 변 비율 / 포장면 IoU / 점 수):
         //   28,1.4  64.4%  91.2%  8722   ← 곧음보다 충실도를 택한 값
         //   40,2.5  73.5%  89.2%  7188
-        //   55,4.0  83.8%  84.6%  4936   ← 지금
-        //   60,5.0  86.8%  81.4%  4082  (여기부터는 길이 제자리를 많이 벗어난다)
+        //   55,4.0  83.8%  84.6%  4936
+        //   62,5.0  86.8%  80.3%  3769   ← 지금 (곧게 보이는 쪽을 택했다)
         //
         // regularize(직각 세우기)도 대봤지만 포장면에선 순손실이었다 —
         // 같은 직선성에서 IoU만 5%p 더 깎였다. 도로는 직각이 아니라
         // 제각각 각도의 직선이라 90° 격자에 세울 이유가 없다.
-      ], mergeDeg: 55, maxOffset: 4.0, minEdge: 3.0);
-      // 면적 순으로 나오므로 첫 고리가 바깥, 나머지는 그 안의 구멍이다.
-      (k == 0 ? outers : holes).add(w);
+      ], mergeDeg: 62, maxOffset: 5.0, minEdge: 4.0);
+      // 곧게 펴면서 생긴 '나갔다 되돌아오는 가시'를 걷어낸다. 면적은 거의
+      // 0이라 앞의 실오라기 검사에 안 걸리는데, 그려 놓으면 머리카락 같은
+      // 자국이 지도를 가로지른다.
+      final w2 = deSpike(w);
+      // 실오라기는 버린다. 폭이 1.5m도 안 되면서 12m 넘게 뻗은 고리는
+      // 길을 갈라놓은 가위 자국이지 실제 지형이 아니다.
+      //
+      // 바깥 고리가 실오라기면 그 덩어리 자체가 찌꺼기이므로 **구멍까지
+      // 통째로** 버린다(면적 순이라 첫 고리가 바깥이다).
+      final thin = isSliver(w2, maxWidth: 1.5, minLength: 12);
+      if (k == 0 && thin) break;
+      if (thin) continue;
+      (k == 0 ? outers : holes).add(w2);
     }
   }
   outers.sort((a, b) => polyArea(b).compareTo(polyArea(a)));
@@ -757,12 +768,18 @@ void main() {
   // 잔디를 뽑을 때 이 선들을 메워버리기 때문에(closeM), 따로 되살려야 보인다.
   final fieldLines = <List<Pt>>[];
   {
-    final greenMask = rasterize([
-      for (final r in greens)
-        [
-          for (final p in r) [p.x, p.y]
-        ]
-    ], gw, gh, ox, oy, res);
+    // 녹지 폴리곤은 매끈하게 다듬어 둔 것이라 실제 잔디 픽셀보다 바깥으로
+    // 조금 부푼다. 그대로 빼면 **가장자리 테두리가 통째로 '선'으로 잡혀**
+    // 지도에 가위로 오린 듯한 바늘이 남는다(실측 6개, 길이 15~77m).
+    // 안쪽으로 4셀(1.2m) 깎고 나서 빼면 테두리가 걸리지 않는다.
+    final greenMask = erode(
+        rasterize([
+          for (final r in greens)
+            [
+              for (final p in r) [p.x, p.y]
+            ]
+        ], gw, gh, ox, oy, res),
+        3);
     final lineRaw = Mask(gw, gh);
     for (var i = 0; i < lineRaw.bits.length; i++) {
       lineRaw.bits[i] =
@@ -776,9 +793,13 @@ void main() {
       final o = ll.cropOrigin(id, pad: 4);
       for (final l in traceSmooth(crop,
           blurR: 1, blurN: 1, round: 0, preEps: 0.7, minLoopArea: 20)) {
-        fieldLines.add([
+        final ring = [
           for (final p in l) Pt(ox + (p.x + o[0]) * res, oy + (p.y + o[1]) * res)
-        ]);
+        ];
+        // 그래도 남는 실오라기는 버린다. 평균 폭(2·면적/둘레)이 1m도 안
+        // 되면서 15m 넘게 뻗은 것은 운동장 선이 아니라 찌꺼기다.
+        if (isSliver(ring, maxWidth: 1.0, minLength: 15)) continue;
+        fieldLines.add(ring);
       }
     }
   }

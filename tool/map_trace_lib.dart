@@ -1119,6 +1119,67 @@ int straightenTried = 0, straightenGaveUp = 0;
 
 /// [regularize]가 몇 번 불렸고 몇 번 포기했는지. 포기하면 물결치는 원본이
 /// 그대로 나가므로, 이 숫자가 크면 건물이 흐물흐물해 보인다.
+/// 폴리곤에서 **나갔다가 그대로 되돌아오는 가시**를 걷어낸다.
+///
+/// 곧게 펴는 힘을 세게 주면 선이 제자리를 찾아가면서 한 점이 바깥으로
+/// 튀어나갔다 되돌아오는 자리가 생긴다. 면적은 거의 0이지만 그려 놓으면
+/// **머리카락 같은 자국**이 지도를 가로지른다. 실측 85곳, 최대 179.7°.
+///
+/// 되돌아오는 정도([maxTurn]도 초과)가 심한 꼭짓점을 지우고, 그 때문에
+/// 이웃의 각도가 바뀌므로 더 지울 게 없을 때까지 되풀이한다.
+List<Pt> deSpike(List<Pt> poly, {double maxTurn = 165}) {
+  var pts = poly;
+  for (var pass = 0; pass < 40 && pts.length > 4; pass++) {
+    final keep = <Pt>[];
+    for (var i = 0; i < pts.length; i++) {
+      final a = pts[(i - 1 + pts.length) % pts.length];
+      final b = pts[i];
+      final c = pts[(i + 1) % pts.length];
+      final v1x = b.x - a.x, v1y = b.y - a.y;
+      final v2x = c.x - b.x, v2y = c.y - b.y;
+      final l1 = math.sqrt(v1x * v1x + v1y * v1y);
+      final l2 = math.sqrt(v2x * v2x + v2y * v2y);
+      if (l1 < 1e-9 || l2 < 1e-9) continue; // 겹친 점도 함께 버린다
+      final ang = math.atan2((v1x * v2y - v1y * v2x) / (l1 * l2),
+                  ((v1x * v2x + v1y * v2y) / (l1 * l2)).clamp(-1.0, 1.0))
+              .abs() *
+          180 /
+          math.pi;
+      if (ang > maxTurn) continue;
+      keep.add(b);
+    }
+    if (keep.length == pts.length) break;
+    if (keep.length < 4) break;
+    pts = keep;
+  }
+  return pts;
+}
+
+/// 가위로 오린 듯한 실오라기 조각인지.
+///
+/// 평균 폭(2·면적/둘레)이 [maxWidth]도 안 되면서 [minLength]보다 길게
+/// 뻗은 폴리곤은 지도에 긁힌 자국처럼 보인다. 추출 경계가 한 셀씩 어긋날
+/// 때 생기는 찌꺼기이지 실제 지형이 아니다.
+bool isSliver(List<Pt> ring,
+    {double maxWidth = 1.0, double minLength = 15}) {
+  if (ring.length < 3) return true;
+  var per = 0.0;
+  var minX = ring.first.x, maxX = ring.first.x;
+  var minY = ring.first.y, maxY = ring.first.y;
+  for (var i = 0; i < ring.length; i++) {
+    final a = ring[i], b = ring[(i + 1) % ring.length];
+    per += math.sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+    if (a.x < minX) minX = a.x;
+    if (a.x > maxX) maxX = a.x;
+    if (a.y < minY) minY = a.y;
+    if (a.y > maxY) maxY = a.y;
+  }
+  if (per <= 0) return true;
+  final width = 2 * polyArea(ring) / per;
+  final length = math.max(maxX - minX, maxY - minY);
+  return width < maxWidth && length > minLength;
+}
+
 int regularizeTried = 0, regularizeGaveUp = 0;
 
 /// 이웃한 두 직선이 나란해 꼭짓점을 못 구한 횟수. 뭉개진 등고선에서는
