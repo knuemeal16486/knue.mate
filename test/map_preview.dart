@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:knue_mate/housing_iso.dart';
+import 'package:knue_mate/housing_service.dart';
 
 Future<void> shoot(
   WidgetTester tester,
@@ -24,7 +25,16 @@ Future<void> shoot(
   String out,
 ) async {
   const proj = IsoProjection(scale: 2.4, rotation: 0);
-  final blds = layoutBuildings(base.buildings, proj);
+  // 화면과 같은 색칠 규칙 — 월탄3길 초록·원룸 이름표까지 앱 그대로 나온다.
+  // (제보·관리자 수정은 서버 값이라 여기선 빈 채로 본다)
+  final style = housingMapStyle(base.buildings);
+  final blds = layoutBuildings(
+    base.buildings,
+    proj,
+    oneRoomIds: style.oneRoomIds,
+    zoneColors: style.zoneColors,
+    displayNames: style.displayNames,
+  );
   final roads = projectRoads(base.roads, proj);
   final terrain = projectTerrain(base.terrain, proj);
   final landuse = projectLandUse(base.landuse, proj);

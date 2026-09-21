@@ -29,7 +29,7 @@ enum HousingZone {
 /// 54동(64%)이 이 길에 있다. 초록으로 칠해 그 덩어리가 한눈에 잡히게 한다.
 /// 다른 길도 칠하려면 여기 한 줄씩 넣으면 된다.
 const Map<String, Color> kHousingRoadColors = {
-  '월탄3길': Color(0xFF43A047),
+  '월탄3길': Color(0xFF7DCB8E),
 };
 
 /// 원룸 이름 후보.

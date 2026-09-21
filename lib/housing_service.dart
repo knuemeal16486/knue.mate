@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show Color;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'housing_iso.dart' show BaseBuilding;
@@ -628,4 +629,90 @@ bool housingMatchesFilter(HousingSummary s, HousingFilter f) {
   }
 
   return true;
+}
+
+/// 자취방 지도에 건물마다 무엇을 칠하고 어떤 이름표를 달지.
+///
+/// 화면(HousingScreen)과 지도 미리보기 도구(test/map_preview.dart)가
+/// **같은 규칙**을 쓰게 하려고 순수 함수로 뺐다. 예전엔 화면 안에만 있어서,
+/// 미리보기로는 월탄3길 초록·이름표를 앱 그대로 확인할 수가 없었다.
+@immutable
+class HousingMapStyle {
+  /// 원룸으로 볼 만한 건물. 연녹색 바탕으로 칠한다.
+  final Set<String> oneRoomIds;
+
+  /// 건물별 지붕색(구역색·도로별 색).
+  final Map<String, Color> zoneColors;
+
+  /// 건물별 이름표.
+  final Map<String, String> displayNames;
+
+  const HousingMapStyle({
+    required this.oneRoomIds,
+    required this.zoneColors,
+    required this.displayNames,
+  });
+}
+
+/// 순수 함수 — 테스트 대상.
+///
+/// 이름표 우선순위: 관리자 수정 > 학생 제보 > 조사해 넣은 이름 > 건물번호.
+/// 조사한 이름은 tool/mapsrc/building_names.json에서 지도 데이터에 구워져
+/// 오고([BaseBuilding.officialName]), 그마저 없으면 건물번호로 대신한다 —
+/// 번호는 교외 건물이 전부 갖고 있어 빈 이름표가 안 생긴다. 도로명까지
+/// 붙이면("월탄3길 5") 이름표가 길어져 서로 많이 겹친다. 어느 길인지는 도로별
+/// 색이 알려주고, 건물을 누르면 전체 주소가 뜬다.
+///
+/// [matches]가 비어 있지 않으면("내 조건 찾기"를 건 상태) 맞는 건물만
+/// 색·이름표를 남겨 후보가 지도에서 바로 눈에 띄게 한다.
+HousingMapStyle housingMapStyle(
+  Iterable<BaseBuilding> buildings, {
+  Map<String, HousingSummary> summaries = const {},
+  Map<String, HousingBuildingOverride> overrides = const {},
+  Set<String> matches = const {},
+}) {
+  OneRoomName? known(String id) {
+    final o = overrides[id];
+    if (o != null) return o.toOneRoomName();
+    final oid = summaries[id]?.oneRoomId;
+    return oid == null ? null : kOneRoomNameById[oid];
+  }
+
+  final oneRoomIds = <String>{};
+  final zoneColors = <String, Color>{};
+  final displayNames = <String, String>{};
+
+  for (final b in buildings) {
+    final isOneRoom = looksLikeOneRoom(b, summaries);
+    if (isOneRoom) oneRoomIds.add(b.id);
+
+    final k = known(b.id);
+    if (k != null) {
+      zoneColors[b.id] = k.zone.color;
+      displayNames[b.id] = k.name;
+    } else if (isOneRoom) {
+      final official = b.officialName;
+      final no = b.buildingNo;
+      if (official != null && official.isNotEmpty) {
+        displayNames[b.id] = official;
+      } else if (no != null && no.isNotEmpty) {
+        displayNames[b.id] = no;
+      }
+    }
+
+    // 도로별 색. 이름표만으로는 어느 골목인지 한눈에 안 들어온다.
+    final roadColor = kHousingRoadColors[b.road];
+    if (roadColor != null) zoneColors[b.id] ??= roadColor;
+  }
+
+  if (matches.isNotEmpty) {
+    zoneColors.removeWhere((id, _) => !matches.contains(id));
+    displayNames.removeWhere((id, _) => !matches.contains(id));
+  }
+
+  return HousingMapStyle(
+    oneRoomIds: oneRoomIds,
+    zoneColors: zoneColors,
+    displayNames: displayNames,
+  );
 }

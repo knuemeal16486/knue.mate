@@ -192,63 +192,25 @@ class _HousingScreenState extends State<HousingScreen>
       ..scale(targetScale);
   }
 
-  bool _looksLikeOneRoom(BaseBuilding b) => looksLikeOneRoom(b, _summaries);
-
   void _rebuild() {
     final proj = IsoProjection(scale: _scale, rotation: _rotationAngle);
 
-    final oneRoomIds = <String>{};
-    final zoneColors = <String, Color>{};
-    final displayNames = <String, String>{};
-
-    for (final b in _base.buildings) {
-      final isOneRoom = _looksLikeOneRoom(b);
-      if (isOneRoom) oneRoomIds.add(b.id);
-
-      final known = _resolvedKnown(b.id);
-      if (known != null) {
-        zoneColors[b.id] = known.zone.color;
-        displayNames[b.id] = known.name;
-      } else if (isOneRoom) {
-        // 이름표 우선순위: 학생 제보 > 조사해 넣은 이름 > 건물번호.
-        //
-        // 조사한 이름은 tool/mapsrc/building_names.json에 있고 지도 데이터에
-        // 구워져 온다. 그마저 없으면 건물번호로 대신한다 — 번호는 교외
-        // 건물 505동이 전부 갖고 있어서 빈 이름표가 안 생긴다.
-        //
-        // 도로명까지 붙이면("월탄3길 5") 이름표가 길어져 서로 많이 겹친다.
-        // 어느 길인지는 도로별 색이 알려주고, 건물을 누르면 전체 주소가 뜬다.
-        final official = b.officialName;
-        final no = b.buildingNo;
-        if (official != null && official.isNotEmpty) {
-          displayNames[b.id] = official;
-        } else if (no != null && no.isNotEmpty) {
-          displayNames[b.id] = no;
-        }
-      }
-
-      // 도로별 색. 이름표만으로는 어느 골목인지 한눈에 안 들어온다.
-      final roadColor = kHousingRoadColors[b.road];
-      if (roadColor != null) {
-        zoneColors[b.id] ??= roadColor;
-      }
-    }
-
-    // 조건을 걸어 두면 맞는 건물만 구역색을 남기고 나머지는 색을 빼서,
-    // 지도에서도 후보가 바로 눈에 띄게 한다.
-    final matches = _matchingBuildingIds;
-    if (matches.isNotEmpty) {
-      zoneColors.removeWhere((id, _) => !matches.contains(id));
-      displayNames.removeWhere((id, _) => !matches.contains(id));
-    }
+    // 무엇을 칠하고 어떤 이름표를 달지는 housingMapStyle이 정한다 — 지도
+    // 미리보기 도구도 같은 함수를 써서 앱과 똑같은 그림을 뜬다.
+    final style = housingMapStyle(
+      _base.buildings,
+      summaries: _summaries,
+      overrides: _overrides,
+      matches: _matchingBuildingIds,
+    );
 
     _buildings = layoutBuildings(
       _base.buildings,
       proj,
       selectedId: _selectedId,
-      oneRoomIds: oneRoomIds,
-      zoneColors: zoneColors,
-      displayNames: displayNames,
+      oneRoomIds: style.oneRoomIds,
+      zoneColors: style.zoneColors,
+      displayNames: style.displayNames,
     );
     _roadPaths = projectRoads(_base.roads, proj);
     _isoOsmRoads = projectOsmRoads(_osmRoads, proj);

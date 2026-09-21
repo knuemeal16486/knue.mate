@@ -1741,7 +1741,10 @@ class HousingMapPainter extends CustomPainter {
     } else if (b.building.isCampus) {
       base = campusUseColor(b.building.use, isDark);
     } else if (b.zoneColor != null) {
-      base = b.zoneColor!;
+      // 구역색·도로색은 한 벌뿐이라 다크 모드에서도 밝은 원색 그대로
+      // 칠해져 형광처럼 떴다(월탄3길 초록이 특히 눈부셨다). 색상은 두고
+      // 밝기·채도만 어두운 바탕에 맞게 눌러 준다.
+      base = isDark ? _dimForDark(b.zoneColor!) : b.zoneColor!;
     } else if (b.isOneRoom) {
       base = isDark ? const Color(0xFF275038) : const Color(0xFFDCFCE7);
     } else {
@@ -1961,7 +1964,11 @@ class HousingMapPainter extends CustomPainter {
 
     final placed = <Rect>[];
     for (final b in ordered) {
-      final tp = b.cachedBadgePainter!;
+      // 선택한 건물은 초록 알약 위 흰 글씨라 두 테마 모두 그대로 쓴다.
+      final label = b.displayName;
+      final tp = (isDark && !b.highlighted && label != null)
+          ? _darkBadge(label)
+          : b.cachedBadgePainter!;
       final center = b.topCenter;
       final w = (tp.width + 12) * k;
       final h = (tp.height + 6) * k;
@@ -2015,6 +2022,40 @@ class HousingMapPainter extends CustomPainter {
       canvas.restore();
     }
   }
+
+  /// 다크 모드용으로 색을 가라앉힌다. 색상(hue)은 그대로 둬야 "초록 = 월탄3길"
+  /// 같은 뜻이 두 테마에서 똑같이 읽힌다.
+  static Color _dimForDark(Color c) {
+    final hsl = HSLColor.fromColor(c);
+    return hsl
+        .withLightness(hsl.lightness.clamp(0.0, 0.36))
+        .withSaturation((hsl.saturation * 0.7).clamp(0.0, 1.0))
+        .toColor();
+  }
+
+  /// 다크 모드 이름표 글씨. 캐시한 TextPainter는 밝은 테마 글자색(짙은
+  /// 회색)으로 구워져 있어서, 다크 모드의 짙은 알약 위에 그대로 그리면
+  /// **글씨가 안 보였다**(#222831 글자 위에 #242830 바탕). 글자는 같고
+  /// 색만 다른 painter를 따로 굽는다.
+  static final Map<String, TextPainter> _darkBadgePainters = {};
+
+  static TextPainter _darkBadge(String text) =>
+      _darkBadgePainters.putIfAbsent(
+        text,
+        () => TextPainter(
+          text: TextSpan(
+            text: text,
+            style: TextStyle(
+              color: const Color(0xFFE8EAED),
+              fontSize: 9.0,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
+              fontFamily: KnueTokens.fontFamily,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout(),
+      );
 
   Color _shade(Color c, double amount) {
     final hsl = HSLColor.fromColor(c);
