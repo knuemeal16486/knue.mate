@@ -1282,6 +1282,11 @@ class HousingMapPainter extends CustomPainter {
     // 캡처에서 뽑은 교내 지형은 지적 노면 위에 얹는다 — 부지 안에서는
     // 이쪽이 실제 모양이라 아래 것을 덮어야 한다.
     _paintTracedCampus(canvas);
+    // OSM 도로는 **교내 지형 위에** 긋는다. 예전엔 _paintRoads 안에서
+    // 먼저 그었는데, 바로 뒤의 _paintTracedCampus가 부지 전체를 연파랑으로
+    // 칠하는 바람에 교내 도로가 통째로 가려졌다(미리보기 도구는 순서가
+    // 달라 멀쩡해 보였다). 횡단보도·건물보다는 아래여야 한다.
+    _paintOsmRoads(canvas);
     _paintCrosswalksAndIslands(canvas);
     for (final b in buildings) {
       _paintBuilding(canvas, b);
@@ -1673,8 +1678,6 @@ class HousingMapPainter extends CustomPainter {
 
     canvas.drawPath(roads.walkways, walkwayEdge);
     canvas.drawPath(roads.walkways, walkwaySurface);
-
-    _paintOsmRoads(canvas);
   }
 
   /// OSM 중심선을 굵기로 그어 도로를 만든다.
