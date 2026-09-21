@@ -82,3 +82,7 @@ tool/mapsrc/src_crop.png
 tool/mapsrc/core_ov.png
 tool/mapsrc/crop.png
 tool/mapsrc/needle_zoom.png
+tool/mapsrc/cl*.png
+tool/mapsrc/src_cl.png
+tool/mapsrc/c2.png
+tool/mapsrc/c3.png
