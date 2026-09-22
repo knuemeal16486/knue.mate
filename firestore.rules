@@ -60,6 +60,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── 앱 공용 설정 ────────────────────────────────────────────
+    // 관리자가 앱 안에서 켜고 끄는 값(예: 종료 팝업의 빈자리를 애드몹 광고로
+    // 채울지). 위의 app_config와 헷갈리기 쉬운데 성격이 정반대다:
+    //   app_config   = 비밀번호. 아무도 못 읽는다.
+    //   app_settings = 공개 설정. 모든 앱이 읽어야 화면이 맞춰진다.
+    // 그래서 읽기는 열고 쓰기만 관리자로 막는다.
+    match /app_settings/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── 관리자 권한 부여 ────────────────────────────────────────
     // 비밀번호를 아는 사람이 자기 uid로 문서를 만든다.
     //

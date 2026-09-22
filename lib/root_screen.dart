@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'admin_auth_service.dart';
 import 'club_event_model.dart';
 import 'club_event_service.dart';
+import 'exit_promo_settings.dart';
+import 'native_ad_card.dart';
 import 'main.dart' show pendingWidgetTab;
 import 'constants.dart';
 import 'meal_reminder.dart';
@@ -247,12 +250,16 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (event != null &&
-                  event.posterUrl != null &&
-                  event.posterUrl!.isNotEmpty)
+          // 애드몹 네이티브 광고는 290px짜리 고정 높이라, 작은 화면에서는
+          // 포스터·모집 문구까지 더하면 팝업이 화면보다 커진다. 넘치면
+          // 노란 줄무늬가 뜨므로 스크롤로 받아낸다.
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (event != null &&
+                    event.posterUrl != null &&
+                    event.posterUrl!.isNotEmpty)
                 Image.network(
                   event.posterUrl!,
                   height: 170,
@@ -303,23 +310,27 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
                         style: TextStyle(fontSize: 13, color: sub),
                       ),
                     ] else ...[
-                      Text(
-                        "지금 진행중인 동아리·학과 행사",
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: sub,
-                        ),
+                      // 행사 자리가 비었다. 관리자가 켜 뒀으면 그 자리를
+                      // 애드몹 광고가 채운다([ExitPromoSettings]).
+                      ValueListenableBuilder<bool>(
+                        valueListenable: ExitPromoSettings.fillWithAdmob,
+                        builder: (_, fill, _) {
+                          final slot = exitPromoSlot(
+                            hasEvent: false,
+                            fillWithAdmob: fill,
+                          );
+                          if (slot != ExitPromoSlot.admobAd) {
+                            return _exitPromoEmptyNotice(sub);
+                          }
+                          return KnueAdmobNativeAd(
+                            isCompact: false,
+                            // 광고를 못 받아오면 원래 안내로 돌아간다 —
+                            // 팝업에 빈 구멍이 남으면 안 된다.
+                            fallbackBuilder: (_) => _exitPromoEmptyNotice(sub),
+                          );
+                        },
                       ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        "아직 등록된 행사가 없어요",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          height: 1.25,
-                        ),
-                      ),
+                      _exitPromoAdminToggle(dialogContext, color, sub),
                     ],
                     const SizedBox(height: 16),
                     Row(
@@ -401,9 +412,92 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
               const SizedBox(height: 18),
             ],
           ),
+          ),
         ),
       ),
     );
+  }
+
+  /// 행사도 광고도 없을 때의 원래 안내. 광고 로드가 실패했을 때도 이걸로
+  /// 돌아오므로 두 곳에서 쓴다.
+  Widget _exitPromoEmptyNotice(Color sub) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "지금 진행중인 동아리·학과 행사",
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: sub,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          "아직 등록된 행사가 없어요",
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            height: 1.25,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 관리자에게만 보이는 스위치. 행사 자리가 비었을 때 애드몹 광고로 채울지를
+  /// **모든 기기에 대해** 바꾼다(학생 기기에서는 아예 그려지지 않고, 혹시
+  /// 불린다 해도 서버 규칙이 쓰기를 거부한다).
+  Widget _exitPromoAdminToggle(BuildContext context, Color color, Color sub) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdminAuthService.isAdmin,
+      builder: (_, isAdmin, _) {
+        if (!isAdmin) return const SizedBox.shrink();
+        return ValueListenableBuilder<bool>(
+          valueListenable: ExitPromoSettings.fillWithAdmob,
+          builder: (_, fill, _) => Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Row(
+              children: [
+                Icon(Icons.shield_moon_rounded, size: 15, color: color),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    "행사 없을 때 애드몹 광고로 채우기",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: sub,
+                    ),
+                  ),
+                ),
+                Switch.adaptive(
+                  value: fill,
+                  activeThumbColor: color,
+                  onChanged: (v) => _setExitPromoAdmob(context, v),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _setExitPromoAdmob(BuildContext context, bool value) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ExitPromoSettings.setFillWithAdmob(value);
+      showToastOn(
+        messenger,
+        value ? "행사가 없으면 애드몹 광고를 띄웁니다" : "행사가 없으면 안내 문구를 띄웁니다",
+      );
+    } catch (e) {
+      // 관리자 권한이 풀렸거나 네트워크가 끊긴 경우. 스위치는 이미
+      // [ExitPromoSettings]가 되돌려 놓았다.
+      debugPrint('종료 팝업 광고 설정 실패: $e');
+      showToastOn(messenger, "바꾸지 못했어요 · 관리자 권한을 확인해 주세요");
+    }
   }
 
   Widget _getScreenForTab(AppTab tab) {

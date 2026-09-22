@@ -39,7 +39,7 @@ class KnueNativeAdCard extends StatelessWidget {
 
   // StatelessWidget이라 build()가 부모 rebuild마다 다시 불린다 — 매번
   // .snapshots()를 새로 부르면 StreamBuilder가 "스트림이 바뀌었다"고 보고
-  // 기존 구독을 버리고 새로 구독하는데, 그 순간 자식(_DefaultFallbackWithAdMob)도
+  // 기존 구독을 버리고 새로 구독하는데, 그 순간 자식(KnueAdmobNativeAd)도
   // 새 State로 다시 만들어져 이미 로드된 AdMob 광고까지 처음부터 다시 요청한다.
   // 그렇다고 무조건 하나만 만들어 영원히 재사용하면, Firestore 권한 오류처럼
   // 스트림이 한 번 error로 끝나버리는 사고가 나면(과거에 sponsors 규칙이
@@ -236,7 +236,7 @@ class KnueNativeAdCard extends StatelessWidget {
     // 2. Firebase 미초기화 시 — Firestore는 못 쓰지만 AdMob은 Firebase와
     //    무관하니 그쪽부터 시도한다.
     if (Firebase.apps.isEmpty) {
-      return _DefaultFallbackWithAdMob(isCompact: isCompact);
+      return KnueAdmobNativeAd(isCompact: isCompact);
     }
 
     // 3. Firestore 'sponsors' 컬렉션 실시간 구독
@@ -288,7 +288,7 @@ class KnueNativeAdCard extends StatelessWidget {
 
         // 제휴 스폰서가 없거나 기간 만료 시 — AdMob으로 먼저 채워보고,
         // 그것도 안 되면 기본 안내 카드.
-        return _DefaultFallbackWithAdMob(isCompact: isCompact);
+        return KnueAdmobNativeAd(isCompact: isCompact);
       },
     );
   }
@@ -605,17 +605,30 @@ class KnueNativeAdCard extends StatelessWidget {
 /// (native_ad_layout_compact.xml, NativeAdFactoryImpl(isCompact: true))을 쓴다
 /// — KnueNativeAdCard의 압축 스폰서 카드와 같은 한 줄짜리 모양으로, 이미지
 /// 없이 아이콘+제목/설명+버튼만 있다.
-class _DefaultFallbackWithAdMob extends StatefulWidget {
+/// 제휴(sponsors)는 **섞지 않는다.** [KnueNativeAdCard]는 제휴를 먼저 보고
+/// 없을 때만 이쪽으로 오지만, 종료 팝업처럼 "여기는 애드몹만"이라고 정해 둔
+/// 자리는 이 위젯을 직접 쓴다.
+class KnueAdmobNativeAd extends StatefulWidget {
   final bool isCompact;
-  const _DefaultFallbackWithAdMob({required this.isCompact});
+
+  /// 광고를 못 띄웠을 때 대신 그릴 것. 안 주면 기본 안내 카드를 그린다.
+  /// 종료 팝업은 원래 있던 "아직 등록된 행사가 없어요"로 돌아가야 해서
+  /// 여기에 그 안내를 넘긴다.
+  final WidgetBuilder? fallbackBuilder;
+
+  const KnueAdmobNativeAd({
+    super.key,
+    required this.isCompact,
+    this.fallbackBuilder,
+  });
 
   @override
-  State<_DefaultFallbackWithAdMob> createState() =>
-      _DefaultFallbackWithAdMobState();
+  State<KnueAdmobNativeAd> createState() =>
+      _KnueAdmobNativeAdState();
 }
 
-class _DefaultFallbackWithAdMobState extends State<_DefaultFallbackWithAdMob>
-    with AutomaticKeepAliveClientMixin<_DefaultFallbackWithAdMob> {
+class _KnueAdmobNativeAdState extends State<KnueAdmobNativeAd>
+    with AutomaticKeepAliveClientMixin<KnueAdmobNativeAd> {
   NativeAd? _ad;
 
   // bus_screen.dart처럼 ListView 안에 놓이면 스크롤에 화면 밖으로 나갔다
@@ -672,6 +685,8 @@ class _DefaultFallbackWithAdMobState extends State<_DefaultFallbackWithAdMob>
       final height = widget.isCompact ? 80.0 : 290.0;
       return SizedBox(height: height, child: AdWidget(ad: ad));
     }
+    final fallback = widget.fallbackBuilder;
+    if (fallback != null) return fallback(context);
     // 같은 파일(라이브러리) 안이라 private 메서드를 직접 호출할 수 있다.
     return KnueNativeAdCard(
       isCompact: widget.isCompact,

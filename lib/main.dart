@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +22,7 @@ import 'root_screen.dart';
 import 'ui_utils.dart';
 import 'keyword_alert_service.dart';
 import 'club_event_alert_service.dart';
+import 'exit_promo_settings.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -150,7 +152,13 @@ void main() async {
         debugPrint("loadSettings warning: $e");
       }),
       loadAppVersion(),
+      // 종료 팝업이 뒤로가기 한 번에 바로 떠야 해서, 팝업은 이 캐시값만 본다.
+      ExitPromoSettings.loadCached(),
     ]);
+
+    // 최신값은 뒤에서 따라온다. 앱이 켜지는 길을 막지 않는다 — 한 번
+    // 지난 값으로 팝업이 떠도 다음 번엔 맞는다.
+    unawaited(ExitPromoSettings.refresh());
 
     try {
       _initializeBackgroundTasks();
