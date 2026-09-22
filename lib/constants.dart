@@ -600,7 +600,12 @@ Future<void> shareMenu(
   List<String>? items, {
   String? calories,
 }) async {
-  if (items == null || items.isEmpty) return;
+  // 예전엔 여기서 그냥 return했다. 메뉴가 없는 날 공유를 누르면 **아무 일도
+  // 일어나지 않아** 기능이 고장 난 것처럼 보였다.
+  if (items == null || items.isEmpty) {
+    showToast(context, "공유할 메뉴가 없어요");
+    return;
+  }
 
   final sourceLabel = source.shortLabel;
   final dateStr = "${date.month}/${date.day}";
@@ -612,7 +617,24 @@ Future<void> shareMenu(
     shareText += "\n\n⚡ 예상: $calories";
   }
 
-  await SharePlus.instance.share(ShareParams(text: shareText.trim()));
+  // 아이패드·맥은 공유 시트가 **팝오버**라 어디서 튀어나올지 알려줘야 한다.
+  // 안 주면 시트가 엉뚱한 자리에 뜨거나 아예 안 뜬다(다른 기기는 무시한다).
+  // context를 받아 놓고 여태 쓰지 않던 자리가 여기다.
+  final box = context.findRenderObject() as RenderBox?;
+  final origin = (box != null && box.hasSize)
+      ? box.localToGlobal(Offset.zero) & box.size
+      : null;
+
+  try {
+    await SharePlus.instance.share(
+      ShareParams(text: shareText.trim(), sharePositionOrigin: origin),
+    );
+  } catch (e) {
+    // 공유 앱이 없거나 시트를 못 띄우는 기기가 있다. 조용히 삼키면
+    // 사용자는 버튼이 고장 났다고 여긴다.
+    debugPrint('shareMenu 실패: $e');
+    if (context.mounted) showToast(context, "공유할 수 없어요");
+  }
 }
 
 /// 설정 화면에 보여줄 앱 버전. [loadAppVersion]이 채운다.

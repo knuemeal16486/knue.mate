@@ -540,13 +540,6 @@ class _TodayMealPageState extends State<TodayMealPage>
                     items: _meals[_selected.stdKey] ?? [],
                     isToday: isToday,
                     date: _date,
-                    onShare: () => shareMenu(
-                      context,
-                      _date,
-                      _source,
-                      _selected,
-                      _meals[_selected.stdKey],
-                    ),
                   ),
                 ),
               const SizedBox(height: 16),
@@ -2960,7 +2953,6 @@ class _MealDetailCard extends StatefulWidget {
   final List<String> items;
   final bool isToday;
   final DateTime date;
-  final VoidCallback? onShare;
 
   const _MealDetailCard({
     super.key,
@@ -2970,7 +2962,6 @@ class _MealDetailCard extends StatefulWidget {
     required this.items,
     required this.isToday,
     required this.date,
-    this.onShare,
   });
   @override
   State<_MealDetailCard> createState() => _MealDetailCardState();
