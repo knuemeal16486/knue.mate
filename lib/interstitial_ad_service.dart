@@ -18,12 +18,14 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 class InterstitialAdService {
   InterstitialAdService._();
 
-  /// ⚠️ **아직 비어 있다.** AdMob 콘솔에서 «전면 광고» 단위를 만들고 그 ID를
-  /// 여기 넣어야 실제 광고가 나간다. 비어 있는 동안 릴리스 빌드는 광고를
-  /// 띄우지 않고 [show]가 곧바로 `onUnavailable`로 간다 — 호출부는 그때
-  /// 기능을 그냥 열어주므로(아래 주석 참고) 사용자가 막히지는 않는다.
-  static const String _androidRealId = '';
-  static const String _iosRealId = '';
+  /// AdMob «전면 광고» 단위. 앱 ID(`~`가 들어간 것)와 **다르다** — 앱 ID는
+  /// AndroidManifest.xml과 Info.plist에 있고, 여기 있는 건 광고 단위 ID(`/`)다.
+  ///
+  /// 비워 두면 릴리스 빌드가 광고를 띄우지 않고 [show]가 곧바로
+  /// `onUnavailable`로 간다. 호출부는 그때 기능을 그냥 열어주므로 사용자가
+  /// 막히지는 않는다.
+  static const String _androidRealId = 'ca-app-pub-8400037761673359/6806365275';
+  static const String _iosRealId = 'ca-app-pub-8400037761673359/1451940123';
 
   // Google 공식 테스트용 전면 광고 단위. 출처: developers.google.com/admob/*/test-ads
   static const String _androidTestId = 'ca-app-pub-3940256099942544/1033173712';
