@@ -103,22 +103,6 @@ Color colorOfDay(DateTime date) {
   return kRainbowPalette[idx];
 }
 
-/// 테마 팔레트에서 무작위로 한 색을 뽑는다(보상형 광고 보상용).
-///
-/// **지금 쓰고 있는 색은 후보에서 뺀다** — 광고를 끝까지 봤는데 색이 그대로면
-/// 보상을 못 받은 것처럼 보인다. 팔레트에 색이 하나뿐이면 어쩔 수 없이 그걸
-/// 돌려준다.
-///
-/// [random]은 테스트에서 결과를 고정하려고 주입하는 용도.
-Color pickRandomThemeColor(Color current, {Random? random}) {
-  final candidates = kColorPalette
-      .where((c) => c.toARGB32() != current.toARGB32())
-      .toList();
-  if (candidates.isEmpty) return current;
-  final r = random ?? Random();
-  return candidates[r.nextInt(candidates.length)];
-}
-
 /// 식단을 긁어오는 실제 출처.
 ///
 /// a는 www.knue.ac.kr이 "사도교육원식당"이라 부르는 그 식당인데, 학교의 다른

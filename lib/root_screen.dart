@@ -39,6 +39,81 @@ class RootNavigationScreen extends StatefulWidget {
   }
 }
 
+/// 종료 팝업 아래의 광고주(행사 주최 측) 모집 칸. 이 팝업이 존재하는 진짜
+/// 이유다 — 누르면 문자 앱으로 연결한다(전화 걸기 아님).
+///
+/// 팝업 밖으로 꺼내 둔 이유는 **글씨가 접히는지 재려고**다. 여기 들어가는
+/// 문구는 아이콘 두 개와 안쪽 여백에 밀려 실제로 쓸 수 있는 폭이 좁은데,
+/// 팝업 안에 파묻혀 있으면 좁은 화면에서 줄이 접혀도 알 수가 없다.
+/// test/exit_promo_box_test.dart가 이 위젯을 좁은 폭에 놓고 줄 수를 센다.
+class ExitPromoSponsorBox extends StatelessWidget {
+  final String phone;
+  final String priceText;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const ExitPromoSponsorBox({
+    super.key,
+    required this.phone,
+    required this.priceText,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final sub = isDark ? Colors.white60 : Colors.black54;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : const Color(0xFFF5F5F7),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            const Text("📣", style: TextStyle(fontSize: 20)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 예전엔 "우리 동아리·학과 행사도 여기 올리고 싶다면?"이었다.
+                  // 좁은 화면에서는 이 한 줄이 두 줄로 접혀 칸이 들쭉날쭉했다.
+                  const Text(
+                    "행사 홍보하고 싶으신가요?",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(priceText, style: TextStyle(fontSize: 11, color: sub)),
+                  const SizedBox(height: 4),
+                  // "(문자)"는 뺐다 — 오른쪽 문자 아이콘이 같은 말을 한다.
+                  Text(
+                    "문의 · $phone",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.sms_rounded, size: 16, color: accent),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class RootNavigationScreenState extends State<RootNavigationScreen>
     with WidgetsBindingObserver {
   int _currentIndex = 0;
@@ -69,11 +144,13 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
   static final _freePromoEnds = DateTime(2026, 9, 30, 23, 59, 59);
 
   /// 광고 단가 문구. 프로모션 기간이면 무료 안내를, 지났으면 주당 단가를 보여준다.
+  /// 좁은 폭에서 접히지 않게 짧게 쓴다 — 이 줄이 들어가는 칸은 아이콘 두
+  /// 개와 안쪽 여백을 빼고 나면 생각보다 좁다([ExitPromoSponsorBox]).
   String get _sponsorPriceText {
     if (DateTime.now().isBefore(_freePromoEnds)) {
-      return "9월 30일까지 무료 · 이후 주당 10,000원";
+      return "9/30까지 무료 · 이후 주당 1만원";
     }
-    return "주당 10,000원";
+    return "주당 1만원";
   }
 
   @override
@@ -246,6 +323,13 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
         },
         child: Dialog(
           clipBehavior: Clip.antiAlias,
+          // 기본값(좌우 40)은 360dp 폰에서 팝업을 280dp까지 좁힌다. 안쪽
+          // 여백과 아이콘을 빼고 나면 글씨가 쓸 수 있는 폭이 170dp밖에 안
+          // 남아 문구마다 줄이 접혔다. 32dp를 되돌려준다.
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
           backgroundColor: Theme.of(context).cardColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
@@ -347,56 +431,11 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
                       ],
                     ),
                     const SizedBox(height: 14),
-                    // 광고주(행사 주최 측) 모집 — 이 팝업이 존재하는 진짜
-                    // 이유다. 연락처를 누르면 문자 앱으로 연결한다(전화 아님).
-                    InkWell(
-                      borderRadius: BorderRadius.circular(14),
+                    ExitPromoSponsorBox(
+                      phone: _sponsorPhone,
+                      priceText: _sponsorPriceText,
+                      accent: color,
                       onTap: () => _messageSponsorContact(context),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.06)
-                              : const Color(0xFFF5F5F7),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          children: [
-                            const Text("📣", style: TextStyle(fontSize: 20)),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    "우리 동아리·학과 행사도 여기 올리고 싶다면?",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _sponsorPriceText,
-                                    style: TextStyle(fontSize: 11, color: sub),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    "광고 문의 · $_sponsorPhone (문자)",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: color,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.sms_rounded, size: 16, color: color),
-                          ],
-                        ),
-                      ),
                     ),
                   ],
                 ),

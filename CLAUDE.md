@@ -109,6 +109,11 @@ OSM 데이터·타일은 ODbL이라 **"© OpenStreetMap 기여자" 표기가 의
 - 월탄3길 **26-4, 26-2** — 이름을 모른다.
 
 **콘솔 작업이 필요**
+- **AdMob 전면 광고 단위가 없다.** 무지개 모드 잠금 해제가 보상형(30초 강제
+  시청)에서 전면 광고로 바뀌었는데, `lib/interstitial_ad_service.dart`의
+  `_androidRealId`/`_iosRealId`가 비어 있다. 채우기 전까지 릴리스 빌드는
+  광고 없이 기능을 그냥 열어준다(막히지는 않지만 수익도 없다).
+  보상형 단위는 이제 아무도 안 쓴다 — 콘솔에서 정리해도 된다.
 - **Firebase Storage가 활성화돼 있지 않다.** 행사 포스터·제휴 이미지 업로드가
   전부 실패한다. Blaze 요금제가 필요할 수 있다.
 - iOS 식단 위젯: Xcode에서 `ios/MealWidget/`을 Widget Extension 타깃으로

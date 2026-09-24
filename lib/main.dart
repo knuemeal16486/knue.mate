@@ -10,7 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'ad_service.dart';
 import 'admin_auth_service.dart';
 import 'att_service.dart';
-import 'rewarded_ad_service.dart';
+import 'interstitial_ad_service.dart';
 import 'constants.dart';
 import 'building_data.dart';
 import 'package:workmanager/workmanager.dart';
@@ -178,7 +178,7 @@ void main() async {
             // 무지개 모드 잠금 해제용 보상형 광고를 미리 불러둔다. 다 될 때까지
             // runApp을 기다릴 필요는 없어서 await 안 한다 — 설정 화면을 열 즈음엔
             // 대개 이미 준비돼 있다.
-            RewardedAdService.preload();
+            InterstitialAdService.preload();
           }(),
         ]);
       }

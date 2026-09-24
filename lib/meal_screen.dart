@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'tab_edit_screen.dart';
 import 'notice_alert_settings_screen.dart';
 import 'meal_rating_service.dart';
-import 'rewarded_ad_service.dart';
+import 'interstitial_ad_service.dart';
 import 'root_screen.dart';
 import 'ui_utils.dart';
 import 'meal_rating.dart';
@@ -1610,24 +1610,28 @@ class _SettingsPageState extends State<SettingsPage> {
                                 // 자투리 폭이 전부 오른쪽 끝 빈 공간으로 남았다.
                                 // GridView는 5열로 폭을 균등하게 나눠 쓰므로
                                 // 그 여백이 스와치 사이 간격으로 흡수된다.
+                                //
+                                // 다만 스와치가 40으로 **고정**돼 있어서, 칸이
+                                // 그보다 넓으면 남는 폭이 다시 칸 안쪽 여백이
+                                // 됐다. 간격 12에 그 여백까지 더해져 동그라미가
+                                // 띄엄띄엄 떨어져 보였다 — 이제 스와치가 칸을
+                                // 꽉 채우고, 간격만 사이를 벌린다.
                                 child: GridView.builder(
                                   shrinkWrap: true,
                                   physics: const NeverScrollableScrollPhysics(),
                                   gridDelegate:
                                       const SliverGridDelegateWithFixedCrossAxisCount(
                                     crossAxisCount: 5,
-                                    mainAxisSpacing: 12,
-                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 8,
+                                    crossAxisSpacing: 8,
                                   ),
                                   itemCount: kColorPalette.length,
                                   itemBuilder: (context, i) {
                                     final c = kColorPalette[i];
-                                    return Center(
-                                      child: _ColorPickerItem(
-                                        color: c,
-                                        isSelected: !rainbowOn &&
-                                            c.value == currentColor.value,
-                                      ),
+                                    return _ColorPickerItem(
+                                      color: c,
+                                      isSelected: !rainbowOn &&
+                                          c.value == currentColor.value,
                                     );
                                   },
                                 ),
@@ -1637,12 +1641,6 @@ class _SettingsPageState extends State<SettingsPage> {
                             const Divider(height: 1),
                             const SizedBox(height: 8),
                             _RainbowModeTile(isOn: rainbowOn),
-                            const SizedBox(height: 4),
-                            const Divider(height: 1),
-                            const SizedBox(height: 8),
-                            // 무지개 모드가 켜져 있으면 색을 매일 자동으로
-                            // 덮어쓰므로, 뽑아봐야 소용이 없어 같이 잠근다.
-                            _RandomColorTile(disabled: rainbowOn),
                           ],
                         ),
                       ),
@@ -2674,102 +2672,32 @@ class _RainbowModeTile extends StatelessWidget {
     );
   }
 
-  /// 끄는 건 바로 처리하지만, 켜는 건 보상형 광고를 끝까지 봐야 켜진다.
+  /// 끄는 건 바로 처리하지만, 켜려면 광고를 한 번 거친다.
+  ///
+  /// 예전엔 보상형 광고라 30초를 끝까지 봐야 했다. 테마 색이 매일 바뀌는
+  /// 것치고는 너무 길어서 전면 광고로 바꿨다 — 몇 초 뒤 닫을 수 있다.
+  ///
+  /// 광고를 못 띄우면 **그냥 켜준다.** 색이 바뀌는 기능일 뿐인데 광고가 안
+  /// 불러와졌다는 이유로 스위치가 안 먹으면 사용자 눈에는 고장으로 보인다.
   Future<void> _handleToggle(BuildContext context, bool wantsOn) async {
     if (!wantsOn) {
       await PreferencesService.setRainbowMode(false);
       return;
     }
-    showToast(context, "광고를 보면 무지개 모드가 켜져요 🌈");
-    await RewardedAdService.show(
-      onEarned: () => PreferencesService.setRainbowMode(true),
-      onUnavailable: () {
-        if (context.mounted) {
-          showToast(context, "지금은 광고를 불러올 수 없어요. 잠시 후 다시 시도해주세요.");
-        }
-      },
+    if (!InterstitialAdService.isConfigured) {
+      await PreferencesService.setRainbowMode(true);
+      return;
+    }
+    showToast(context, "광고를 닫으면 무지개 모드가 켜져요 🌈");
+    await InterstitialAdService.show(
+      onClosed: () => PreferencesService.setRainbowMode(true),
+      onUnavailable: () => PreferencesService.setRainbowMode(true),
     );
   }
 }
 
 /// 광고를 끝까지 보면 테마 색을 무작위로 하나 뽑아 적용한다.
 /// 팔레트를 훑어보기 귀찮은 사람을 위한 "아무거나 골라줘" 버튼.
-class _RandomColorTile extends StatelessWidget {
-  /// 무지개 모드가 켜져 있으면 색이 매일 자동으로 덮어써지므로 잠근다.
-  final bool disabled;
-  const _RandomColorTile({required this.disabled});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Opacity(
-      opacity: disabled ? 0.4 : 1.0,
-      child: IgnorePointer(
-        ignoring: disabled,
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: themeColor.value.withValues(alpha: isDark ? 0.22 : 0.12),
-              ),
-              child: Icon(
-                Icons.casino_rounded,
-                size: 19,
-                color: themeColor.value,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "랜덤 테마 색",
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    disabled ? "무지개 모드를 끄면 쓸 수 있어요" : "광고 보고 색 하나 뽑기",
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: isDark ? Colors.white54 : Colors.black54,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            TextButton(
-              onPressed: () => _roll(context),
-              child: const Text("뽑기"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _roll(BuildContext context) async {
-    showToast(context, "광고를 보면 색이 바뀌어요 🎲");
-    await RewardedAdService.show(
-      onEarned: () async {
-        // 지금 색은 후보에서 빠지므로 광고를 보고도 그대로인 일은 없다.
-        final picked = pickRandomThemeColor(themeColor.value);
-        themeColor.value = picked;
-        await PreferencesService.saveThemeColor(picked);
-        if (context.mounted) showToast(context, "새 테마 색이 적용됐어요 🎨");
-      },
-      onUnavailable: () {
-        if (context.mounted) {
-          showToast(context, "지금은 광고를 불러올 수 없어요. 잠시 후 다시 시도해주세요.");
-        }
-      },
-    );
-  }
-}
-
 class _ColorPickerItem extends StatelessWidget {
   final Color color;
   final bool isSelected;
@@ -2780,9 +2708,25 @@ class _ColorPickerItem extends StatelessWidget {
       themeColor.value = color;
       PreferencesService.saveThemeColor(color);
     },
-    child: Container(
-      width: 40,
-      height: 40,
+    // 칸을 꽉 채우되 너무 커지지는 않게 한다. 열 수는 5로 고정이라(20색 =
+    // 4줄로 딱 떨어진다) 아이패드처럼 넓은 화면에서는 칸이 접시만 해진다.
+    //
+    // Container에 maxWidth를 주는 방법은 여기서 안 통한다 — 격자가 칸 크기를
+    // **꽉 조인 제약**으로 내려보내서 그 제약이 이긴다. 가운데 정렬로 한 번
+    // 풀어준 뒤 직접 재야 한다.
+    child: Center(
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final side = c.maxWidth.isFinite
+              ? c.maxWidth.clamp(0.0, 52.0)
+              : 40.0;
+          return SizedBox(width: side, height: side, child: _swatch());
+        },
+      ),
+    ),
+  );
+
+  Widget _swatch() => Container(
       decoration: BoxDecoration(
         // 펄 그라데이션 + 위에 겹치는 반사광. 저장되는 값은 여전히 단색
         // [color] 하나이고, 여기서는 보여주기만 한다.
@@ -2803,8 +2747,7 @@ class _ColorPickerItem extends StatelessWidget {
           gradient: KnuePearl.sheen(),
         ),
       ),
-    ),
-  );
+    );
 }
 
 class _MealTabs extends StatelessWidget {
