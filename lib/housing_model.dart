@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 /// 자취방 구역. 학생들이 "CU 뒤", "메이 근처"처럼 덩어리로 부르기 때문에
@@ -207,7 +208,7 @@ class DormCost {
   int get monthlyWithMeals => monthlyHousing + monthlyMeal;
 }
 
-/// 학기 중 기숙사 희망입사 비용. 출처: 학교 공지(1·2학기 다감관 기준).
+/// 학기 중 기숙사 희망입사 비용. 출처: 학교 공지(1·2학기 다감관/인혜관 기준).
 ///
 /// ⚠️ 학기마다 바뀌는 값이다. 공지가 갱신되면 여기 숫자를 고쳐야 한다.
 const List<DormCost> kDormCosts = [
@@ -217,4 +218,40 @@ const List<DormCost> kDormCosts = [
     semesterMealWon: 1684200, // 2식 420식
     days: 212,
   ),
+  DormCost(
+    name: '다감관 2인실',
+    semesterHousingWon: 1350000,
+    semesterMealWon: 1684200,
+    days: 212,
+  ),
+  DormCost(
+    name: '사임당·인혜관',
+    semesterHousingWon: 850000,
+    semesterMealWon: 1684200,
+    days: 212,
+  ),
 ];
+
+/// 캠퍼스 주요 거점 위치 (단위: 미터).
+enum CampusLandmark {
+  mainGate('정문', Offset(-20, 205)),
+  library('도서관', Offset(365, 22)),
+  studentUnion('학생회관', Offset(499, 97));
+
+  final String label;
+  final Offset position;
+  const CampusLandmark(this.label, this.position);
+}
+
+/// 건물 중심점과 캠퍼스 거점 사이 도보 거리(미터).
+/// 실제 골목과 보행로는 직선보다 우회하므로 보행 계수(1.2)를 곱한다.
+int walkingDistanceMeters(Offset buildingCenter, CampusLandmark landmark) {
+  final dx = buildingCenter.dx - landmark.position.dx;
+  final dy = buildingCenter.dy - landmark.position.dy;
+  final straight = math.sqrt(dx * dx + dy * dy);
+  return (straight * 1.2).round();
+}
+
+/// 도보 거리(미터) → 예상 도보 소요 시간(분).
+/// 평균 보행 속도를 약 67m/분(4km/h)으로 계산한다.
+int walkingMinutes(int meters) => (meters / 67).ceil().clamp(1, 60);

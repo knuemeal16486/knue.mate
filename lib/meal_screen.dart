@@ -1607,33 +1607,21 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ignoring: rainbowOn,
                                 // Wrap은 한 줄에 몇 개가 들어가는지가 스와치
                                 // 폭(고정 40)으로만 정해져서, 5개를 채우고 남는
-                                // 자투리 폭이 전부 오른쪽 끝 빈 공간으로 남았다.
-                                // GridView는 5열로 폭을 균등하게 나눠 쓰므로
-                                // 그 여백이 스와치 사이 간격으로 흡수된다.
-                                //
-                                // 다만 스와치가 40으로 **고정**돼 있어서, 칸이
-                                // 그보다 넓으면 남는 폭이 다시 칸 안쪽 여백이
-                                // 됐다. 간격 12에 그 여백까지 더해져 동그라미가
-                                // 띄엄띄엄 떨어져 보였다 — 이제 스와치가 칸을
-                                // 꽉 채우고, 간격만 사이를 벌린다.
-                                child: GridView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 5,
-                                    mainAxisSpacing: 8,
-                                    crossAxisSpacing: 8,
+                                // 오밀조밀하고 콤팩트한 중앙 정렬 Wrap 레이아웃
+                                child: Center(
+                                  child: Wrap(
+                                    alignment: WrapAlignment.center,
+                                    spacing: 10,
+                                    runSpacing: 10,
+                                    children: [
+                                      for (final c in kColorPalette)
+                                        _ColorPickerItem(
+                                          color: c,
+                                          isSelected: !rainbowOn &&
+                                              c.value == currentColor.value,
+                                        ),
+                                    ],
                                   ),
-                                  itemCount: kColorPalette.length,
-                                  itemBuilder: (context, i) {
-                                    final c = kColorPalette[i];
-                                    return _ColorPickerItem(
-                                      color: c,
-                                      isSelected: !rainbowOn &&
-                                          c.value == currentColor.value,
-                                    );
-                                  },
                                 ),
                               ),
                             ),
@@ -2702,42 +2690,34 @@ class _ColorPickerItem extends StatelessWidget {
   final Color color;
   final bool isSelected;
   const _ColorPickerItem({required this.color, required this.isSelected});
+
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: () {
       themeColor.value = color;
       PreferencesService.saveThemeColor(color);
     },
-    // 칸을 꽉 채우되 너무 커지지는 않게 한다. 열 수는 5로 고정이라(20색 =
-    // 4줄로 딱 떨어진다) 아이패드처럼 넓은 화면에서는 칸이 접시만 해진다.
-    //
-    // Container에 maxWidth를 주는 방법은 여기서 안 통한다 — 격자가 칸 크기를
-    // **꽉 조인 제약**으로 내려보내서 그 제약이 이긴다. 가운데 정렬로 한 번
-    // 풀어준 뒤 직접 재야 한다.
-    child: Center(
-      child: LayoutBuilder(
-        builder: (context, c) {
-          final side = c.maxWidth.isFinite
-              ? c.maxWidth.clamp(0.0, 52.0)
-              : 40.0;
-          return SizedBox(width: side, height: side, child: _swatch());
-        },
-      ),
+    child: SizedBox(
+      width: 34,
+      height: 34,
+      child: _swatch(),
     ),
   );
 
-  Widget _swatch() => Container(
+  Widget _swatch() => AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
-        // 펄 그라데이션 + 위에 겹치는 반사광. 저장되는 값은 여전히 단색
-        // [color] 하나이고, 여기서는 보여주기만 한다.
         gradient: KnuePearl.swatchGradient(color),
         shape: BoxShape.circle,
-        border: isSelected ? Border.all(width: 3, color: Colors.white) : null,
+        border: isSelected
+            ? Border.all(width: 2.5, color: Colors.white)
+            : Border.all(width: 1.0, color: Colors.black.withValues(alpha: 0.12)),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.35),
-            blurRadius: isSelected ? 10 : 5,
-            offset: const Offset(0, 2),
+            color: color.withValues(alpha: isSelected ? 0.45 : 0.20),
+            blurRadius: isSelected ? 8 : 3,
+            offset: const Offset(0, 1.5),
           ),
         ],
       ),

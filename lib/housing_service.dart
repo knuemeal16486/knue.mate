@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart' show Color;
+import 'package:flutter/painting.dart' show Color, Offset;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'housing_iso.dart' show BaseBuilding;
@@ -48,8 +48,14 @@ class HousingReport {
   /// 관리비(만원). 모르면 null.
   final int? maintenanceFee;
 
-  /// 자유 특징 — "풀옵션", "복층", "주차 가능" 등.
+  /// 추천 장점 — "도시가스", "방음 양호", "풀옵션" 등.
   final List<String> features;
+
+  /// 솔직 주의점·단점 — "심야전기(난방비 주의)", "벽간 소음", "벌레" 등.
+  final List<String> drawbacks;
+
+  /// 외벽 현수막/관리인 임대 문의 연락처 (예: 010-XXXX-XXXX).
+  final String? contactPhone;
 
   /// 이 건물의 원룸 이름([OneRoomName.id]). 건축물대장에는 원룸 이름이
   /// 없어서, 시세와 함께 학생에게 물어 채운다.
@@ -65,16 +71,26 @@ class HousingReport {
   /// 방 구조. 이 필드가 생기기 전 제보는 null(모름).
   final HousingRoomType? roomType;
 
+  /// 한줄 거주 후기 / 장단점 (선택).
+  final String? review;
+
+  /// 관리비에 포함된 공과금 항목 (예: '수도', '인터넷', '전기', '도시가스').
+  final List<String> includedUtilities;
+
   const HousingReport({
     required this.buildingId,
     required this.deposit,
     required this.monthlyRent,
     required this.features,
+    this.drawbacks = const [],
+    this.contactPhone,
     required this.reportedAt,
     this.maintenanceFee,
     this.oneRoomId,
     this.id,
     this.roomType,
+    this.review,
+    this.includedUtilities = const [],
   });
 
   /// 관리비까지 포함한 월 부담액. 관리비를 안 적었으면 월세만.
@@ -87,6 +103,11 @@ class HousingReport {
         if (maintenanceFee != null) 'maintenanceFee': maintenanceFee,
         if (oneRoomId != null) 'oneRoomId': oneRoomId,
         if (roomType != null) 'roomType': roomType!.key,
+        if (review != null && review!.trim().isNotEmpty) 'review': review!.trim(),
+        if (contactPhone != null && contactPhone!.trim().isNotEmpty)
+          'contactPhone': contactPhone!.trim(),
+        if (drawbacks.isNotEmpty) 'drawbacks': drawbacks,
+        if (includedUtilities.isNotEmpty) 'includedUtilities': includedUtilities,
         'features': features,
         'reportedAt': FieldValue.serverTimestamp(),
       };
@@ -97,6 +118,8 @@ class HousingReport {
     final rent = d['monthlyRent'];
     if (buildingId is! String || deposit is! num || rent is! num) return null;
     final ts = d['reportedAt'];
+    final rev = d['review'] as String?;
+    final phone = d['contactPhone'] as String?;
     return HousingReport(
       id: id,
       buildingId: buildingId,
@@ -106,6 +129,10 @@ class HousingReport {
       oneRoomId: d['oneRoomId'] as String?,
       roomType: HousingRoomType.fromKey(d['roomType'] as String?),
       features: (d['features'] as List?)?.whereType<String>().toList() ?? const [],
+      drawbacks: (d['drawbacks'] as List?)?.whereType<String>().toList() ?? const [],
+      contactPhone: (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null,
+      review: (rev != null && rev.trim().isNotEmpty) ? rev.trim() : null,
+      includedUtilities: (d['includedUtilities'] as List?)?.whereType<String>().toList() ?? const [],
       reportedAt: ts is Timestamp ? ts.toDate() : DateTime.now(),
     );
   }
@@ -134,6 +161,22 @@ class HousingBuildingOverride {
   final int? floors;
   final int? unitCount;
 
+  /// 개발자/관리자가 직접 지정한 건물 고유 색상 (16진수 HEX 예: "#4CAF50")
+  final String? customColorHex;
+
+  Color? get customColor {
+    if (customColorHex == null || customColorHex!.trim().isEmpty) return null;
+    try {
+      final hex = customColorHex!.trim().replaceAll('#', '');
+      if (hex.length == 6) {
+        return Color(int.parse('0xFF$hex'));
+      } else if (hex.length == 8) {
+        return Color(int.parse('0x$hex'));
+      }
+    } catch (_) {}
+    return null;
+  }
+
   const HousingBuildingOverride({
     required this.buildingId,
     required this.name,
@@ -145,6 +188,7 @@ class HousingBuildingOverride {
     this.landlordPhone,
     this.floors,
     this.unitCount,
+    this.customColorHex,
   });
 
   static String? _clean(String? v) {
@@ -163,6 +207,8 @@ class HousingBuildingOverride {
           'landlordPhone': _clean(landlordPhone),
         if (floors != null) 'floors': floors,
         if (unitCount != null) 'unitCount': unitCount,
+        if (_clean(customColorHex) != null)
+          'customColorHex': _clean(customColorHex),
       };
 
   static HousingBuildingOverride? fromMap(String buildingId, Map<String, dynamic> d) {
@@ -187,6 +233,7 @@ class HousingBuildingOverride {
       landlordPhone: d['landlordPhone'] as String?,
       floors: (d['floors'] as num?)?.toInt(),
       unitCount: (d['unitCount'] as num?)?.toInt(),
+      customColorHex: d['customColorHex'] as String?,
     );
   }
 
@@ -200,6 +247,7 @@ class HousingBuildingOverride {
     String? landlordPhone,
     int? floors,
     int? unitCount,
+    String? customColorHex,
   }) =>
       HousingBuildingOverride(
         buildingId: buildingId,
@@ -212,6 +260,7 @@ class HousingBuildingOverride {
         landlordPhone: landlordPhone ?? this.landlordPhone,
         floors: floors ?? this.floors,
         unitCount: unitCount ?? this.unitCount,
+        customColorHex: customColorHex ?? this.customColorHex,
       );
 
   /// 화면 표시용으로 [OneRoomName]과 같은 모양으로 바꾼다 — 지도·검색이
@@ -239,6 +288,35 @@ bool looksLikeOneRoom(
     (summaries.containsKey(b.id) ||
         (b.floors >= minFloors && b.footprintArea >= minArea));
 
+/// 자취방 추천 장점 프리셋
+const List<String> kHousingPros = [
+  '도시가스 난방',
+  '정문 도보 3분컷',
+  '방음 우수(콘크리트벽)',
+  '채광/남향',
+  '수압 강함/온수 양호',
+  '1.5룸/넓은 분리형',
+  '풀옵션(전자레인지 등)',
+  '엘리베이터 있음',
+  '주차 공간 넉넉',
+  '집주인 친절/빠른 수리',
+  '심야 안심/밝은 가로등',
+];
+
+/// 자취방 솔직 주의점 프리셋 (교원대 실제 자취 환경 반영)
+const List<String> kHousingCons = [
+  '심야전기/LPG (겨울 난방비 폭탄 주의)',
+  '벽간/층간 소음 있음 (방음 취약)',
+  '수압 약함 / 온수 불안정',
+  '1층/저층 벌레·습기 주의',
+  '언덕길 / 도보 10분 이상',
+  '골목 어두움 / 외진 위치',
+  '주차 공간 협소 / 주차 불가',
+  '세탁실 공용 / 베란다 없음',
+  '옵션 노후 (냉장고·에어컨)',
+  '외풍 있음 / 겨울철 추움',
+];
+
 /// 한 건물의 제보를 모은 결과.
 class HousingSummary {
   final int reportCount;
@@ -250,12 +328,21 @@ class HousingSummary {
   final int? medianDeposit;
   final int? medianRent;
 
-  /// 많이 언급된 특징 순. **상위 5개만** — 화면 표시용이다.
+  /// 많이 언급된 특징(장점) 순. **상위 5개만** — 화면 표시용이다.
   final List<String> topFeatures;
 
   /// 한 번이라도 언급된 특징 전부. 필터는 이걸 봐야 한다 —
   /// [topFeatures]로 거르면 6번째로 밀린 특징은 조건에 영영 안 걸린다.
   final Set<String> allFeatures;
+
+  /// 많이 언급된 솔직 주의점/단점 순. **상위 5개만**.
+  final List<String> topDrawbacks;
+
+  /// 한 번이라도 언급된 솔직 주의점 전부.
+  final Set<String> allDrawbacks;
+
+  /// 외벽 현수막/관리인 임대 문의 연락처 (최신 유효 제보).
+  final String? publicContactPhone;
 
   /// 가장 최근 제보 시점.
   final DateTime? latestReport;
@@ -265,26 +352,19 @@ class HousingSummary {
   final String? oneRoomId;
 
   /// 관리비 중앙값(만원). 아무도 안 적었으면 null.
-  ///
-  /// ⚠️ 이 값은 **관리비를 적어 낸 제보만** 모은 것이라 [medianRent]와
-  /// 모집단이 다르다. 둘을 더하면 안 된다 — 그건 [medianMonthlyTotal]이
-  /// 따로 있는 이유다.
   final int? medianMaintenance;
 
   /// 관리비까지 포함한 월 부담액 중앙값(만원). 제보가 없으면 null.
-  ///
-  /// 제보마다 월세+관리비를 먼저 더한 뒤 그 값들의 중앙값을 낸다.
-  /// 예전엔 `medianRent + medianMaintenance`로 구했는데, 중앙값은 더할 수
-  /// 있는 값이 아닌 데다 두 값의 모집단까지 달라서 실제로 없는 금액이
-  /// 나왔다. 5건 중 4건이 관리비 미기재(월세 40)이고 1건만 40+20이면
-  /// 40+20=60이 되어, 5명 중 4명이 40을 내는 건물이 "월 50 이하"
-  /// 검색에서 빠졌다.
   final int? medianMonthlyTotal;
 
-  /// 이 건물에서 제보된 방 구조들. 한 건물에 원룸과 2룸이 섞여 있을 수 있어
-  /// 다수결로 하나만 고르지 않고 **전부** 들고 있는다 — "2룸 찾기"를 눌렀을 때
-  /// 2룸 제보가 하나라도 있으면 후보로 보여줘야 한다.
+  /// 이 건물에서 제보된 방 구조들.
   final Set<HousingRoomType> roomTypes;
+
+  /// 이 건물에 남겨진 최근 거주 후기 (최대 10건, 최신순).
+  final List<String> recentReviews;
+
+  /// 이 건물 제보들에서 언급된 포함 관리비 항목 (예: 수도, 인터넷 등).
+  final Set<String> commonUtilities;
 
   const HousingSummary({
     required this.reportCount,
@@ -297,6 +377,11 @@ class HousingSummary {
     this.medianMonthlyTotal,
     this.roomTypes = const {},
     this.allFeatures = const {},
+    this.topDrawbacks = const [],
+    this.allDrawbacks = const {},
+    this.publicContactPhone,
+    this.recentReviews = const [],
+    this.commonUtilities = const {},
   });
 
   static const empty = HousingSummary(
@@ -305,6 +390,11 @@ class HousingSummary {
     medianRent: null,
     topFeatures: [],
     latestReport: null,
+    topDrawbacks: [],
+    allDrawbacks: {},
+    publicContactPhone: null,
+    recentReviews: [],
+    commonUtilities: {},
   );
 
   bool get hasData => reportCount > 0;
@@ -320,12 +410,12 @@ class HousingSummary {
       if (values.isEmpty) return null;
       values.sort();
       final mid = values.length ~/ 2;
-      // 짝수 개면 가운데 두 값의 평균.
       return values.length.isOdd
           ? values[mid]
           : ((values[mid - 1] + values[mid]) / 2).round();
     }
 
+    // 장점 집계
     final featureCount = <String, int>{};
     for (final r in list) {
       for (final f in r.features) {
@@ -335,8 +425,39 @@ class HousingSummary {
     final sortedFeatures = featureCount.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    // 이름은 다수결로 정한다. 한 사람이 잘못 지목해도 여러 명이 맞게 고르면
-    // 바로잡히고, 아무도 안 골랐으면 이름 없이 남는다.
+    // 단점/주의점 집계
+    final drawbackCount = <String, int>{};
+    for (final r in list) {
+      for (final d in r.drawbacks) {
+        drawbackCount[d] = (drawbackCount[d] ?? 0) + 1;
+      }
+    }
+    final sortedDrawbacks = drawbackCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    // 최근 작성된 거주 후기들을 최신순으로 정렬해 수집 (최대 10개)
+    final reviewsWithDate = list
+        .where((r) => r.review != null && r.review!.trim().isNotEmpty)
+        .toList()
+      ..sort((a, b) => b.reportedAt.compareTo(a.reportedAt));
+    final recentReviews =
+        reviewsWithDate.map((r) => r.review!.trim()).take(10).toList();
+
+    // 임대 문의처 전화번호 최신순 추출
+    final phonesWithDate = list
+        .where((r) => r.contactPhone != null && r.contactPhone!.trim().isNotEmpty)
+        .toList()
+      ..sort((a, b) => b.reportedAt.compareTo(a.reportedAt));
+    final publicContactPhone =
+        phonesWithDate.isNotEmpty ? phonesWithDate.first.contactPhone : null;
+
+    // 포함 관리비 항목 집계
+    final utilities = <String>{};
+    for (final r in list) {
+      utilities.addAll(r.includedUtilities);
+    }
+
+    // 이름 다수결
     final nameCount = <String, int>{};
     for (final r in list) {
       final id = r.oneRoomId;
@@ -349,24 +470,31 @@ class HousingSummary {
             .first
             .key;
 
-    // 관리비는 적은 사람만 적는다 — null을 0으로 치면 중앙값이 아래로
-    // 끌려가므로, 적어 낸 제보만 모아 중앙값을 낸다.
+    // 시세 계산 시 유효한(0보다 큰) 금액만 필터링하여 전화번호 단독 제보로 인한 왜곡 방지
+    final validDeposits = list.map((r) => r.deposit).where((v) => v > 0).toList();
+    final validRents = list.map((r) => r.monthlyRent).where((v) => v > 0).toList();
+    final validTotals = list.map((r) => r.monthlyTotal).where((v) => v > 0).toList();
+
     final fees = list
         .map((r) => r.maintenanceFee)
         .whereType<int>()
+        .where((v) => v > 0)
         .toList();
 
     return HousingSummary(
       reportCount: list.length,
-      medianDeposit: median(list.map((r) => r.deposit).toList()),
-      medianRent: median(list.map((r) => r.monthlyRent).toList()),
+      medianDeposit: median(validDeposits.isNotEmpty ? validDeposits : list.map((r) => r.deposit).toList()),
+      medianRent: median(validRents.isNotEmpty ? validRents : list.map((r) => r.monthlyRent).toList()),
       medianMaintenance: median(fees),
-      // 제보마다 먼저 더한 뒤 중앙값. 두 중앙값을 더하면 안 되는 이유는
-      // medianMonthlyTotal 문서 주석 참고.
-      medianMonthlyTotal: median(list.map((r) => r.monthlyTotal).toList()),
+      medianMonthlyTotal: median(validTotals.isNotEmpty ? validTotals : list.map((r) => r.monthlyTotal).toList()),
       roomTypes: list.map((r) => r.roomType).whereType<HousingRoomType>().toSet(),
       topFeatures: sortedFeatures.take(5).map((e) => e.key).toList(),
       allFeatures: featureCount.keys.toSet(),
+      topDrawbacks: sortedDrawbacks.take(5).map((e) => e.key).toList(),
+      allDrawbacks: drawbackCount.keys.toSet(),
+      publicContactPhone: publicContactPhone,
+      recentReviews: recentReviews,
+      commonUtilities: utilities,
       latestReport: list
           .map((r) => r.reportedAt)
           .reduce((a, b) => a.isAfter(b) ? a : b),
@@ -424,6 +552,36 @@ class HousingService {
       FirestoreHealth.reportFailure();
       debugPrint('HousingService.submit error: $e');
       return HousingSubmitResult.failed;
+    }
+  }
+
+  /// 외벽 현수막/관리인 임대 문의 연락처만 빠르게 제보
+  static Future<bool> submitContactPhone({
+    required String buildingId,
+    required String phone,
+    String? oneRoomId,
+  }) async {
+    try {
+      final report = HousingReport(
+        buildingId: buildingId,
+        deposit: 0,
+        monthlyRent: 0,
+        contactPhone: phone.trim(),
+        oneRoomId: oneRoomId,
+        features: const [],
+        drawbacks: const [],
+        reportedAt: DateTime.now(),
+      );
+      await _db
+          .collection(_collection)
+          .add(report.toFirestore())
+          .timeout(const Duration(seconds: 6));
+      FirestoreHealth.reportSuccess();
+      return true;
+    } catch (e) {
+      FirestoreHealth.reportFailure();
+      debugPrint('HousingService.submitContactPhone error: $e');
+      return false;
     }
   }
 
@@ -509,6 +667,105 @@ class HousingService {
   /// 덮어쓴 정보를 지우고 학생 제보 다수결로 정해지는 이름으로 되돌린다.
   static Future<void> clearOverride(String buildingId) async {
     await _db.collection(_overrideCollection).doc(buildingId).delete();
+  }
+
+  static const String _customBuildingsCollection = 'housing_custom_buildings';
+
+  /// 개발자/관리자가 직접 추가한 커스텀 건물 목록
+  static Future<List<BaseBuilding>> fetchCustomBuildings() async {
+    if (!FirestoreHealth.isAvailable) return const [];
+    try {
+      final snap = await _db
+          .collection(_customBuildingsCollection)
+          .get()
+          .timeout(const Duration(seconds: 5));
+      FirestoreHealth.reportSuccess();
+      final list = <BaseBuilding>[];
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        final rawRing = d['ring'] as List?;
+        final ring = <Offset>[];
+        if (rawRing != null) {
+          for (final p in rawRing) {
+            if (p is List && p.length >= 2) {
+              ring.add(Offset((p[0] as num).toDouble(), (p[1] as num).toDouble()));
+            }
+          }
+        }
+        if (ring.length >= 3) {
+          list.add(BaseBuilding(
+            id: doc.id,
+            officialName: d['name'] as String?,
+            floors: (d['floors'] as num?)?.toInt() ?? 3,
+            road: d['road'] as String?,
+            buildingNo: d['buildingNo'] as String?,
+            ring: ring,
+            isCampus: (d['isCampus'] as bool?) ?? false,
+          ));
+        }
+      }
+      return list;
+    } catch (e) {
+      FirestoreHealth.reportFailure();
+      debugPrint('HousingService.fetchCustomBuildings error: $e');
+      return const [];
+    }
+  }
+
+  /// 새 건물을 생성하여 저장 (건물 도형 + 관리자 오버라이드 동시 등록)
+  static Future<void> saveCustomBuilding({
+    required BaseBuilding building,
+    required HousingBuildingOverride override,
+  }) async {
+    await _db.collection(_customBuildingsCollection).doc(building.id).set({
+      'name': override.name,
+      'floors': building.floors,
+      'road': building.road,
+      'buildingNo': building.buildingNo,
+      'isCampus': building.isCampus,
+      'ring': [
+        for (final p in building.ring) [p.dx, p.dy],
+      ],
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    await setOverride(override);
+  }
+
+  /// 커스텀 건물 삭제
+  static Future<void> deleteCustomBuilding(String buildingId) async {
+    await _db.collection(_customBuildingsCollection).doc(buildingId).delete();
+    await clearOverride(buildingId);
+  }
+
+  // ── 즐겨찾기(찜) 로컬 저장소 ──────────────────────────────
+  static const String _favKey = 'housing_favorite_building_ids';
+
+  /// 사용자가 찜(즐겨찾기)한 건물 ID 목록을 불러온다.
+  static Future<Set<String>> fetchFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_favKey) ?? [];
+    return list.toSet();
+  }
+
+  /// 특정 건물의 찜 상태를 토글하고 새로운 상태(true=찜됨)를 반환한다.
+  static Future<bool> toggleFavorite(String buildingId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final set = (prefs.getStringList(_favKey) ?? []).toSet();
+    final isFav = set.contains(buildingId);
+    if (isFav) {
+      set.remove(buildingId);
+    } else {
+      set.add(buildingId);
+    }
+    await prefs.setStringList(_favKey, set.toList());
+    return !isFav;
+  }
+
+  /// 특정 건물이 찜되어 있는지 확인한다.
+  static Future<bool> isFavorite(String buildingId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_favKey) ?? [];
+    return list.contains(buildingId);
   }
 }
 
@@ -686,8 +943,12 @@ HousingMapStyle housingMapStyle(
     final isOneRoom = looksLikeOneRoom(b, summaries);
     if (isOneRoom) oneRoomIds.add(b.id);
 
+    final o = overrides[b.id];
     final k = known(b.id);
-    if (k != null) {
+    if (o?.customColor != null) {
+      zoneColors[b.id] = o!.customColor!;
+      displayNames[b.id] = o.name;
+    } else if (k != null) {
       zoneColors[b.id] = k.zone.color;
       displayNames[b.id] = k.name;
     } else if (isOneRoom) {
@@ -715,4 +976,79 @@ HousingMapStyle housingMapStyle(
     zoneColors: zoneColors,
     displayNames: displayNames,
   );
+}
+
+/// 제보 화면에서 고르는 관리비 포함 공과금 항목 목록.
+const List<String> kHousingUtilities = [
+  '수도',
+  '인터넷',
+  '전기',
+  '도시가스',
+];
+
+/// 자취방 목록 정렬 기준.
+enum HousingSortType {
+  monthlyTotalAsc('월 부담 싼 순'),
+  depositAsc('보증금 싼 순'),
+  distanceMainGateAsc('정문 가까운 순'),
+  distanceLibraryAsc('도서관 가까운 순'),
+  reportCountDesc('제보 많은 순'),
+  nameAsc('이름 순');
+
+  final String label;
+  const HousingSortType(this.label);
+}
+
+/// 자취방 목록 정렬 순수 함수 — 테스트 대상.
+List<T> sortHousingItems<T>({
+  required List<T> items,
+  required HousingSortType sortType,
+  required HousingSummary Function(T) getSummary,
+  required BaseBuilding Function(T) getBuilding,
+  required String Function(T) getName,
+}) {
+  final copy = List<T>.from(items);
+  copy.sort((a, b) {
+    switch (sortType) {
+      case HousingSortType.monthlyTotalAsc:
+        final am = getSummary(a).medianMonthlyTotal ?? (1 << 30);
+        final bm = getSummary(b).medianMonthlyTotal ?? (1 << 30);
+        if (am != bm) return am.compareTo(bm);
+        final ad = getSummary(a).medianDeposit ?? (1 << 30);
+        final bd = getSummary(b).medianDeposit ?? (1 << 30);
+        if (ad != bd) return ad.compareTo(bd);
+        return getName(a).compareTo(getName(b));
+
+      case HousingSortType.depositAsc:
+        final ad = getSummary(a).medianDeposit ?? (1 << 30);
+        final bd = getSummary(b).medianDeposit ?? (1 << 30);
+        if (ad != bd) return ad.compareTo(bd);
+        final am = getSummary(a).medianMonthlyTotal ?? (1 << 30);
+        final bm = getSummary(b).medianMonthlyTotal ?? (1 << 30);
+        if (am != bm) return am.compareTo(bm);
+        return getName(a).compareTo(getName(b));
+
+      case HousingSortType.distanceMainGateAsc:
+        final ad = walkingDistanceMeters(getBuilding(a).center, CampusLandmark.mainGate);
+        final bd = walkingDistanceMeters(getBuilding(b).center, CampusLandmark.mainGate);
+        if (ad != bd) return ad.compareTo(bd);
+        return getName(a).compareTo(getName(b));
+
+      case HousingSortType.distanceLibraryAsc:
+        final ad = walkingDistanceMeters(getBuilding(a).center, CampusLandmark.library);
+        final bd = walkingDistanceMeters(getBuilding(b).center, CampusLandmark.library);
+        if (ad != bd) return ad.compareTo(bd);
+        return getName(a).compareTo(getName(b));
+
+      case HousingSortType.reportCountDesc:
+        final ac = getSummary(a).reportCount;
+        final bc = getSummary(b).reportCount;
+        if (ac != bc) return bc.compareTo(ac);
+        return getName(a).compareTo(getName(b));
+
+      case HousingSortType.nameAsc:
+        return getName(a).compareTo(getName(b));
+    }
+  });
+  return copy;
 }

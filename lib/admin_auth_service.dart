@@ -65,9 +65,18 @@ class AdminAuthService {
       if (auth == null) return;
       _watchForLostAccount(auth);
       if (auth.currentUser == null) {
-        await auth.signInAnonymously();
+        await auth.signInAnonymously().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {
+            debugPrint('AdminAuthService: signInAnonymously 타임아웃');
+            return null as dynamic;
+          },
+        );
       }
-      await refreshAdminStatus();
+      await refreshAdminStatus().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => false,
+      );
     } catch (e) {
       debugPrint('AdminAuthService.initialize 실패(앱은 계속 동작): $e');
     }

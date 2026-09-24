@@ -367,13 +367,29 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
   late final TextEditingController _floorsController;
   late final TextEditingController _unitsController;
   late HousingZone _zone;
+  String? _customColorHex;
   bool _saving = false;
+
+  static const List<Map<String, dynamic>> _kColorPresets = [
+    {'name': '기본(구역색)', 'hex': null, 'color': Colors.transparent},
+    {'name': '네이버 그린', 'hex': '#03C75A', 'color': Color(0xFF03C75A)},
+    {'name': '스카이 블루', 'hex': '#007AFF', 'color': Color(0xFF007AFF)},
+    {'name': '앰버 옐로우', 'hex': '#F59E0B', 'color': Color(0xFFF59E0B)},
+    {'name': '로즈 핑크', 'hex': '#EC4899', 'color': Color(0xFFEC4899)},
+    {'name': '퍼플', 'hex': '#8B5CF6', 'color': Color(0xFF8B5CF6)},
+    {'name': '인디고 블루', 'hex': '#3B82F6', 'color': Color(0xFF3B82F6)},
+    {'name': '에메랄드 틸', 'hex': '#10B981', 'color': Color(0xFF10B981)},
+    {'name': '선셋 오렌지', 'hex': '#F97316', 'color': Color(0xFFF97316)},
+    {'name': '모던 차콜', 'hex': '#4B5563', 'color': Color(0xFF4B5563)},
+    {'name': '크림 아이보리', 'hex': '#E2E8F0', 'color': Color(0xFFE2E8F0)},
+  ];
 
   @override
   void initState() {
     super.initState();
     final c = widget.current;
     final s = widget.saved;
+    _customColorHex = s?.customColorHex;
     _nameController = TextEditingController(text: c?.name ?? '');
     _yearController = TextEditingController(text: c?.builtYear?.toString() ?? '');
     _noteController = TextEditingController(text: c?.note ?? '');
@@ -421,6 +437,7 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
           landlordPhone: _landlordPhoneController.text,
           floors: int.tryParse(_floorsController.text.trim()),
           unitCount: int.tryParse(_unitsController.text.trim()),
+          customColorHex: _customColorHex,
         ),
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -506,6 +523,7 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
   @override
   Widget build(BuildContext context) {
     final b = widget.building;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ValueListenableBuilder<Color>(
       valueListenable: themeColor,
       builder: (context, color, child) {
@@ -559,7 +577,74 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
                     if (v != null) setState(() => _zone = v);
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
+                // 건물 옥상/외벽 색상 선택 (지도에 실시간 반영)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.palette_outlined, size: 16, color: Color(0xFF007AFF)),
+                        const SizedBox(width: 6),
+                        const Text(
+                          "지도 건물 옥상/외벽 색상",
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const Spacer(),
+                        if (_customColorHex != null)
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                            onPressed: () => setState(() => _customColorHex = null),
+                            child: const Text('기본 구역색 복원', style: TextStyle(fontSize: 11)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _kColorPresets.map((preset) {
+                        final hex = preset['hex'] as String?;
+                        final color = preset['color'] as Color;
+                        final isSelected = _customColorHex == hex;
+                        final isNone = hex == null;
+
+                        return Tooltip(
+                          message: preset['name'] as String,
+                          child: InkWell(
+                            onTap: () => setState(() => _customColorHex = hex),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: isNone ? (isDark ? Colors.white12 : Colors.grey.shade200) : color,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSelected ? Colors.black87 : Colors.black12,
+                                  width: isSelected ? 2.5 : 1.0,
+                                ),
+                              ),
+                              child: isNone
+                                  ? const Icon(Icons.block, size: 18, color: Colors.grey)
+                                  : (isSelected
+                                      ? Icon(
+                                          Icons.check_rounded,
+                                          size: 20,
+                                          color: color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white,
+                                        )
+                                      : null),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
                 TextField(
                   controller: _yearController,
                   keyboardType: TextInputType.number,

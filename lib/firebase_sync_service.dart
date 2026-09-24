@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -43,7 +44,10 @@ class FirebaseSyncService {
         });
       }
 
-      await batch.commit();
+      await batch.commit().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => debugPrint('FirebaseSyncService: batch.commit 타임아웃'),
+      );
       debugPrint('FirebaseSyncService: 건물 정보 ${buildingsJson.length}개 Batch 업로드 완료');
     } catch (e) {
       debugPrint('FirebaseSyncService: 건물 정보 업로드 실패: $e');
@@ -54,7 +58,16 @@ class FirebaseSyncService {
   static Future<List<BuildingData>?> fetchBuildingsFromFirestore() async {
     try {
       if (Firebase.apps.isEmpty) return null;
-      final snapshot = await _firestore.collection('knue_buildings').get();
+      final snapshot = await _firestore
+          .collection('knue_buildings')
+          .get()
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              debugPrint('FirebaseSyncService: fetchBuildingsFromFirestore 타임아웃');
+              throw TimeoutException('fetchBuildingsFromFirestore 타임아웃');
+            },
+          );
       if (snapshot.docs.isEmpty) return null;
 
       List<BuildingData> firestoreBuildings = [];
