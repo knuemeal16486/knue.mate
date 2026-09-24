@@ -2983,88 +2983,32 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     }
   }
 
-  /// 별점 평가 가능 시간인지 확인
-  /// 운영 시작 시간부터 운영 종료 후 30분까지 평가 가능
-  bool _isRatingAllowed() {
-    if (!widget.isToday) return false;
+  /// 별점을 **새로** 남길 수 있는 시간인지.
+  ///
+  /// 판단은 [isRatingOpen]이 한다. 예전엔 이 안에 식당·끼니별 시간표를 통째로
+  /// 다시 적어 놓고 있었는데, [mealTimeRangeFor]와 값이 어긋나면 화면마다
+  /// 다른 말을 하게 된다. 시간표는 한 곳에만 둔다.
+  bool _isRatingAllowed() => isRatingOpen(
+    widget.type,
+    widget.source,
+    DateTime.now(),
+    widget.date,
+  );
+
+  /// 왜 지금은 새로 못 남기는지. 결과는 여전히 볼 수 있다는 걸 같이 알린다.
+  String _getRatingTimeMessage() {
+    if (!widget.isToday) return "오늘 식단만 평가할 수 있어요";
+
+    if (mealTimeRangeFor(widget.type, widget.source) == null) {
+      return "${widget.source.shortLabel} 식당 ${widget.type.label}은 운영하지 않아요";
+    }
 
     final now = DateTime.now();
-
-    // 각 식당과MealType별 운영 시간 설정
-    int startHour, startMinute, endHour, endMinute;
-
-    if (widget.source == MealSource.a) {
-      // 사도교육원 식당
-      switch (widget.type) {
-        case MealType.breakfast:
-          startHour = 7;
-          startMinute = 30;
-          endHour = 9;
-          endMinute = 0;
-          break;
-        case MealType.lunch:
-          startHour = 11;
-          startMinute = 30;
-          endHour = 13;
-          endMinute = 30;
-          break;
-        case MealType.dinner:
-          startHour = 17;
-          startMinute = 30;
-          endHour = 19;
-          endMinute = 0;
-          break;
-      }
-    } else {
-      // 교직원 식당 (조식은 운영 안함)
-      if (widget.type == MealType.breakfast) return false;
-
-      switch (widget.type) {
-        case MealType.lunch:
-          startHour = 11;
-          startMinute = 0;
-          endHour = 14;
-          endMinute = 0;
-          break;
-        case MealType.dinner:
-          startHour = 17;
-          startMinute = 0;
-          endHour = 18;
-          endMinute = 30;
-          break;
-        default:
-          return false;
-      }
+    final window = mealServiceWindow(widget.type, widget.source, now);
+    if (window != null && now.isBefore(window.start)) {
+      return "배식이 시작되면 평가할 수 있어요";
     }
-
-    final startTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      startHour,
-      startMinute,
-    );
-    // 종료 후 1시간까지 허용 (사용자 요청)
-    final endTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      endHour,
-      endMinute,
-    ).add(const Duration(hours: 1));
-
-    return now.isAfter(startTime) && now.isBefore(endTime);
-  }
-
-  /// 별점 평가 가능 시간에 대한 사용자 안내 메시지
-  String _getRatingTimeMessage() {
-    if (!widget.isToday) return "오늘만 평가할 수 있습니다";
-
-    if (widget.source == MealSource.b && widget.type == MealType.breakfast) {
-      return "${MealSource.b.shortLabel} 식당 아침은 운영하지 않습니다";
-    }
-
-    return "운영 시간에 평가해주세요";
+    return "평가는 배식 종료 ${kRatingGracePeriod.inMinutes}분 뒤까지예요";
   }
 
   /// 별점과 배식 방식을 한 문서로 제출한다.
@@ -3242,15 +3186,15 @@ class _MealDetailCardState extends State<_MealDetailCard> {
   }
 
   void _showRatingDialog() {
-    // 평가 가능 시간인지 확인
-    if (!_isRatingAllowed()) {
-      showToast(context, _getRatingTimeMessage());
-      return;
-    }
+    // 마감된 뒤에도 **결과는 보여준다.** 닫히는 건 새 등록뿐이다.
+    // 예전엔 토스트 한 줄만 띄우고 팝업을 열지 않아서, 배식이 끝나고 나면
+    // 몇 명이 어떻게 평가했는지 볼 방법이 아예 없었다.
+    final canRate = _isRatingAllowed();
 
     double currentRating = 4.0;
     ServingStyle? currentStyle;
-    bool showBreakdown = false;
+    // 읽으러 온 사람에게는 분포를 처음부터 펼쳐 준다 — 그게 보러 온 것이다.
+    bool showBreakdown = !canRate;
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -3259,9 +3203,9 @@ class _MealDetailCardState extends State<_MealDetailCard> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
             ),
-            title: const Text(
-              "식단은 어떠셨나요?",
-              style: TextStyle(fontWeight: FontWeight.bold),
+            title: Text(
+              canRate ? "식단은 어떠셨나요?" : "${widget.type.label} 식단 평가",
+              style: const TextStyle(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             content: Column(
@@ -3367,93 +3311,142 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                     );
                   },
                 ),
-                const Text(
-                  "식단이 어떠셨나요?\n맛있게 드셨다면 별점을 남겨주세요!",
-                  style: TextStyle(fontSize: 14, height: 1.4),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                _buildStarRatingBar(currentRating, (val) {
-                  setDialogState(() => currentRating = val);
-                }),
-                const SizedBox(height: 10),
-                Text(
-                  "$currentRating 점",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: KnueTokens.warm(
-                      Theme.of(context).brightness == Brightness.dark,
+                if (!canRate)
+                  // 마감 안내. 왜 못 남기는지 말해주지 않으면 고장으로 읽힌다.
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.lock_clock_rounded,
+                        size: 15,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white38
+                            : Colors.black38,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          "${_getRatingTimeMessage()}\n지난 평가 결과는 그대로 보실 수 있어요.",
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.4,
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white54
+                                : Colors.black54,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else ...[
+                  const Text(
+                    "식단이 어떠셨나요?\n맛있게 드셨다면 별점을 남겨주세요!",
+                    style: TextStyle(fontSize: 14, height: 1.4),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  _buildStarRatingBar(currentRating, (val) {
+                    setDialogState(() => currentRating = val);
+                  }),
+                  const SizedBox(height: 10),
+                  Text(
+                    "$currentRating 점",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: KnueTokens.warm(
+                        Theme.of(context).brightness == Brightness.dark,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 18),
-                const Divider(height: 1),
-                const SizedBox(height: 14),
-                // 배식 방식 투표 — 식당에 가기 전 가장 궁금해하는 정보다.
-                // 별점과 같은 문서에 담아 한 번의 제출로 끝낸다.
-                const Text(
-                  "메인 반찬은 어떻게 나왔나요?",
-                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "직접 드신 분만 골라주세요 (선택)",
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white38
-                        : Colors.black38,
+                  const SizedBox(height: 18),
+                  const Divider(height: 1),
+                  const SizedBox(height: 14),
+                  // 배식 방식 투표 — 식당에 가기 전 가장 궁금해하는 정보다.
+                  // 별점과 같은 문서에 담아 한 번의 제출로 끝낸다.
+                  const Text(
+                    "메인 반찬은 어떻게 나왔나요?",
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: ServingStyle.values.map((style) {
-                    final selected = currentStyle == style;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ChoiceChip(
-                        label: Text(style.label),
-                        selected: selected,
-                        // 다시 누르면 선택 해제 — "잘 모르겠다"를 따로 두지 않고
-                        // 고르지 않은 상태로 되돌릴 수 있게 한다.
-                        onSelected: (_) => setDialogState(
-                          () => currentStyle = selected ? null : style,
+                  const SizedBox(height: 4),
+                  Text(
+                    "직접 드신 분만 골라주세요 (선택)",
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white38
+                          : Colors.black38,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: ServingStyle.values.map((style) {
+                      final selected = currentStyle == style;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: ChoiceChip(
+                          label: Text(style.label),
+                          selected: selected,
+                          // 다시 누르면 선택 해제 — "잘 모르겠다"를 따로 두지
+                          // 않고 고르지 않은 상태로 되돌릴 수 있게 한다.
+                          onSelected: (_) => setDialogState(
+                            () => currentStyle = selected ? null : style,
+                          ),
+                          labelStyle: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
+                          showCheckmark: false,
                         ),
-                        labelStyle: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight:
-                              selected ? FontWeight.w700 : FontWeight.w500,
-                        ),
-                        showCheckmark: false,
-                      ),
-                    );
-                  }).toList(),
-                ),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ],
             ),
             actionsAlignment: MainAxisAlignment.center,
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("취소", style: TextStyle(color: Colors.grey)),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _submitRating(currentRating, style: currentStyle);
-                },
-                style: FilledButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text("평가하기"),
-              ),
-            ],
+            actions: canRate
+                ? [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text(
+                        "취소",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _submitRating(currentRating, style: currentStyle);
+                      },
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text("평가하기"),
+                    ),
+                  ]
+                : [
+                    FilledButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text("닫기"),
+                    ),
+                  ],
           );
         },
       ),

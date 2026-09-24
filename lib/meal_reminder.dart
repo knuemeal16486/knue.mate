@@ -76,13 +76,29 @@ class _MealReminderDialogState extends State<_MealReminderDialog> {
   Future<void> _submit() async {
     if (_rating == 0 || _submitting) return;
     setState(() => _submitting = true);
-    await MealRatingService.submit(
-      source: widget.source,
-      type: widget.type,
-      date: DateTime.now(),
-      rating: _rating,
-    );
-    if (mounted) Navigator.pop(context);
+
+    // 팝업이 닫히면서 토스트를 띄우므로 messenger를 미리 잡아 둔다.
+    final messenger = ScaffoldMessenger.of(context);
+
+    String? message;
+    try {
+      message = await MealRatingService.submit(
+        source: widget.source,
+        type: widget.type,
+        date: DateTime.now(),
+        rating: _rating,
+      );
+    } catch (e) {
+      // 예전엔 여기에 catch가 없어서, 제출이 한 번 실패하면 팝업이 닫히지
+      // 않고 스피너만 계속 돌았다 — 사용자는 "전송이 끝나지 않는다"고 본다.
+      debugPrint('MealReminder: 별점 제출 실패: $e');
+      message = "별점을 저장하지 못했어요";
+    }
+
+    if (!mounted) return;
+    Navigator.pop(context);
+    // 남겼는지 아닌지 아무 말이 없으면 눌린 건지도 알 수 없다.
+    showToastOn(messenger, message ?? "별점 $_rating점 반영되었습니다. 감사합니다 ❤️");
   }
 
   @override
@@ -99,10 +115,7 @@ class _MealReminderDialogState extends State<_MealReminderDialog> {
           children: [
             Text(
               "${widget.type.label} 식사하셨나요?",
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),

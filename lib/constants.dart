@@ -560,6 +560,63 @@ MealType? mealEndingSoonNow(MealSource source, DateTime now) {
   return (type: served.first, isTomorrow: true);
 }
 
+/// "11:30 ~ 13:30" 같은 문자열을 [day]의 실제 시작·종료 시각으로 푼다.
+/// 그 식당이 그 끼니를 운영하지 않으면 null. 순수 함수(테스트 대상).
+///
+/// 운영 시간을 쓰는 곳마다 문자열을 따로 쪼개다 보니 값이 어긋난 적이 있다
+/// ([widgetMealSlot] 주석 참고). 쪼개는 일은 여기서만 한다.
+({DateTime start, DateTime end})? mealServiceWindow(
+  MealType type,
+  MealSource source,
+  DateTime day,
+) {
+  final range = mealTimeRangeFor(type, source);
+  if (range == null) return null;
+  final times = range.split("~");
+  final startStr = times[0].trim().split(":");
+  final endStr = times[1].trim().split(":");
+  return (
+    start: DateTime(
+      day.year,
+      day.month,
+      day.day,
+      int.parse(startStr[0]),
+      int.parse(startStr[1]),
+    ),
+    end: DateTime(
+      day.year,
+      day.month,
+      day.day,
+      int.parse(endStr[0]),
+      int.parse(endStr[1]),
+    ),
+  );
+}
+
+/// 배식이 끝난 뒤에도 별점을 받아주는 시간.
+///
+/// 먹고 나와서 남기는 사람이 대부분이라 종료 시각에 딱 맞춰 닫으면 거의 다
+/// 놓친다. 종료 10분 전에 뜨는 "식사하셨나요?" 팝업([isMealEndingSoon])을
+/// 보고 뒤늦게 누르는 경로도 이 여유 안에 들어와야 한다.
+const Duration kRatingGracePeriod = Duration(minutes: 30);
+
+/// 별점을 **새로** 남길 수 있는 시간인지. 순수 함수(테스트 대상).
+///
+/// 마감된 뒤에도 **결과는 볼 수 있다** — 닫히는 건 새 등록뿐이고, 별점
+/// 팝업은 읽기 전용으로 열린다(meal_screen.dart의 `_showRatingDialog`).
+bool isRatingOpen(
+  MealType type,
+  MealSource source,
+  DateTime now,
+  DateTime targetDate,
+) {
+  if (!isSameDate(now, targetDate)) return false;
+  final window = mealServiceWindow(type, source, now);
+  if (window == null) return false; // 이 식당은 이 끼니를 운영 안 함
+  final closesAt = window.end.add(kRatingGracePeriod);
+  return !now.isBefore(window.start) && !now.isAfter(closesAt);
+}
+
 ServeStatus statusFor(
   MealType type,
   DateTime now,
@@ -567,28 +624,11 @@ ServeStatus statusFor(
   MealSource source = MealSource.a,
 }) {
   if (!isSameDate(now, targetDate)) return ServeStatus.notToday;
-  final range = mealTimeRangeFor(type, source);
-  if (range == null) return ServeStatus.closed;
-  final times = range.split("~");
-  final startStr = times[0].trim().split(":");
-  final endStr = times[1].trim().split(":");
-  final start = DateTime(
-    now.year,
-    now.month,
-    now.day,
-    int.parse(startStr[0]),
-    int.parse(startStr[1]),
-  );
-  final end = DateTime(
-    now.year,
-    now.month,
-    now.day,
-    int.parse(endStr[0]),
-    int.parse(endStr[1]),
-  );
+  final window = mealServiceWindow(type, source, now);
+  if (window == null) return ServeStatus.closed;
 
-  if (now.isBefore(start)) return ServeStatus.waiting;
-  if (now.isAfter(end)) return ServeStatus.closed;
+  if (now.isBefore(window.start)) return ServeStatus.waiting;
+  if (now.isAfter(window.end)) return ServeStatus.closed;
   return ServeStatus.open;
 }
 
