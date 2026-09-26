@@ -308,9 +308,13 @@ class DormCost {
   int get monthlyWithMeals => monthlyHousing + monthlyMeal;
 }
 
-/// 학기 중 기숙사 희망입사 비용. 출처: 학교 공지(1·2학기 다감관/인혜관 기준).
+/// [kDormCosts]가 어느 학기 값인지. 다감관 카드에 그대로 뜬다.
+const kDormCostTerm = '2026-2학기';
+
+/// 학기 중 기숙사 희망입사 비용. 출처: 학교 공지(다감관, [kDormCostTerm]).
 ///
-/// ⚠️ 학기마다 바뀌는 값이다. 공지가 갱신되면 여기 숫자를 고쳐야 한다.
+/// ⚠️ 학기마다 바뀌는 값이다. 공지가 갱신되면 여기 숫자와 [kDormCostTerm]을
+/// 같이 고친다.
 const List<DormCost> kDormCosts = [
   DormCost(
     name: '다감관 1인실',
@@ -324,13 +328,21 @@ const List<DormCost> kDormCosts = [
     semesterMealWon: 1684200,
     days: 212,
   ),
-  DormCost(
-    name: '사임당·인혜관',
-    semesterHousingWon: 850000,
-    semesterMealWon: 1684200,
-    days: 212,
-  ),
 ];
+
+/// 다감관 건물(A동·B동, 합친 조각 포함)인지. 누르면 [kDormCosts]를 보여준다.
+bool isDagamName(String? name) => name?.replaceAll(' ', '').startsWith('다감관') ?? false;
+
+/// 원 → "2,387,120원".
+String formatWon(int won) {
+  final s = won.toString();
+  final b = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+    b.write(s[i]);
+  }
+  return '$b원';
+}
 
 // ── 지도 좌표계 ────────────────────────────────────────────────
 // 자취방 지도의 월드 좌표는 이 원점을 기준으로 한 평면 미터다. x는 동쪽,

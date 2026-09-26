@@ -493,7 +493,10 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
-    final b = widget.building;
+    // 다감관은 학교 기숙사라 시세·제보·연락처가 필요 없다 — 교내 건물처럼
+    // 다루고 기숙사비만 보여준다(지도에선 원룸 구역으로 칠해 둔 동이 있다).
+    final dagam = isDagamName(_shownName);
+    final b = dagam ? widget.building.copyWith(isCampus: true) : widget.building;
     final s = widget.summary;
     final known = widget.known;
 
@@ -723,12 +726,15 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                 // 교내 건물: 캠퍼스맵에 있던 설명·층별 호실
                 if (widget.campusInfo case final info?) _buildCampusInfoCard(info, isDark),
 
+                // 다감관: 1인실·2인실 기숙사비와 식비
+                if (dagam) _buildDormCostCard(isDark),
+
                 // 상가 건물에 든 가게들
                 if (widget.edited?.shops case final shops? when shops.isNotEmpty)
                   _buildShopsCard(shops, isDark),
 
                 // 개발자가 직접 입력한 시세(최근 3건 + 전체보기)
-                if (widget.edited?.prices case final prices? when prices.isNotEmpty)
+                if (widget.edited?.prices case final prices? when prices.isNotEmpty && !dagam)
                   _buildEnteredPricesCard(prices, isDark),
 
                 const SizedBox(height: 6),
@@ -814,7 +820,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                       ),
                     ),
                   ),
-                ] else ...[
+                ] else if (!dagam) ...[
                   // 캠퍼스 건물 안내
                   Container(
                     width: double.infinity,
@@ -886,10 +892,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
     // 방 구조별 시세(학생 제보). 개발자 확인 시세는 아래 따로 보여준다.
     final points = housingPricePoints(s, null);
     // 아파트 전세(시세 조사). 단지 어느 동을 눌러도 보인다.
-    final edited = widget.edited;
-    final jeonse = housingJeonseFor(
-      (edited?.isNamed ?? false) ? edited!.name : (widget.known?.name ?? widget.building.officialName),
-    );
+    final jeonse = housingJeonseFor(_shownName);
 
     Widget chipRow(String title, List<String> items, Color color) => Padding(
           padding: const EdgeInsets.only(top: 10),
@@ -1070,6 +1073,80 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
   }
 
   /// 교내 건물 안내: 설명과 층별 호실(층을 누르면 펼친다).
+  /// 지도에 뜨는 이름(개발자 모드에서 고친 이름 우선).
+  String? get _shownName {
+    final edited = widget.edited;
+    return (edited?.isNamed ?? false) ? edited!.name : (widget.known?.name ?? widget.building.officialName);
+  }
+
+  /// 다감관 기숙사 비용: 호실별 학기 주거비와 식비, 월 환산.
+  Widget _buildDormCostCard(bool isDark) {
+    final fg = isDark ? Colors.white : Colors.black87;
+    final sub = isDark ? Colors.white60 : Colors.black54;
+    final meal = kDormCosts.first;
+    Widget row(String label, String value, {String? note, bool bold = false}) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              SizedBox(
+                width: 84,
+                child: Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: sub)),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
+                  color: fg,
+                  fontFeatures: KnueTokens.tabularFigures,
+                ),
+              ),
+              if (note != null) ...[
+                const SizedBox(width: 6),
+                Expanded(child: Text(note, style: TextStyle(fontSize: 11.5, color: sub))),
+              ],
+            ],
+          ),
+        );
+    return _infoCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.bed_rounded, size: 18, color: Color(0xFF3F51B5)),
+              const SizedBox(width: 6),
+              Text('기숙사 비용', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: fg)),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  '$kDormCostTerm · ${meal.days}일',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11.5, color: sub),
+                ),
+              ),
+            ],
+          ),
+          for (final d in kDormCosts)
+            row(d.name.replaceFirst('다감관 ', ''), formatWon(d.semesterHousingWon), note: '월 약 ${d.monthlyHousing}만원'),
+          row('식비', formatWon(meal.semesterMealWon), note: '2식 · 월 약 ${meal.monthlyMeal}만원'),
+          const SizedBox(height: 4),
+          Divider(height: 12, color: isDark ? Colors.white12 : Colors.black12),
+          for (final d in kDormCosts)
+            row(
+              '${d.name.replaceFirst('다감관 ', '')} + 식비',
+              formatWon(d.semesterTotalWon),
+              note: '월 약 ${d.monthlyWithMeals}만원',
+              bold: true,
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCampusInfoCard(BuildingData info, bool isDark) {
     final fg = isDark ? Colors.white : Colors.black87;
     final sub = isDark ? Colors.white60 : Colors.black54;
