@@ -189,27 +189,38 @@ void main() {
     test('제보가 없으면 빈 요약이다', () {
       final s = HousingSummary.from(const []);
       expect(s.hasData, isFalse);
-      expect(s.medianDeposit, isNull);
+      expect(s.avgDeposit, isNull);
       expect(s.oneRoomId, isNull);
     });
 
     test('홀수 개면 가운데 값', () {
       final s = HousingSummary.from([r(100, 30), r(300, 50), r(200, 40)]);
-      expect(s.medianDeposit, 200);
-      expect(s.medianRent, 40);
+      expect(s.avgDeposit, 200);
+      expect(s.avgRent, 40);
     });
 
     test('짝수 개면 가운데 두 값의 평균', () {
       final s = HousingSummary.from([r(100, 30), r(200, 40)]);
-      expect(s.medianDeposit, 150);
-      expect(s.medianRent, 35);
+      expect(s.avgDeposit, 150);
+      expect(s.avgRent, 35);
     });
 
-    test('이상치 하나가 중앙값을 흔들지 못한다', () {
-      // 평균이었다면 9999에 끌려간다. 중앙값을 쓰는 이유다.
-      final s = HousingSummary.from([r(100, 30), r(110, 32), r(9999, 300)]);
-      expect(s.medianDeposit, 110);
-      expect(s.medianRent, 32);
+    test('겹치는 제보도 전부 평균에 들어간다 — 방마다 값이 다르다', () {
+      final s = HousingSummary.from([r(300, 30), r(300, 30), r(200, 35), r(500, 40)]);
+      expect(s.reportCount, 4);
+      expect(s.reports.length, 4);
+      expect(s.avgDeposit, 325);
+      expect(s.avgRent, 34); // 33.75 반올림
+    });
+
+    test('오타 금액은 폼에서 막는다 — 평균이라 하나가 전체를 끌고 간다', () {
+      expect(housingAmountError('300', max: kMaxReportDeposit), isNull);
+      expect(housingAmountError('3000', max: kMaxReportDeposit), isNull); // 반전세
+      expect(housingAmountError('3000000', max: kMaxReportDeposit), '만원 단위로');
+      expect(housingAmountError('350000', max: kMaxReportRent), '만원 단위로');
+      expect(housingAmountError('', max: kMaxReportRent), '입력');
+      expect(housingAmountError('', max: kMaxReportFee, required: false), isNull);
+      expect(housingAmountError('-5', max: kMaxReportFee), '숫자만');
     });
 
     test('많이 언급된 특징이 앞에 온다', () {

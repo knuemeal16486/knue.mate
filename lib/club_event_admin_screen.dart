@@ -70,9 +70,9 @@ class _ClubEventAdminScreenState extends State<ClubEventAdminScreen> {
     } else if (result == AdminUnlockResult.wrongPassword) {
       // 재시도 제한 없음: 화면을 벗어나지 않고 입력만 비워 다시 시도하게 한다.
       _passwordController.clear();
-      showToast(context, "비밀번호가 일치하지 않습니다");
+      showToast(context, result.message);
     } else {
-      showToast(context, "확인에 실패했습니다. 연결을 확인해주세요");
+      showToast(context, result.message);
     }
   }
 

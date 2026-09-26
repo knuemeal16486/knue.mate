@@ -1,13 +1,19 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'admin_auth_service.dart';
+import 'building_data.dart' show BuildingData;
+import 'campus_building_info.dart' show floorLabel;
 import 'housing_iso.dart';
 import 'housing_model.dart';
+import 'housing_note_service.dart';
+import 'housing_note_sheet.dart';
 import 'housing_report_sheet.dart';
 import 'housing_service.dart';
+import 'housing_survey.dart';
 import 'ui_utils.dart';
 
 /// 자취방 건물 상세 바텀시트
@@ -18,10 +24,15 @@ class HousingDetailSheet extends StatefulWidget {
   final HousingBuildingOverride? edited;
   final bool isDark;
   final bool isFavorite;
+  final bool isCompared;
   final Future<void> Function() onToggleFavorite;
   final Future<void> Function() onReported;
+  final VoidCallback? onToggleCompare;
   final VoidCallback? onShowOnMap;
   final VoidCallback? onEditBuilding;
+
+  /// 교내 건물이면 캠퍼스맵에 있던 건물 정보(설명·층별 호실).
+  final BuildingData? campusInfo;
 
   const HousingDetailSheet({
     super.key,
@@ -33,8 +44,11 @@ class HousingDetailSheet extends StatefulWidget {
     required this.isFavorite,
     required this.onToggleFavorite,
     required this.onReported,
+    this.isCompared = false,
+    this.onToggleCompare,
     this.onShowOnMap,
     this.onEditBuilding,
+    this.campusInfo,
   });
 
   @override
@@ -45,49 +59,84 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
   bool _already = false;
   late bool _fav;
   int _dormIndex = 0;
+  HousingNoteData? _noteData;
+
+  /// 원룸, 1.5룸, 2룸 중 단일 선택 (기본: 원룸)
+  HousingRoomType _selectedRoomType = HousingRoomType.oneRoom;
 
   @override
   void initState() {
     super.initState();
     _fav = widget.isFavorite;
+
+    // 만약 건물에 등록된 제보 방 구조가 있고 원룸이 없다면 해당 타입 우선 선택
+    final reportedTypes = widget.summary.roomTypes;
+    if (reportedTypes.isNotEmpty && !reportedTypes.contains(HousingRoomType.oneRoom)) {
+      if (reportedTypes.contains(HousingRoomType.onePointFive)) {
+        _selectedRoomType = HousingRoomType.onePointFive;
+      } else if (reportedTypes.contains(HousingRoomType.twoRoom)) {
+        _selectedRoomType = HousingRoomType.twoRoom;
+      }
+    }
+
     HousingService.hasReported(widget.building.id).then((v) {
       if (mounted) setState(() => _already = v);
     });
+    _loadNote();
+  }
+
+  Future<void> _loadNote() async {
+    final note = await HousingNoteService.loadNote(widget.building.id);
+    if (mounted) setState(() => _noteData = note);
+  }
+
+  void _openInspectionSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => HousingNoteSheet(
+        buildingId: widget.building.id,
+        buildingName: widget.known?.name ?? widget.building.officialName ?? '이름 미확인 건물',
+        isDark: widget.isDark,
+        onSaved: (note) {
+          if (mounted) setState(() => _noteData = note);
+        },
+      ),
+    );
   }
 
   void _share() {
     final b = widget.building;
     final s = widget.summary;
     final name = widget.known?.name ?? b.officialName ?? '한국교원대 인근 자취방';
-    final addr = widget.edited?.address ?? b.addressLabel;
-    final distGate = walkingDistanceMeters(b.center, CampusLandmark.mainGate);
+    final addr = displayAddress(b, widget.edited);
+    final pricing = s.getPricing(_selectedRoomType, zone: widget.known?.zone);
 
     final buffer = StringBuffer();
     buffer.writeln('[KNUE Mate 자취방 정보] $name');
     buffer.writeln('📍 위치: $addr');
-    buffer.writeln('🚶 정문 거리: 도보 약 ${walkingMinutes(distGate)}분 (${distGate}m)');
-    if (s.hasData) {
-      final monthly = s.medianMonthlyTotal ?? s.medianRent ?? 0;
-      buffer.writeln('💰 시세(중앙값): 월 $monthly만원 / 보증금 ${s.medianDeposit ?? 0}만원');
-      if (s.topFeatures.isNotEmpty) {
-        buffer.writeln('✨ 특징: ${s.topFeatures.join(', ')}');
-      }
-      if (s.recentReviews.isNotEmpty) {
-        buffer.writeln('💬 학생 후기: "${s.recentReviews.first}"');
-      }
-    } else {
-      buffer.writeln('💰 시세: 아직 등록된 제보가 없습니다.');
+    buffer.writeln('🏠 방 구조: ${_selectedRoomType.label}');
+    if (pricing != null) {
+      buffer.writeln('💰 시세: 보증금 ${pricing.deposit}만원 / 월세 ${pricing.monthlyRent}만원 (관리비 ${pricing.maintenanceFee}만원)');
+    }
+    if (s.topFeatures.isNotEmpty) {
+      buffer.writeln('✨ 특징: ${s.topFeatures.join(', ')}');
+    }
+    if (s.recentReviews.isNotEmpty) {
+      buffer.writeln('💬 학생 후기: "${s.recentReviews.first}"');
     }
 
     Share.share(buffer.toString());
   }
 
-  String? get _effectivePhone {
-    final overridePhone = widget.edited?.landlordPhone?.trim();
-    if (overridePhone != null && overridePhone.isNotEmpty) return overridePhone;
-    final reportedPhone = widget.summary.publicContactPhone?.trim();
-    if (reportedPhone != null && reportedPhone.isNotEmpty) return reportedPhone;
-    return null;
+  /// 외벽 현수막/관리인/집주인 복수 연락처 (보통 최대 2개)
+  List<String> get _effectivePhones {
+    final overridePhones = widget.edited?.allLandlordPhones ?? [];
+    final reportedPhones = widget.summary.publicContactPhones.isNotEmpty
+        ? widget.summary.publicContactPhones
+        : [if (widget.summary.publicContactPhone != null) widget.summary.publicContactPhone!];
+    return parseContactPhones([...overridePhones, ...reportedPhones]);
   }
 
   Future<void> _callLandlord(String phone) async {
@@ -119,8 +168,9 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
     }
   }
 
-  void _showSubmitPhoneDialog() {
-    final controller = TextEditingController();
+  void _showSubmitPhoneDialog({String? initialPhone1, String? initialPhone2}) {
+    final controller1 = TextEditingController(text: initialPhone1);
+    final controller2 = TextEditingController(text: initialPhone2);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -136,17 +186,28 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '건물 외벽 현수막이나 출입문에 적힌 공실/임대 문의 연락처를 입력해주세요.\n방을 찾는 다른 학우들에게 큰 도움이 됩니다!',
+              '건물 외벽 현수막이나 출입문에 적힌 문의 연락처를 입력해주세요.\n보통 집주인과 관리인(또는 사모님) 2개가 적혀 있습니다.',
               style: TextStyle(fontSize: 12.5, height: 1.4, color: Colors.grey),
             ),
             const SizedBox(height: 14),
             TextField(
-              controller: controller,
+              controller: controller1,
               keyboardType: TextInputType.phone,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: '연락처',
+                labelText: '연락처 1 (집주인/임대인)',
                 hintText: '예: 010-1234-5678',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller2,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: '연락처 2 (관리인/사모님 - 선택)',
+                hintText: '예: 010-9876-5432 또는 유선전화',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -160,12 +221,14 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
           ),
           FilledButton(
             onPressed: () async {
-              final phone = controller.text.trim();
-              if (phone.isEmpty) return;
+              final phone1 = controller1.text.trim();
+              final phone2 = controller2.text.trim();
+              if (phone1.isEmpty && phone2.isEmpty) return;
               Navigator.pop(ctx);
               final ok = await HousingService.submitContactPhone(
                 buildingId: widget.building.id,
-                phone: phone,
+                phone: phone1.isNotEmpty ? phone1 : phone2,
+                phone2: (phone1.isNotEmpty && phone2.isNotEmpty) ? phone2 : null,
                 oneRoomId: widget.known?.id,
               );
               if (mounted) {
@@ -188,18 +251,20 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
     );
   }
 
-  void _showInquiryTemplateModal(String? phone) {
+  void _showInquiryTemplateModal(String? phone, {String? roleTitle}) {
     final b = widget.building;
     final name = widget.known?.name ?? b.officialName ?? '한국교원대 인근 원룸';
-    final addr = widget.edited?.address ?? b.addressLabel;
+    final addr = displayAddress(b, widget.edited);
+    final roomName = _selectedRoomType.label;
+    final pricing = widget.summary.getPricing(_selectedRoomType, zone: widget.known?.zone);
 
     final defaultText = '''안녕하세요, 교원대 학생입니다!
 에브리타임/지도에서 [ $name ]($addr) 외벽 임대 현수막 보고 연락드립니다.
 
-혹시 다가오는 학기에 입주 가능한 공실이 있는지 여쭙고 싶습니다.
-- 희망 입주시기: 개강 전 (협의 가능)
-- 보증금 및 월세, 관리비(포함 항목) 조건
-- 방 옵션 및 난방 방식(도시가스 등)
+혹시 다가오는 학기에 입주 가능한 [$roomName] 공실이 있는지 여쭙고 싶습니다.
+- 문의 구조: $roomName
+${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 / 월세 ${pricing.monthlyRent}만원 (관리비 ${pricing.maintenanceFee}만원)\n' : ''}- 희망 입주시기: 개강 전 (협의 가능)
+- 기본 옵션 및 난방 방식(도시가스 등) 확인 요청
 
 편하신 시간에 방을 한번 둘러볼 수 있을까요? 감사합니다!''';
 
@@ -432,34 +497,49 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
     final s = widget.summary;
     final known = widget.known;
 
-    final distGate = walkingDistanceMeters(b.center, CampusLandmark.mainGate);
-    final distLib = walkingDistanceMeters(b.center, CampusLandmark.library);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF161618) : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 38,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white24 : Colors.black12,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
+    return DraggableScrollableSheet(
+      initialChildSize: 0.38,
+      minChildSize: 0.22,
+      maxChildSize: 0.88,
+      snap: true,
+      snapSizes: const [0.38, 0.88],
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF161618) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.15),
+                blurRadius: 16,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                controller: scrollController,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, b.isCampus ? 16 : 88),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 38,
+                            height: 4,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white24 : Colors.black12,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
 
                 // 상단 헤더 (이름 + 즐겨찾기 + 공유 + 지도보기)
                 Row(
@@ -526,11 +606,12 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
                 // 주소 및 층수 정보
                 Text(
                   [
-                    widget.edited?.address ?? b.addressLabel,
+                    displayAddress(b, widget.edited),
                     '지상 ${widget.edited?.floors ?? b.floors}층',
                     if (widget.edited?.unitCount != null)
                       '${widget.edited!.unitCount}세대',
-                    if (known?.builtYear != null) '${known!.builtYear}년 준공',
+                    if (known?.builtYear ?? builtYearByName(b.officialName) case final year?)
+                      '$year년 준공',
                     if (known?.note != null) known!.note!,
                   ].join(' · '),
                   style: TextStyle(
@@ -540,7 +621,8 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
                   ),
                 ),
 
-                if (known != null) ...[
+                // 구역 딱지는 "캠퍼스 시설"만 — 원룸 구역 태그는 뺐다.
+                if (known != null && b.isCampus) ...[
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -548,7 +630,7 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: known.zone.color,
+                          color: badgeZone(b, known).color,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -565,85 +647,97 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
                   ),
                 ],
 
-                // 거리 뱃지 정보
+                // 정문·도서관·정류장까지 어림 거리는 뺐다(직선거리라 실제와 달랐다).
+                // 도보권은 지도의 등시선 버튼으로 이 건물 기준으로 본다.
                 if (!b.isCampus) ...[
                   const SizedBox(height: 12),
+
+                  // 발품수첩 & 비교함 액션 버튼
                   Row(
                     children: [
-                      _distBadge(
-                        Icons.directions_walk_rounded,
-                        '정문 도보 ${walkingMinutes(distGate)}분 (${distGate}m)',
-                        isDark,
-                      ),
-                      const SizedBox(width: 8),
-                      _distBadge(
-                        Icons.menu_book_rounded,
-                        '도서관 도보 ${walkingMinutes(distLib)}분 (${distLib}m)',
-                        isDark,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // 외벽 임대 문의처 카드 (전화 / 직거래 문자 양식 / 번호 제보)
-                  _buildLandlordContactCard(isDark),
-                ],
-
-                const SizedBox(height: 8),
-
-                // 시세 블록
-                if (!b.isCampus) ...[
-                  _priceBlock(s, isDark),
-
-                  // 포함 관리비 뱃지
-                  if (s.commonUtilities.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          '포함 관리비: ',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white70 : Colors.black87,
-                          ),
-                        ),
-                        Expanded(
-                          child: Wrap(
-                            spacing: 6,
-                            children: s.commonUtilities.map((u) {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: (isDark ? Colors.tealAccent : Colors.teal)
-                                      .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '✓ $u',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark ? Colors.tealAccent : Colors.teal.shade800,
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _openInspectionSheet,
+                          icon: const Icon(Icons.assignment_outlined, size: 15),
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('발품 수첩', style: TextStyle(fontSize: 12)),
+                              if (_noteData != null && _noteData!.checkedKeys.isNotEmpty) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '${_noteData!.checkedKeys.length}/7',
+                                    style: const TextStyle(fontSize: 9.5, color: Colors.white, fontWeight: FontWeight.bold),
                                   ),
                                 ),
-                              );
-                            }).toList(),
+                              ],
+                            ],
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      if (widget.onToggleCompare != null) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: widget.onToggleCompare,
+                            icon: Icon(
+                              widget.isCompared ? Icons.check_circle_outline_rounded : Icons.compare_arrows_rounded,
+                              size: 15,
+                            ),
+                            label: Text(
+                              widget.isCompared ? '비교함 담김 ✓' : '비교함 담기',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: widget.isCompared ? const Color(0xFF10B981) : const Color(0xFF007AFF),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
                           ),
                         ),
                       ],
-                    ),
-                  ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
 
-                  // 학우들이 꼽은 솔직 장단점 요약 (Pros vs Cons)
-                  _buildProsAndConsCard(s, isDark),
+                  // 외벽 임대 문의처 카드 (집주인 / 관리인 보통 2개 번호 지원)
+                  _buildLandlordContactCard(isDark),
+
+                  // 시세·조건 한 장: 방 구조별 시세, 관리비 포함 항목, 좋은 점·아쉬운 점.
+                  // (예전엔 방 구조 선택기·구조별 시세·옵션 안내·관리비·장단점이
+                  //  카드 다섯 장으로 흩어져 있었고, 옵션 안내는 모든 건물에 같은
+                  //  평수·옵션을 지어 보여줬다.)
+                  _buildConditionsCard(s, isDark),
+                ],
+
+                // 교내 건물: 캠퍼스맵에 있던 설명·층별 호실
+                if (widget.campusInfo case final info?) _buildCampusInfoCard(info, isDark),
+
+                // 상가 건물에 든 가게들
+                if (widget.edited?.shops case final shops? when shops.isNotEmpty)
+                  _buildShopsCard(shops, isDark),
+
+                // 개발자가 직접 입력한 시세(최근 3건 + 전체보기)
+                if (widget.edited?.prices case final prices? when prices.isNotEmpty)
+                  _buildEnteredPricesCard(prices, isDark),
+
+                const SizedBox(height: 6),
+
+                // 포함 관리비 및 실거주 정보 블록
+                if (!b.isCampus) ...[
 
                   // 기숙사 비교 카드
-                  if (s.hasData && s.medianMonthlyTotal != null) ...[
+                  if (s.hasData && s.avgMonthlyTotal != null) ...[
                     const SizedBox(height: 12),
                     _buildDormComparisonCard(s, isDark),
                   ],
@@ -703,16 +797,11 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: _already ? null : _openForm,
-                      icon: Icon(
-                        _already
-                            ? Icons.check_rounded
-                            : Icons.add_comment_outlined,
-                        size: 18,
-                      ),
+                      onPressed: _openForm,
+                      icon: const Icon(Icons.add_comment_outlined, size: 18),
                       label: Text(
                         _already
-                            ? '이미 제보함'
+                            ? '다른 방 시세 알려주기'
                             : known == null
                             ? '이 건물 이름·시세 알려주기'
                             : '내가 아는 시세·후기 알려주기',
@@ -762,139 +851,599 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _distBadge(IconData icon, String text, bool isDark) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF252528) : const Color(0xFFF2F2F7),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 14,
-              color: isDark ? Colors.white60 : Colors.black54,
-            ),
-            const SizedBox(width: 5),
-            Expanded(
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white70 : Colors.black87,
-                  fontFeatures: KnueTokens.tabularFigures,
+              // 하단 고정 전화/문자 퀵 액션 플로팅 바 (Glassmorphism Blur)
+              if (!b.isCampus)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildBottomQuickActionBar(isDark),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _priceBlock(HousingSummary s, bool isDark) {
-    if (!s.hasData) {
-      return Container(
+  /// 하단 고정 전화/문자 퀵 액션 플로팅 바 (Glassmorphism Blur)
+  Widget _infoCard({required bool isDark, required Widget child}) => Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 18),
+        margin: const EdgeInsets.only(top: 10),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
+          color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF7F8FA),
           borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06)),
         ),
-        child: Column(
-          children: [
-            Icon(
-              Icons.help_outline_rounded,
-              size: 26,
-              color: isDark ? Colors.white24 : Colors.black26,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '아직 제보가 없어요',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white54 : Colors.black54,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              '살아봤다면 아래에서 알려주세요',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: isDark ? Colors.white38 : Colors.black38,
-              ),
-            ),
-          ],
-        ),
+        child: child,
       );
-    }
 
-    final d = s.medianDeposit;
-    final m = s.medianMonthlyTotal ?? s.medianRent;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+  /// 학생 제보로 모은 이 집의 시세와 조건. 없는 건 지어내지 않고 비워 둔다.
+  Widget _buildConditionsCard(HousingSummary s, bool isDark) {
+    final fg = isDark ? Colors.white : Colors.black87;
+    final sub = isDark ? Colors.white54 : Colors.black54;
+    // 방 구조별 시세(학생 제보). 개발자 확인 시세는 아래 따로 보여준다.
+    final points = housingPricePoints(s, null);
+    // 아파트 전세(시세 조사). 단지 어느 동을 눌러도 보인다.
+    final edited = widget.edited;
+    final jeonse = housingJeonseFor(
+      (edited?.isNamed ?? false) ? edited!.name : (widget.known?.name ?? widget.building.officialName),
+    );
+
+    Widget chipRow(String title, List<String> items, Color color) => Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sub)),
+              const SizedBox(height: 5),
+              Wrap(
+                spacing: 5,
+                runSpacing: 5,
+                children: [
+                  for (final x in items)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: isDark ? 0.2 : 0.1),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(x, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+
+    return _infoCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _priceItem('보증금', d == null ? '-' : '$d만원', isDark),
-          Container(
-            width: 1,
-            height: 28,
-            color: isDark ? Colors.white12 : Colors.black12,
+          Row(
+            children: [
+              Text('시세·조건', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: fg)),
+              const SizedBox(width: 6),
+              if (s.hasData)
+                Text('${s.sourceLabel}${s.isThin ? ' · 참고용' : ''}', style: TextStyle(fontSize: 11.5, color: sub)),
+              const Spacer(),
+              TextButton(
+                onPressed: _openForm,
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                child: const Text('제보하기', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+              ),
+            ],
           ),
-          _priceItem('월 부담', m == null ? '-' : '$m만원', isDark),
-          Container(
-            width: 1,
-            height: 28,
-            color: isDark ? Colors.white12 : Colors.black12,
-          ),
-          _priceItem('제보', '${s.reportCount}건', isDark),
+          if (points.isEmpty && jeonse.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '아직 시세 제보가 없어요. 살고 있거나 계약해 봤다면 알려 주세요.',
+                style: TextStyle(fontSize: 12.5, height: 1.4, color: sub),
+              ),
+            )
+          else ...[
+            if (points.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text('방 구조별 평균 (만원)', style: TextStyle(fontSize: 11.5, color: sub)),
+              ),
+            for (final p in points)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 64,
+                      child: Text(
+                        p.roomType?.label ?? '구조 모름',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: sub),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '보증금 ${p.deposit} · 월세 ${p.monthlyRent}'
+                        '${p.maintenanceKnown ? ' · 관리비 ${p.monthlyTotal - p.monthlyRent}' : ''}',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: fg,
+                          fontFeatures: KnueTokens.tabularFigures,
+                        ),
+                      ),
+                    ),
+                    if (s.roomPricingMap[p.roomType]?.reportCount case final n?)
+                      Text('$n건', style: TextStyle(fontSize: 11.5, color: sub)),
+                  ],
+                ),
+              ),
+          ],
+          for (final j in jeonse)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 64,
+                    child: Text('전세', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: sub)),
+                  ),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        text: '보증금 ${j.deposit}',
+                        children: [
+                          if (j.note != null)
+                            TextSpan(
+                              text: '  ${j.note}',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: sub),
+                            ),
+                        ],
+                      ),
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: fg,
+                        fontFeatures: KnueTokens.tabularFigures,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (s.reports.length > 1) _buildAllReports(s, isDark),
+          if (s.commonUtilities.isNotEmpty)
+            chipRow('관리비에 포함', s.commonUtilities.toList(), isDark ? Colors.tealAccent : Colors.teal.shade700),
+          if (s.topFeatures.isNotEmpty) chipRow('좋은 점', s.topFeatures, const Color(0xFF10B981)),
+          if (s.topDrawbacks.isNotEmpty) chipRow('아쉬운 점', s.topDrawbacks, const Color(0xFFEF4444)),
         ],
       ),
     );
   }
 
-  Widget _priceItem(String label, String value, bool isDark) => Column(
-    children: [
-      Text(
-        label,
-        style: TextStyle(
-          fontSize: 11.5,
-          color: isDark ? Colors.white54 : Colors.black54,
+  /// 평균이 나온 제보 하나하나. 같은 건물도 방마다 값이 달라 겹치는 제보를
+  /// 모두 남기므로, 어떤 값들의 평균인지 펼쳐 볼 수 있게 한다.
+  Widget _buildAllReports(HousingSummary s, bool isDark) {
+    final fg = isDark ? Colors.white70 : Colors.black87;
+    final sub = isDark ? Colors.white38 : Colors.black45;
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 4),
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        title: Text(
+          '제보 전체 보기 (${s.reports.length}건)',
+          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: fg),
+        ),
+        children: [
+          for (final r in s.reports)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 56,
+                    child: Text(r.roomType?.label ?? '구조 모름', style: TextStyle(fontSize: 12, color: sub)),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '${r.deposit} / ${r.monthlyRent}'
+                      '${r.maintenanceFee != null ? ' · 관리비 ${r.maintenanceFee}' : ''}',
+                      style: TextStyle(fontSize: 12.5, color: fg, fontFeatures: KnueTokens.tabularFigures),
+                    ),
+                  ),
+                  Text(
+                    r.survey
+                        ? '시세 조사'
+                        : '${r.reportedAt.year}.${r.reportedAt.month.toString().padLeft(2, '0')}',
+                    style: TextStyle(fontSize: 11, color: sub),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 교내 건물 안내: 설명과 층별 호실(층을 누르면 펼친다).
+  Widget _buildCampusInfoCard(BuildingData info, bool isDark) {
+    final fg = isDark ? Colors.white : Colors.black87;
+    final sub = isDark ? Colors.white60 : Colors.black54;
+    final floors = [for (final f in info.floors) if (f.rooms.isNotEmpty) f];
+    return _infoCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.school_rounded, size: 18, color: Color(0xFF3F51B5)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '건물 안내',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: fg),
+                ),
+              ),
+            ],
+          ),
+          if (info.description.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(info.description, style: TextStyle(fontSize: 13, height: 1.4, color: sub)),
+          ],
+          if (floors.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            for (final f in floors)
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(bottom: 8),
+                  dense: true,
+                  title: Text(
+                    '${floorLabel(f.floor)} · ${f.rooms.length}곳',
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: fg),
+                  ),
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final r in f.rooms)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white10 : Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                              ),
+                              child: Text(r, style: TextStyle(fontSize: 12, color: fg)),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 상가 건물 안의 가게 목록.
+  Widget _buildShopsCard(List<HousingShop> shops, bool isDark) {
+    return _infoCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.storefront_rounded, size: 18, color: Color(0xFFFF9800)),
+              const SizedBox(width: 6),
+              Text(
+                '이 건물의 가게 ${shops.length}곳',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: isDark ? Colors.white : Colors.black87),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final shop in shops)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      shop.name,
+                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87),
+                    ),
+                  ),
+                  if (shop.detail.isNotEmpty)
+                    Text(shop.detail, style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black45)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 개발자가 직접 입력한 시세. 최근 3건만 보이고, 더 있으면 [전체보기].
+  Widget _buildEnteredPricesCard(List<HousingPriceEntry> prices, bool isDark) {
+    final sorted = sortedPriceEntries(prices);
+    const preview = 3;
+    return _infoCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.payments_outlined, size: 18, color: Color(0xFF03C75A)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '확인된 시세 ${sorted.length}건',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: isDark ? Colors.white : Colors.black87),
+                ),
+              ),
+              if (sorted.length > preview)
+                TextButton(
+                  onPressed: () => _showAllPrices(sorted, isDark),
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                  child: const Text('전체보기', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          for (final p in sorted.take(preview)) _priceRow(p, isDark),
+        ],
+      ),
+    );
+  }
+
+  Widget _priceRow(HousingPriceEntry p, bool isDark) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${p.priceText} 만원',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : Colors.black87,
+                fontFeatures: KnueTokens.tabularFigures,
+              ),
+            ),
+            if (p.detail.isNotEmpty)
+              Text(p.detail, style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black45)),
+          ],
+        ),
+      );
+
+  void _showAllPrices(List<HousingPriceEntry> sorted, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.92,
+        builder: (ctx, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '확인된 시세 전체 (${sorted.length}건)',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: isDark ? Colors.white : Colors.black87),
+            ),
+            const SizedBox(height: 8),
+            for (final p in sorted) ...[
+              _priceRow(p, isDark),
+              Divider(height: 10, color: isDark ? Colors.white10 : Colors.black12),
+            ],
+          ],
         ),
       ),
-      const SizedBox(height: 3),
-      Text(
-        value,
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          color: isDark ? Colors.white : Colors.black87,
-          fontFeatures: KnueTokens.tabularFigures,
+    );
+  }
+
+  Widget _buildBottomQuickActionBar(bool isDark) {
+    final phones = _effectivePhones;
+    final primaryPhone = phones.isNotEmpty ? phones.first : null;
+
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            10,
+            16,
+            MediaQuery.of(context).padding.bottom + 8,
+          ),
+          decoration: BoxDecoration(
+            color: isDark
+                ? const Color(0xFF161618).withValues(alpha: 0.86)
+                : Colors.white.withValues(alpha: 0.88),
+            border: Border(
+              top: BorderSide(
+                color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08),
+                width: 0.8,
+              ),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, -3),
+              ),
+            ],
+          ),
+          child: phones.isEmpty
+              ? Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _showSubmitPhoneDialog(),
+                        icon: const Icon(Icons.add_call, size: 16),
+                        label: const Text('외벽 임대 연락처 제보하기'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF007AFF),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    // 전화 걸기 버튼 (복수 번호 시 모달 선택)
+                    Expanded(
+                      flex: 1,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          if (phones.length == 1) {
+                            _callLandlord(primaryPhone!);
+                          } else {
+                            _showCallSelectModal(phones);
+                          }
+                        },
+                        icon: const Icon(Icons.phone_in_talk_rounded, size: 16, color: Color(0xFF10B981)),
+                        label: Text(
+                          phones.length > 1 ? '전화 (2개)' : '집주인 전화',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.5),
+                            width: 1.2,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // 문자 문의하기 버튼 (자동 템플릿 연동)
+                    Expanded(
+                      flex: 1,
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          _showInquiryTemplateModal(primaryPhone, roleTitle: '집주인');
+                        },
+                        icon: const Icon(Icons.sms_outlined, size: 16),
+                        label: const Text(
+                          '직거래 문자',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF007AFF),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
-    ],
-  );
+    );
+  }
+
+  void _showCallSelectModal(List<String> phones) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        decoration: BoxDecoration(
+          color: widget.isDark ? const Color(0xFF1E1E22) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: widget.isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const Text(
+              '통화할 연락처 선택',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            ...phones.asMap().entries.map((e) {
+              final idx = e.key;
+              final p = e.value;
+              final role = idx == 0 ? '집주인 (임대인)' : '관리인 (사모님)';
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF10B981).withValues(alpha: 0.15),
+                  child: const Icon(Icons.phone_rounded, color: Color(0xFF10B981), size: 18),
+                ),
+                title: Text('$role · $p', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle: const Text('터치 시 바로 통화 앱으로 연결됩니다', style: TextStyle(fontSize: 11)),
+                trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _callLandlord(p);
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
 
   bool _compareIncludeMeals = false;
 
   Widget _buildDormComparisonCard(HousingSummary s, bool isDark) {
     final dorm = kDormCosts[_dormIndex];
-    final monthly = s.medianMonthlyTotal ?? s.medianRent;
+    final monthly = s.avgMonthlyTotal ?? s.avgRent;
     if (monthly == null) return const SizedBox.shrink();
 
     final roomCost = _compareIncludeMeals ? (monthly + dorm.monthlyMeal) : monthly;
@@ -1108,15 +1657,14 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
   }
 
   Widget _buildLandlordContactCard(bool isDark) {
-    final phone = _effectivePhone;
-    final hasPhone = phone != null && phone.isNotEmpty;
+    final phones = _effectivePhones;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E242B) : const Color(0xFFF0F7FF),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: const Color(0xFF007AFF).withValues(alpha: isDark ? 0.35 : 0.25),
           width: 1.2,
@@ -1133,205 +1681,206 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
                   color: const Color(0xFF007AFF).withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.apartment_rounded, color: Color(0xFF007AFF), size: 16),
+                child: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF007AFF), size: 16),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      hasPhone ? '임대 문의처 (외벽 현수막/관리인)' : '임대 문의처 번호 없음',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          '임대 문의 연락처',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF007AFF).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            phones.isNotEmpty ? '${phones.length}개 번호 제공' : '외벽 번호 제보',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF007AFF),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
-                      hasPhone ? phone : '건물 외벽 현수막 번호를 제보해주세요',
+                      phones.isNotEmpty
+                          ? '외벽 현수막/관리인 직거래 문의 번호입니다.'
+                          : '외벽 현수막이나 출입문에 적힌 문의 번호를 등록해주세요.',
                       style: TextStyle(
-                        fontSize: 12,
-                        color: hasPhone
-                            ? (isDark ? Colors.lightBlueAccent : const Color(0xFF0056B3))
-                            : (isDark ? Colors.white54 : Colors.black45),
-                        fontWeight: hasPhone ? FontWeight.w800 : FontWeight.normal,
+                        fontSize: 11,
+                        color: isDark ? Colors.white60 : Colors.black54,
                       ),
                     ),
                   ],
                 ),
               ),
+              InkWell(
+                onTap: () => _showSubmitPhoneDialog(
+                  initialPhone1: phones.isNotEmpty ? phones[0] : null,
+                  initialPhone2: phones.length > 1 ? phones[1] : null,
+                ),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    phones.isNotEmpty ? '수정/제보' : '번호 등록',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
-          if (hasPhone) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _callLandlord(phone),
-                    icon: const Icon(Icons.phone_rounded, size: 15),
-                    label: const Text('전화 걸기', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
+
+          if (phones.isNotEmpty) ...[
+            // 최대 2개의 번호 (집주인 및 관리인/비상 연락처)
+            ...List.generate(phones.length, (idx) {
+              final phone = phones[idx];
+              final roleTitle = idx == 0 ? '집주인 (임대인)' : '관리인 / 비상 연락처';
+              final roleIcon = idx == 0 ? Icons.person_rounded : Icons.support_agent_rounded;
+
+              return Container(
+                margin: EdgeInsets.only(bottom: idx < phones.length - 1 ? 8 : 0),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF252C35) : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08),
+                    width: 0.8,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _showInquiryTemplateModal(phone),
-                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
-                    label: const Text('직거래 문자', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF007AFF),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                child: Row(
+                  children: [
+                    Icon(roleIcon, size: 15, color: const Color(0xFF007AFF)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            roleTitle,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                            ),
+                          ),
+                          Text(
+                            phone,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.lightBlueAccent : const Color(0xFF0056B3),
+                              letterSpacing: 0.3,
+                              fontFeatures: KnueTokens.tabularFigures,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    // 복사 버튼
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, size: 15),
+                      tooltip: '번호 복사',
+                      constraints: const BoxConstraints(),
+                      padding: const EdgeInsets.all(5),
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: phone));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$roleTitle 번호가 복사되었습니다: $phone')),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 2),
+                    // 문자 버튼
+                    IconButton(
+                      icon: const Icon(Icons.sms_outlined, size: 16, color: Color(0xFF007AFF)),
+                      tooltip: '직거래 문의 문자',
+                      constraints: const BoxConstraints(),
+                      padding: const EdgeInsets.all(5),
+                      onPressed: () => _showInquiryTemplateModal(phone, roleTitle: roleTitle),
+                    ),
+                    const SizedBox(width: 4),
+                    // 전화 걸기 버튼
+                    FilledButton.icon(
+                      onPressed: () => _callLandlord(phone),
+                      icon: const Icon(Icons.phone_rounded, size: 12),
+                      label: const Text('통화', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            // 번호가 1개만 있을 때 관리인/사모님 2번째 연락처 추가 권장
+            if (phones.length == 1) ...[
+              const SizedBox(height: 6),
+              InkWell(
+                onTap: () => _showSubmitPhoneDialog(initialPhone1: phones[0]),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.add_circle_outline_rounded, size: 12, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        '관리인/사모님 2번째 연락처 추가 제보하기 +',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: isDark ? Colors.white60 : Colors.black54,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ] else ...[
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: _showSubmitPhoneDialog,
+                onPressed: () => _showSubmitPhoneDialog(),
                 icon: const Icon(Icons.add_call, size: 15),
-                label: const Text('외벽 임대 문의 번호 제보하기', style: TextStyle(fontSize: 12)),
+                label: const Text('외벽 임대 문의 번호 제보하기 (보통 2개)', style: TextStyle(fontSize: 12)),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 9),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProsAndConsCard(HousingSummary s, bool isDark) {
-    final hasPros = s.topFeatures.isNotEmpty;
-    final hasCons = s.topDrawbacks.isNotEmpty;
-
-    if (!hasPros && !hasCons) return const SizedBox.shrink();
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF202024) : const Color(0xFFF9F9FB),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text('⚖️ ', style: TextStyle(fontSize: 14)),
-              Text(
-                '학우들이 꼽은 솔직 장단점 요약',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          if (hasPros) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(Icons.thumb_up_alt_rounded, size: 13, color: Color(0xFF10B981)),
-                const SizedBox(width: 5),
-                Text(
-                  '장점 & 매력 포인트',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: s.topFeatures.map((f) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.18 : 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                      width: 0.7,
-                    ),
-                  ),
-                  child: Text(
-                    '✓ $f',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF065F46),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-          if (hasCons) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFEF4444)),
-                const SizedBox(width: 5),
-                Text(
-                  '주의점 & 아쉬운 점 (계약 전 꼭 확인!)',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: s.topDrawbacks.map((d) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444).withValues(alpha: isDark ? 0.18 : 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: const Color(0xFFEF4444).withValues(alpha: 0.3),
-                      width: 0.7,
-                    ),
-                  ),
-                  child: Text(
-                    '⚠️ $d',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B),
-                    ),
-                  ),
-                );
-              }).toList(),
             ),
           ],
         ],

@@ -69,9 +69,9 @@ class _SponsorAdminScreenState extends State<SponsorAdminScreen> {
       _loadSponsors();
     } else if (result == AdminUnlockResult.wrongPassword) {
       _passwordController.clear();
-      showToast(context, "비밀번호가 일치하지 않습니다");
+      showToast(context, result.message);
     } else {
-      showToast(context, "확인에 실패했습니다. 연결을 확인해주세요");
+      showToast(context, result.message);
     }
   }
 

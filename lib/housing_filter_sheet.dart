@@ -14,11 +14,15 @@ class HousingFilterSheet extends StatefulWidget {
   /// 지금 조건으로 몇 곳이 잡히는지 세어 주는 콜백.
   final int Function(HousingFilter) countMatches;
 
+  /// 시세가 없어 판단할 수 없는 원룸이 몇 곳인지.
+  final int Function(HousingFilter)? countUnknown;
+
   const HousingFilterSheet({
     super.key,
     required this.initial,
     required this.isDark,
     required this.countMatches,
+    this.countUnknown,
   });
 
   @override
@@ -55,6 +59,7 @@ class _HousingFilterSheetState extends State<HousingFilterSheet> {
             : int.tryParse(_monthly.text.trim()),
         includeMaintenance: _f.includeMaintenance,
         requiredFeatures: _f.requiredFeatures,
+        includeUnknown: _f.includeUnknown,
       );
     });
   }
@@ -64,6 +69,7 @@ class _HousingFilterSheetState extends State<HousingFilterSheet> {
     final isDark = widget.isDark;
     final sub = isDark ? Colors.white54 : Colors.black54;
     final count = widget.countMatches(_f);
+    final unknown = widget.countUnknown?.call(_f) ?? 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -106,7 +112,7 @@ class _HousingFilterSheetState extends State<HousingFilterSheet> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "학생들이 남긴 제보를 기준으로 걸러요.",
+                  "학생 제보와 확인된 시세를 방마다 비교해요.",
                   style: TextStyle(fontSize: 12, color: sub),
                 ),
                 const SizedBox(height: 18),
@@ -208,7 +214,21 @@ class _HousingFilterSheetState extends State<HousingFilterSheet> {
                     );
                   }).toList(),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
+
+                // 시세가 적은 동안엔 이걸 켜야 후보가 보인다.
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: _f.includeUnknown,
+                  onChanged: (v) => setState(() => _f = _f.copyWith(includeUnknown: v)),
+                  title: const Text("시세 모르는 원룸도 보기", style: TextStyle(fontSize: 13)),
+                  subtitle: Text(
+                    unknown > 0 ? "시세·정보가 없어 비교 못 한 원룸 $unknown곳" : "비교 못 한 원룸이 없어요",
+                    style: TextStyle(fontSize: 11, color: sub),
+                  ),
+                ),
+                const SizedBox(height: 12),
 
                 Row(
                   children: [

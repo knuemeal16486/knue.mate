@@ -563,6 +563,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         _buildNoticeInsetGroup(color, isDark),
+                        const SizedBox(height: 22),
+
+                        // 6. 자취방 시세 제보 독려 카드
+                        KnueSectionHeader(
+                          title: '🏠 자취방 시세 제보',
+                          actionText: '지도 열기',
+                          actionColor: color,
+                          onAction: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HousingScreen())),
+                        ),
+                        _buildHousingCurationCard(color, isDark),
                       ],
                     ),
                   ),
@@ -1114,7 +1124,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.phone_in_talk_rounded,
               tint: KnueTokens.categoryColor('교직원 연락처', isDark),
               label: "연락처",
-              caption: "교직원",
+              caption: "교직원·과사무실",
               isDark: isDark,
               onTap: () => Navigator.push(
                 context,
@@ -1162,13 +1172,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 1),
-          Text(
-            caption,
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w500,
-              color: KnueTokens.caption(isDark),
-              fontFeatures: KnueTokens.tabularFigures,
+          // 긴 캡션("교직원·과사무실")도 좁은 폰에서 두 줄로 접히지 않고 칸에
+          // 맞게 한 줄로 줄어들게 한다 — 접히면 옆 버튼들과 높이가 어긋난다.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              caption,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w500,
+                color: KnueTokens.caption(isDark),
+                fontFeatures: KnueTokens.tabularFigures,
+              ),
             ),
           ),
         ],
@@ -1670,6 +1686,158 @@ class _HomeScreenState extends State<HomeScreen> {
     if (left == 0) return "D-DAY";
     return left > 0 ? "D-$left" : "D+${-left}";
   }
+
+  // -----------------------------------------------------------------------
+  // 6. 자취방 시세 제보 독려 카드
+  // -----------------------------------------------------------------------
+
+  Widget _buildHousingCurationCard(Color themeClr, bool isDark) {
+    final cardColor = themeClr;
+
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HousingScreen())),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              cardColor.withValues(alpha: isDark ? 0.25 : 0.12),
+              cardColor.withValues(alpha: isDark ? 0.08 : 0.03),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: cardColor.withValues(alpha: isDark ? 0.35 : 0.22),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: cardColor.withValues(alpha: isDark ? 0.25 : 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Text('📢', style: TextStyle(fontSize: 24)),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.25 : 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          '익명 보장 · 30초 완료',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF10B981),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '학우 참여 프로젝트',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '살고 계신 자취방 시세를 알려주세요!',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : Colors.black87,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '학우님의 제보 하나가 다음 학기 집을 구하는 동기와 후배들에게 소중한 나침반이 됩니다. 원룸/1.5룸/2룸 실제 보증금·월세와 외벽 연락처를 함께 공유해주세요 🤝',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: cardColor.withValues(alpha: 0.35),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.edit_note_rounded, size: 16, color: Colors.white),
+                            SizedBox(width: 5),
+                            Text(
+                              '시세 제보하러 가기',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '지도에서 건물 터치 ›',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 }
 
 // ===========================================================================
@@ -1749,4 +1917,5 @@ class _AppleErrorRetry extends StatelessWidget {
       ),
     );
   }
+
 }

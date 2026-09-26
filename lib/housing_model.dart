@@ -13,7 +13,15 @@ enum HousingZone {
   dreamVilla('드림빌라·만광', Color(0xFFFB8C00)),
   dorm('기숙사', Color(0xFF00897B)),
   backGate('후문', Color(0xFFEC407A)),
-  darak('다락탑연리', Color(0xFF26A69A));
+  darak('다락탑연리', Color(0xFF26A69A)),
+
+  /// 원룸이 아니라 교내 건물. 교내 건물 정보를 고칠 때 원룸 구역 대신 고른다.
+  /// 원룸 구역 칩(지도 위 필터)에는 나오지 않는다.
+  campus('캠퍼스 시설', Color(0xFF3F51B5));
+
+  /// 지도 위 구역 칩처럼 "원룸 구역"만 보여줄 곳.
+  static List<HousingZone> get housingZones =>
+      [for (final z in values) if (z != campus) z];
 
   final String label;
   final Color color;
@@ -29,6 +37,39 @@ enum HousingZone {
 /// 월탄3길이 사실상 원룸촌 본거리다 — 원룸으로 볼 만한 건물 85동 중
 /// 54동(64%)이 이 길에 있다. 초록으로 칠해 그 덩어리가 한눈에 잡히게 한다.
 /// 다른 길도 칠하려면 여기 한 줄씩 넣으면 된다.
+/// 개발자 모드에서 건물에 칠하는 색. 구역별로 나눠 칠할 수 있게 색상환을
+/// 따라 고르게 놓았다(진한 색 옆에 옅은 색을 둬 비슷한 구역끼리 묶기 좋게).
+/// 건물 추가·정보 편집·칠하기가 모두 이 목록을 쓴다.
+const List<Color> kHousingPalette = [
+  Color(0xFFE53935), // 레드
+  Color(0xFFE91E63), // 핑크
+  Color(0xFFF48FB1), // 연분홍
+  Color(0xFF9C27B0), // 퍼플
+  Color(0xFFB39DDB), // 라벤더
+  Color(0xFF3F51B5), // 인디고
+  Color(0xFF2196F3), // 블루
+  Color(0xFF90CAF9), // 하늘
+  Color(0xFF00BCD4), // 시안
+  Color(0xFF009688), // 틸
+  Color(0xFF03C75A), // 네이버 그린
+  Color(0xFF8BC34A), // 연두
+  Color(0xFFCDDC39), // 라임
+  Color(0xFFFFEB3B), // 노랑
+  Color(0xFFFFC107), // 앰버
+  Color(0xFFFF9800), // 오렌지
+  Color(0xFFFF5722), // 딥오렌지
+  Color(0xFFBCAAA4), // 베이지
+  Color(0xFF795548), // 브라운
+  Color(0xFF607D8B), // 블루그레이
+  Color(0xFF9E9E9E), // 그레이
+  Color(0xFF424242), // 다크 차콜
+  Color(0xFFFFFFFF), // 흰색
+];
+
+/// 색 견본 위 체크 표시 색. 노랑·흰색처럼 밝은 색 위에 흰 체크를 얹으면 안 보인다.
+Color paletteCheckColor(Color c) =>
+    c.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
+
 const Map<String, Color> kHousingRoadColors = {
   '월탄3길': Color(0xFF7DCB8E),
 };
@@ -169,6 +210,65 @@ final Map<String, OneRoomName> kOneRoomNameById = {
   for (final n in kOneRoomNames) n.id: n,
 };
 
+/// 이름 비교용으로 다듬는다. 띄어쓰기·괄호 설명·끝의 "동"·"빌"을 뗀다 —
+/// 개발자 모드에서 붙인 이름은 "어울림"(사전은 "어울림빌"), "청람드림빌 D"
+/// (사전은 "…D동"), "가온빌 (늘품)"처럼 조금씩 다르게 적힌다.
+String normalizeOneRoomName(String name) {
+  var t = name.replaceAll(RegExp(r'\(.*?\)'), '').replaceAll(RegExp(r'\s+'), '');
+  // 지도 데이터엔 "대현빌 A"·"둥지빌라"처럼 빌/빌라가 섞여 적혀 있다.
+  t = t.replaceAll('빌라', '빌');
+  if (t.length > 2 && t.endsWith('동')) t = t.substring(0, t.length - 1);
+  if (t.length > 2 && t.endsWith('빌')) t = t.substring(0, t.length - 1);
+  return t;
+}
+
+final Map<String, OneRoomName> _oneRoomByNormalizedName = {
+  for (final n in kOneRoomNames) normalizeOneRoomName(n.name): n,
+};
+
+/// 지도 데이터(tool/mapsrc/building_names.json)와 원룸 지도가 같은 건물을
+/// 다르게 부르는 경우. 번지·동 번호로 같은 건물임을 맞춰 봤다.
+const Map<String, String> _kOneRoomAliases = {
+  '프리하우스': '삼성프리하우스', // 월탄3길 11, 대현빌라 바로 옆
+  '서호e타운 101동': '서호아파트 101동',
+  '서호e타운 102동': '서호아파트 102동',
+};
+
+/// 사전 항목과 1:1로 맞출 수는 없지만 연도는 확실한 건물. 원룸 지도의
+/// 수정아파트는 "101-가·101-나·102동", 지도 데이터는 "101·102·103동"으로
+/// 동 번호 체계가 다르다. 다만 표의 세 동이 모두 1997년이라 연도는 같다.
+const Map<String, int> _kExtraBuiltYears = {
+  '태암수정아파트 101동': 1997,
+  '태암수정아파트 102동': 1997,
+  '태암수정아파트 103동': 1997,
+};
+
+final Map<String, String> _aliasByNormalizedName = {
+  for (final e in _kOneRoomAliases.entries) normalizeOneRoomName(e.key): e.value,
+};
+final Map<String, int> _extraYearByNormalizedName = {
+  for (final e in _kExtraBuiltYears.entries) normalizeOneRoomName(e.key): e.value,
+};
+
+/// 이름으로 원룸 사전을 찾는다. 순수 함수 — 테스트 대상.
+OneRoomName? oneRoomByName(String? name) {
+  if (name == null || name.trim().isEmpty) return null;
+  final key = normalizeOneRoomName(name);
+  final direct = _oneRoomByNormalizedName[key];
+  if (direct != null) return direct;
+  final alias = _aliasByNormalizedName[key];
+  return alias == null ? null : _oneRoomByNormalizedName[normalizeOneRoomName(alias)];
+}
+
+/// 이름으로 찾은 준공(사용승인) 연도. 출처: 충북 부동산정보조회 시스템
+/// (학생회 원룸 지도 2020.05). 수정 문서에 연도를 따로 적지 않았거나 이름이
+/// 지도 데이터에만 있는 건물도 연도가 뜨게 한다.
+int? builtYearByName(String? name) {
+  final found = oneRoomByName(name)?.builtYear;
+  if (found != null || name == null) return found;
+  return _extraYearByNormalizedName[normalizeOneRoomName(name)];
+}
+
 /// 기숙사 한 학기 비용. 자취 시세와 견줄 수 있게 월 단위로 환산해 둔다.
 ///
 /// 자취는 "월세 + 관리비"로 이야기하고 식비는 따로 치므로, 비교할 때는
@@ -232,11 +332,61 @@ const List<DormCost> kDormCosts = [
   ),
 ];
 
+// ── 지도 좌표계 ────────────────────────────────────────────────
+// 자취방 지도의 월드 좌표는 이 원점을 기준으로 한 평면 미터다. x는 동쪽,
+// y는 **남쪽**이 +다. tool/fetch_osm_roads.js·campus_traced.json과 같은
+// 원점·환산값이어야 GPS 위치와 위성영상이 도로·건물과 겹친다.
+const double kHousingOriginLon = 127.3544;
+const double kHousingOriginLat = 36.6092;
+const double _kMetersPerDegLat = 111320;
+final double _kMetersPerDegLon =
+    111320 * math.cos(kHousingOriginLat * math.pi / 180);
+
+/// 경위도 → 지도 월드 좌표(미터).
+Offset lonLatToHousingWorld(double lon, double lat) => Offset(
+      (lon - kHousingOriginLon) * _kMetersPerDegLon,
+      (kHousingOriginLat - lat) * _kMetersPerDegLat,
+    );
+
+/// 지도 월드 좌표(미터) → (경도, 위도).
+(double lon, double lat) housingWorldToLonLat(Offset w) => (
+      kHousingOriginLon + w.dx / _kMetersPerDegLon,
+      kHousingOriginLat - w.dy / _kMetersPerDegLat,
+    );
+
+/// 도보 등시선의 기준점. 캠퍼스 거점이거나 GPS로 받은 내 위치다.
+@immutable
+class IsochroneCenter {
+  final String label;
+  final Offset position;
+  const IsochroneCenter(this.label, this.position);
+
+  IsochroneCenter.landmark(CampusLandmark l) : this(l.label, landmarkPosition(l));
+
+  @override
+  bool operator ==(Object other) =>
+      other is IsochroneCenter && other.label == label && other.position == position;
+
+  @override
+  int get hashCode => Object.hash(label, position);
+}
+
+/// 개발자 모드에서 지도에 직접 찍은 거점 위치(housing_landmark.dart가 채운다).
+/// 있으면 [CampusLandmark.position]의 어림값 대신 쓴다 — 도보 거리·등시선이
+/// 모두 [landmarkPosition]을 거친다.
+final ValueNotifier<Map<CampusLandmark, Offset>> kPlacedLandmarkPositions =
+    ValueNotifier(const {});
+
+/// 거점의 실제 위치: 찍어 둔 게 있으면 그것, 없으면 코드의 어림값.
+Offset landmarkPosition(CampusLandmark l) =>
+    kPlacedLandmarkPositions.value[l] ?? l.position;
+
 /// 캠퍼스 주요 거점 위치 (단위: 미터).
 enum CampusLandmark {
   mainGate('정문', Offset(-20, 205)),
   library('도서관', Offset(365, 22)),
-  studentUnion('학생회관', Offset(499, 97));
+  studentUnion('학생회관', Offset(499, 97)),
+  topyeonStop('탑연삼거리 정류장', Offset(-220, 310));
 
   final String label;
   final Offset position;
@@ -246,8 +396,9 @@ enum CampusLandmark {
 /// 건물 중심점과 캠퍼스 거점 사이 도보 거리(미터).
 /// 실제 골목과 보행로는 직선보다 우회하므로 보행 계수(1.2)를 곱한다.
 int walkingDistanceMeters(Offset buildingCenter, CampusLandmark landmark) {
-  final dx = buildingCenter.dx - landmark.position.dx;
-  final dy = buildingCenter.dy - landmark.position.dy;
+  final p = landmarkPosition(landmark);
+  final dx = buildingCenter.dx - p.dx;
+  final dy = buildingCenter.dy - p.dy;
   final straight = math.sqrt(dx * dx + dy * dy);
   return (straight * 1.2).round();
 }

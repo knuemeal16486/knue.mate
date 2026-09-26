@@ -112,6 +112,20 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 개발자 모드에서 새로 그리거나 여러 동을 합친 건물의 모양.
+    // 규칙이 없어서 기본 거부에 걸렸고, 추가·병합이 화면에서만 되고
+    // 저장은 조용히 실패해 앱을 다시 켜면 사라졌다.
+    match /housing_custom_buildings/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 개발자 모드에서 자취방 지도에 찍는 버스정류장·정문·후문·쪽문 위치.
+    match /housing_landmarks/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── 자취방 시세 제보 ────────────────────────────────────────
     // 학생이 직접 남기므로 create는 studentWrite()까지만 요구한다.
     // 남의 제보를 고치거나 지우는 건 관리자만 — 시세는 여러 사람의 기록이

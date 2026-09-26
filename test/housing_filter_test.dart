@@ -21,31 +21,31 @@ HousingReport _r({
 
 void main() {
   group('HousingSummary 집계', () {
-    test('관리비는 적어 낸 제보만으로 중앙값을 낸다', () {
-      // null을 0으로 치면 중앙값이 아래로 끌려가 "관리비 싼 집"처럼 보인다.
+    test('관리비는 적어 낸 제보만으로 평균을 낸다', () {
+      // null을 0으로 치면 평균이 아래로 끌려가 "관리비 싼 집"처럼 보인다.
       final s = HousingSummary.from([
         _r(fee: 10),
         _r(fee: null),
         _r(fee: 10),
       ]);
-      expect(s.medianMaintenance, 10);
+      expect(s.avgMaintenance, 10);
     });
 
     test('아무도 관리비를 안 적었으면 null이고, 월 부담은 월세만', () {
       final s = HousingSummary.from([_r(rent: 35), _r(rent: 35)]);
-      expect(s.medianMaintenance, isNull);
-      expect(s.medianMonthlyTotal, 35);
+      expect(s.avgMaintenance, isNull);
+      expect(s.avgMonthlyTotal, 35);
     });
 
-    test('월 부담은 제보마다 더한 뒤 중앙값을 낸다', () {
+    test('월 부담은 제보마다 더한 뒤 평균을 낸다', () {
       final s = HousingSummary.from([_r(rent: 40, fee: 7), _r(rent: 40, fee: 7)]);
-      expect(s.medianMonthlyTotal, 47);
+      expect(s.avgMonthlyTotal, 47);
     });
 
-    test('두 중앙값을 더하지 않는다 — 모집단이 다르다', () {
-      // medianRent는 전체 제보에서, medianMaintenance는 관리비를 적어 낸
+    test('두 평균을 더하지 않는다 — 모집단이 다르다', () {
+      // avgRent는 전체 제보에서, avgMaintenance는 관리비를 적어 낸
       // 제보만에서 나온다. 더하면 5명 중 4명이 40을 내는 건물이 60으로
-      // 잡혀 "월 50 이하" 검색에서 빠졌다.
+      // 잡혀 "월 50 이하" 검색에서 빠졌다. 제보마다 더한 뒤 평균: 44.
       final s = HousingSummary.from([
         _r(rent: 40),
         _r(rent: 40),
@@ -53,12 +53,12 @@ void main() {
         _r(rent: 40),
         _r(rent: 40, fee: 20),
       ]);
-      expect(s.medianRent, 40);
-      expect(s.medianMaintenance, 20); // 적어 낸 건 한 건뿐
-      expect(s.medianMonthlyTotal, 40, reason: '40+20=60이 되면 안 된다');
+      expect(s.avgRent, 40);
+      expect(s.avgMaintenance, 20); // 적어 낸 건 한 건뿐
+      expect(s.avgMonthlyTotal, 44, reason: '40+20=60이 되면 안 된다');
     });
 
-    test('월 부담 중앙값으로 걸러진다', () {
+    test('월 부담 평균으로 걸러진다', () {
       final s = HousingSummary.from([
         _r(rent: 40),
         _r(rent: 40),
@@ -147,13 +147,13 @@ void main() {
     }) =>
         HousingSummary(
           reportCount: 3,
-          medianDeposit: deposit,
-          medianRent: rent,
-          medianMaintenance: fee,
-          // 제보가 전부 같은 값인 건물을 가정하므로 월 부담 중앙값도
+          avgDeposit: deposit,
+          avgRent: rent,
+          avgMaintenance: fee,
+          // 제보가 전부 같은 값인 건물을 가정하므로 월 부담 평균도
           // 월세+관리비다. 실제 집계는 HousingSummary.from이 제보별로
-          // 더한 뒤 중앙값을 낸다.
-          medianMonthlyTotal: rent == null ? null : rent + (fee ?? 0),
+          // 더한 뒤 평균을 낸다.
+          avgMonthlyTotal: rent == null ? null : rent + (fee ?? 0),
           roomTypes: types,
           allFeatures: features,
           topFeatures: features.toList(),

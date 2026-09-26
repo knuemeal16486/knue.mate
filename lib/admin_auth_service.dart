@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -155,9 +157,25 @@ class AdminAuthService {
       }
     }
     if (uid == null) return AdminUnlockResult.failed;
+    final ref = db.collection(grantCollection).doc(uid);
+
+    // 이 기기에 grant가 이미 있으면 그걸로 관리자다. 규칙이 grant 고쳐 쓰기
+    // (update)를 막아 두어서, 있는 문서에 다시 쓰면 permission-denied가 나고
+    // **맞는 비밀번호도 "틀렸다"로** 떨어졌다. 앱을 켤 때 권한 확인이 느린
+    // 네트워크 탓에 실패하면(isAdmin=false) 바로 이 상태가 된다.
+    try {
+      final existing = await ref.get().timeout(const Duration(seconds: 6));
+      if (existing.exists) {
+        isAdmin.value = true;
+        return AdminUnlockResult.ok;
+      }
+    } catch (e) {
+      // 확인을 못 했으면 아래 쓰기로 판단한다.
+      debugPrint('AdminAuthService.unlock 기존 grant 확인 실패: $e');
+    }
 
     try {
-      await db.collection(grantCollection).doc(uid).set({
+      await ref.set({
         // 규칙이 app_config/admin의 값과 대조한다. 이 문서는 읽기가 막혀
         // 있어서 저장된 값이 밖으로 새지 않는다.
         'token': password.trim(),
@@ -170,6 +188,11 @@ class AdminAuthService {
         return AdminUnlockResult.wrongPassword;
       }
       debugPrint('AdminAuthService.unlock 실패: $e');
+      // 무료 요금제(Spark)의 하루 쓰기 한도(2만 건)를 넘기면 이 코드가 온다.
+      if (e.code == 'resource-exhausted') return AdminUnlockResult.quotaExceeded;
+      return AdminUnlockResult.failed;
+    } on TimeoutException {
+      // 오프라인이면 쓰기가 서버 응답을 기다리다 여기로 온다.
       return AdminUnlockResult.failed;
     } catch (e) {
       debugPrint('AdminAuthService.unlock 실패: $e');
@@ -195,6 +218,18 @@ enum AdminUnlockResult {
   ok,
   /// 서버가 거부 — 비밀번호가 틀렸다.
   wrongPassword,
+  /// Firebase 하루 사용량 한도를 넘겼다. 한국 시각 오후 4~5시(태평양 자정)에
+  /// 풀린다.
+  quotaExceeded,
   /// 네트워크 등 다른 이유로 실패.
-  failed,
+  failed;
+
+  /// 실패를 사용자에게 알릴 문구. 예전엔 모든 실패가 "비밀번호가 일치하지
+  /// 않습니다"로 떠서 원인을 알 수 없었다.
+  String get message => switch (this) {
+        ok => '개발자 모드가 활성화되었습니다',
+        wrongPassword => '비밀번호가 일치하지 않습니다',
+        quotaExceeded => '오늘 Firebase 사용량 한도를 넘겨 확인할 수 없어요. 오후 4~5시 이후에 다시 시도해 주세요',
+        failed => '서버에 연결하지 못했어요. 네트워크를 확인해 주세요',
+      };
 }

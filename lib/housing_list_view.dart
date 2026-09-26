@@ -44,7 +44,7 @@ class HousingListView extends StatelessWidget {
 
   OneRoomName? _resolvedKnown(String buildingId) {
     final override = overrides[buildingId];
-    if (override != null) return override.toOneRoomName();
+    if (override != null && override.isNamed) return override.toOneRoomName();
     final oneRoomId = summaries[buildingId]?.oneRoomId;
     return oneRoomId == null ? null : kOneRoomNameById[oneRoomId];
   }
@@ -70,8 +70,8 @@ class HousingListView extends StatelessWidget {
 
       // "내 조건 찾기" 필터
       if (!filter.isEmpty) {
-        final s = summaries[b.id] ?? HousingSummary.empty;
-        if (!housingMatchesFilter(s, filter)) return false;
+        final v = evaluateHousingFilter(summaries[b.id], overrides[b.id], filter).verdict;
+        if (!housingPassesFilter(v, filter)) return false;
       }
 
       // 검색어 필터
@@ -239,7 +239,7 @@ class HousingListView extends StatelessWidget {
                     final distGate = walkingDistanceMeters(b.center, CampusLandmark.mainGate);
                     final distLib = walkingDistanceMeters(b.center, CampusLandmark.library);
 
-                    final monthly = s.medianMonthlyTotal ?? s.medianRent;
+                    final monthly = s.avgMonthlyTotal ?? s.avgRent;
 
                     return InkWell(
                       onTap: () => onTapBuilding(b),
@@ -269,11 +269,12 @@ class HousingListView extends StatelessWidget {
                             // 상단 줄: 구역 뱃지 + 이름 + (지도에서 보기 / 찜) 액션
                             Row(
                               children: [
-                                if (known != null) ...[
+                                // 구역 딱지는 "캠퍼스 시설"만.
+                                if (known != null && b.isCampus) ...[
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                                     decoration: BoxDecoration(
-                                      color: known.zone.color.withValues(alpha: isDark ? 0.22 : 0.12),
+                                      color: badgeZone(b, known).color.withValues(alpha: isDark ? 0.22 : 0.12),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Row(
@@ -283,17 +284,17 @@ class HousingListView extends StatelessWidget {
                                           width: 6,
                                           height: 6,
                                           decoration: BoxDecoration(
-                                            color: known.zone.color,
+                                            color: badgeZone(b, known).color,
                                             shape: BoxShape.circle,
                                           ),
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          known.zone.label,
+                                          badgeZone(b, known).label,
                                           style: TextStyle(
                                             fontSize: 10.5,
                                             fontWeight: FontWeight.w700,
-                                            color: known.zone.color,
+                                            color: badgeZone(b, known).color,
                                           ),
                                         ),
                                       ],
@@ -345,8 +346,9 @@ class HousingListView extends StatelessWidget {
                             Text(
                               [
                                 b.addressLabel,
-                                '지상 ${b.floors}층',
-                                if (known?.builtYear != null) '${known!.builtYear}년 준공',
+                                '지상 ${overrides[b.id]?.floors ?? b.floors}층',
+                                if (known?.builtYear ?? builtYearByName(b.officialName) case final year?)
+                                  '$year년 준공',
                               ].join(' · '),
                               style: TextStyle(
                                 fontSize: 11.5,
@@ -387,10 +389,10 @@ class HousingListView extends StatelessWidget {
                                         color: isDark ? Colors.white70 : Colors.black54,
                                       ),
                                     ),
-                                    if (s.medianDeposit != null) ...[
+                                    if (s.avgDeposit != null) ...[
                                       const SizedBox(width: 8),
                                       Text(
-                                        '/ 보증금 ${s.medianDeposit}만원',
+                                        '/ 보증금 ${s.avgDeposit}만원',
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
@@ -423,7 +425,7 @@ class HousingListView extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(5),
                                     ),
                                     child: Text(
-                                      s.hasData ? '제보 ${s.reportCount}건' : '첫 제보 필요',
+                                      s.hasData ? s.sourceLabel : '첫 제보 필요',
                                       style: TextStyle(
                                         fontSize: 10.5,
                                         fontWeight: FontWeight.w600,

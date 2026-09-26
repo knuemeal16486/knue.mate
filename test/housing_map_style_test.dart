@@ -34,10 +34,31 @@ void main() {
       expect(s.displayNames['a'], '엘리트빌');
     });
 
-    test('이름이 없으면 건물번호로 대신한다 — 도로명은 붙이지 않는다', () {
-      // "월탄3길 48"처럼 길게 달면 원룸촌에서 이름표끼리 크게 겹친다.
+    test('이름이 없으면 이름표를 달지 않는다 — 번지수 숫자로 채우지 않는다', () {
+      // 예전엔 "48"처럼 번지수를 대신 띄웠는데 숫자 마커가 지도를 어지럽혔다.
       final s = housingMapStyle([_b('a', road: '월탄3길', no: '48')]);
-      expect(s.displayNames['a'], '48');
+      expect(s.displayNames.containsKey('a'), isFalse);
+    });
+
+    test('관리자가 끈 건물은 이름이 있어도 이름표가 없다(색은 그대로)', () {
+      final s = housingMapStyle(
+        [_b('a', road: '월탄3길', no: '48', name: '엘리트빌')],
+        overrides: {
+          'a': const HousingBuildingOverride(
+            buildingId: 'a',
+            name: '',
+            zone: HousingZone.aroundCu,
+            hideLabel: true,
+          ),
+        },
+      );
+      expect(s.displayNames.containsKey('a'), isFalse);
+      expect(s.zoneColors.containsKey('a'), isTrue, reason: '월탄3길 도로 색');
+    });
+
+    test('이름표만 끈 문서도 저장했다 되읽힌다', () {
+      const o = HousingBuildingOverride(buildingId: 'a', name: '', zone: HousingZone.aroundCu, hideLabel: true);
+      expect(HousingBuildingOverride.fromMap('a', o.toFirestore())?.hideLabel, isTrue);
     });
 
     test('원룸이 아닌 작은 건물엔 이름표를 달지 않는다', () {
@@ -113,10 +134,11 @@ void main() {
 
     test('조건이 없으면 거르지 않는다', () {
       final s = housingMapStyle([
-        _b('a', road: '월탄3길', no: '1'),
-        _b('b', road: '월탄3길', no: '2'),
+        _b('a', road: '월탄3길', no: '1', name: '가집'),
+        _b('b', road: '월탄3길', no: '2', name: '나집'),
       ]);
       expect(s.displayNames.length, 2);
+      expect(s.zoneColors.length, 2);
     });
   });
 }

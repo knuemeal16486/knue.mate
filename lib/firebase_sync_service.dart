@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'building_data.dart';
 import 'offline_cache.dart';
 import 'meal_rating.dart';
@@ -14,7 +15,26 @@ import 'bus_model.dart';
 class FirebaseSyncService {
   static FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
+  /// 이 기기가 마지막으로 올린 건물 데이터의 지문.
+  static const String _uploadedHashKey = 'knue_buildings_uploaded_hash';
+
+  /// 문자열 지문(FNV-1a 32비트). String.hashCode는 실행마다 같다는 보장이
+  /// 없어 기기에 저장해 두고 비교하는 용도로는 못 쓴다. 순수 함수 — 테스트 대상.
+  static String contentFingerprint(String s) {
+    var h = 0x811c9dc5;
+    for (final c in s.codeUnits) {
+      h ^= c;
+      h = (h * 0x01000193) & 0xffffffff;
+    }
+    return h.toRadixString(16);
+  }
+
   /// [건물 정보] 로컬 JSON 데이터를 Firestore로 업로드합니다.
+  ///
+  /// ⚠️ 예전엔 **모든 기기가 앱을 켤 때마다** 16건을 다시 썼다. 무료
+  /// 요금제의 하루 쓰기 한도(2만 건)를 이것만으로 금방 먹어서, 한도가 차면
+  /// 관리자 편집까지 저장이 안 됐다. 이제 기기마다 데이터가 바뀌었을 때
+  /// 한 번만 올린다.
   static Future<void> uploadBuildingsToFirestore() async {
     try {
       if (Firebase.apps.isEmpty) {
@@ -24,6 +44,9 @@ class FirebaseSyncService {
       final String jsonString = await rootBundle.loadString(
         'assets/buildings/knue_buildings.json',
       );
+      final fingerprint = contentFingerprint(jsonString);
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_uploadedHashKey) == fingerprint) return;
       final dynamic decoded = json.decode(jsonString);
       final Map<String, dynamic> jsonData = Map<String, dynamic>.from(decoded);
       final List<dynamic> buildingsJson = jsonData['buildings'] ?? [];
@@ -44,10 +67,10 @@ class FirebaseSyncService {
         });
       }
 
-      await batch.commit().timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => debugPrint('FirebaseSyncService: batch.commit 타임아웃'),
-      );
+      // 서버가 받았을 때만 "올렸음"으로 적는다. 시간 안에 못 받으면 다음에
+      // 켤 때 다시 시도한다(TimeoutException → 아래 catch).
+      await batch.commit().timeout(const Duration(seconds: 10));
+      await prefs.setString(_uploadedHashKey, fingerprint);
       debugPrint('FirebaseSyncService: 건물 정보 ${buildingsJson.length}개 Batch 업로드 완료');
     } catch (e) {
       debugPrint('FirebaseSyncService: 건물 정보 업로드 실패: $e');

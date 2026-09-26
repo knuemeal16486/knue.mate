@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'housing_model.dart' show IsochroneCenter;
 import 'ui_utils.dart' show KnueTokens;
 
 /// 건물 용도 — 지붕 색이 여기서 갈린다.
@@ -59,7 +60,31 @@ class BaseBuilding {
     this.use,
   });
 
+  BaseBuilding copyWith({
+    String? id,
+    int? floors,
+    List<Offset>? ring,
+    String? officialName,
+    String? road,
+    String? buildingNo,
+    bool? isCampus,
+    int? mapNo,
+    BuildingUse? use,
+  }) =>
+      BaseBuilding(
+        id: id ?? this.id,
+        floors: floors ?? this.floors,
+        ring: ring ?? this.ring,
+        officialName: officialName ?? this.officialName,
+        road: road ?? this.road,
+        buildingNo: buildingNo ?? this.buildingNo,
+        isCampus: isCampus ?? this.isCampus,
+        mapNo: mapNo ?? this.mapNo,
+        use: use ?? this.use,
+      );
+
   String get addressLabel {
+    if (isCampus) return kCampusAddress;
     final parts = [
       if (road != null) road!,
       if (buildingNo != null && buildingNo!.isNotEmpty) buildingNo!,
@@ -701,27 +726,58 @@ class IsoElevationLabel {
   const IsoElevationLabel(this.text, this.screenPosition);
 }
 
+/// 교내 건물 주소. 캠퍼스 시설은 모두 한 지번이다.
+const String kCampusAddress = '태성탑연로 250';
+
 /// 360도 회전 2.5D 아이소메트릭 투영
 class IsoProjection {
   final double scale;
   final double floorHeight;
   final double rotation;
 
+  /// true면 바로 위에서 수직으로 내려다본 평면 시점(북쪽이 위). 높이(z)는
+  /// 무시해서 건물은 바닥 모양만, 언덕도 평평하게 보인다.
+  final bool topDown;
+
   const IsoProjection({
     this.scale = 2.0,
     this.floorHeight = 3.0,
     this.rotation = 0.0,
+    this.topDown = false,
   });
+
+  /// 평면 시점의 배율. 아이소메트릭 한 칸(대각선 방향 0.5·√2)과 비슷한 크기로
+  /// 맞춰 시점을 바꿔도 지도가 갑자기 커지거나 작아지지 않게 한다.
+  static const double _topDownK = 0.7071;
 
   Offset project(double x, double y, [double z = 0]) {
     final cosR = math.cos(rotation);
     final sinR = math.sin(rotation);
     final rx = x * cosR - y * sinR;
     final ry = x * sinR + y * cosR;
+    if (topDown) return Offset(rx * _topDownK * scale, ry * _topDownK * scale);
     return Offset(
       (rx - ry) * 0.5 * scale,
       (rx + ry) * 0.25 * scale - z * scale,
     );
+  }
+
+  /// 화면 2.5D 투영 좌표 (sx, sy) → 월드 지상 평면 좌표 (x, y) 역투영
+  Offset unproject(double sx, double sy, [double z = 0]) {
+    final double rx, ry;
+    if (topDown) {
+      rx = sx / (_topDownK * scale);
+      ry = sy / (_topDownK * scale);
+    } else {
+      final adjSy = sy + z * scale;
+      rx = (sx + 2 * adjSy) / scale;
+      ry = (2 * adjSy - sx) / scale;
+    }
+    final cosR = math.cos(rotation);
+    final sinR = math.sin(rotation);
+    final x = rx * cosR + ry * sinR;
+    final y = -rx * sinR + ry * cosR;
+    return Offset(x, y);
   }
 
   double heightOf(BaseBuilding b) => b.floors * floorHeight;
@@ -896,17 +952,58 @@ class IsoTerrain {
   );
 }
 
-class _Wall {
+class IsoWall {
   final Path path;
   final double depth;
   final bool facingLeft;
-  const _Wall(this.path, this.depth, this.facingLeft);
+
+  /// 이 벽에 난 창문들(자취방 건물만). 벽을 그린 **바로 뒤에** 칠해서, 뒤쪽
+  /// 벽의 창문은 앞쪽 벽이 자연스럽게 가린다.
+  final Path? windows;
+  const IsoWall(this.path, this.depth, this.facingLeft, [this.windows]);
+}
+
+/// 창문 색: 벽 색보다 아주 조금 밝게(명도 +0.06). 이미 아주 밝은 벽(흰 벽)은
+/// 더 밝힐 여지가 없으니 그만큼 어둡게 낸다. 순수 함수 — 테스트 대상.
+Color windowColorFor(Color wall) {
+  final hsl = HSLColor.fromColor(wall);
+  const step = 0.06;
+  final l = hsl.lightness + step <= 0.97 ? hsl.lightness + step : hsl.lightness - step;
+  return hsl.withLightness(l.clamp(0.0, 1.0)).toColor();
+}
+
+/// 벽 한 면의 창문 자리. [t0]~[t1]은 벽 모서리를 따라 0~1, [z0]~[z1]은 벽
+/// 아래에서 잰 높이(미터).
+typedef WallWindow = ({double t0, double t1, double z0, double z1});
+
+/// 길이 [length]m, [floors]층(한 층 [floorHeight]m) 벽에 낼 창문 자리.
+/// 순수 함수 — 테스트 대상.
+///
+/// 층마다 같은 간격으로 폭 2m 창문을 낸다. 층 높이의 25%~75% 자리에 두어
+/// 층 사이 벽이 보이게 하고, 3m보다 짧은 벽(모서리 조각)은 비워 둔다.
+/// (처음엔 1.1m 창을 2.6m마다 촘촘히 냈는데 작은 점이 빼곡해 징그러웠다 —
+/// 크게, 드문드문.)
+List<WallWindow> wallWindows(double length, int floors, double floorHeight) {
+  const width = 2.0, pitch = 5.0, minWall = 3.0;
+  if (length < minWall || floors < 1 || floorHeight <= 0) return const [];
+  final n = ((length - 1.0) / pitch).floor().clamp(1, 1000);
+  final half = width / 2 / length;
+  return [
+    for (var k = 0; k < floors; k++)
+      for (var i = 0; i < n; i++)
+        (
+          t0: (i + 0.5) / n - half,
+          t1: (i + 0.5) / n + half,
+          z0: k * floorHeight + floorHeight * 0.25,
+          z1: k * floorHeight + floorHeight * 0.75,
+        ),
+  ];
 }
 
 class IsoBuilding {
   final BaseBuilding building;
   final Path top;
-  final List<_Wall> walls;
+  final List<IsoWall> walls;
   final Path silhouette;
   final bool highlighted;
   final bool isOneRoom;
@@ -936,15 +1033,6 @@ Path _poly(List<Offset> pts) {
     path.lineTo(p.dx, p.dy);
   }
   return path..close();
-}
-
-Path _line(List<Offset> pts) {
-  if (pts.isEmpty) return Path();
-  final path = Path()..moveTo(pts.first.dx, pts.first.dy);
-  for (final p in pts.skip(1)) {
-    path.lineTo(p.dx, p.dy);
-  }
-  return path;
 }
 
 Path _dashPath(Path source, double dashLength, double gapLength) {
@@ -1014,116 +1102,21 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     forestCombined.addPath(_poly(projPts(pts)), Offset.zero);
   }
 
-  // 3D 지형 등고선 (5m 보조선, 10m 주등고선) 및 힐쉐이딩 생성
-  final contourLevels = CampusElevation.generateContourLevels();
+  // 사용자 요청: 등고선, 힐쉐이딩 및 경사도 표시 제거 (클린 지도 뷰)
   final contoursCombined = Path();
   final majorContours = Path();
   final elevationLabels = <IsoElevationLabel>[];
-
-  contourLevels.forEach((lvl, segs) {
-    final isMajor = lvl % 10 == 0;
-    final targetPath = isMajor ? majorContours : contoursCombined;
-    for (final seg in segs) {
-      if (seg.length < 2) continue;
-      final p1 = p.project(seg[0].dx, seg[0].dy);
-      final p2 = p.project(seg[1].dx, seg[1].dy);
-      targetPath.moveTo(p1.dx, p1.dy);
-      targetPath.lineTo(p2.dx, p2.dy);
-    }
-    // 주등고선(10m 단위)에 표고 텍스트 라벨 (정문 34m + 상대고도)
-    if (isMajor && segs.isNotEmpty && segs.length >= 3) {
-      final midSeg = segs[segs.length ~/ 2];
-      final pos = p.project(midSeg[0].dx, midSeg[0].dy);
-      elevationLabels.add(IsoElevationLabel('${lvl + 34}m', pos));
-    }
-  });
-
-  // 언덕 3D 힐쉐이딩 & 엠보싱 (청람동산·기숙사 능선·연수원 구릉지의 입체 양각/음영)
   final hillshadeShadowPath = Path();
   final hillshadeHighlightPath = Path();
-
-  // 1. 청람동산 주능선 (해발 82m 정상부 - 남동 사면 음영 / 북서 사면 하이라이트)
-  final chungramShadow = [
-    const Offset(620, -520),
-    const Offset(720, -540),
-    const Offset(780, -440),
-    const Offset(720, -380),
-    const Offset(620, -440),
-  ];
-  final chungramHighlight = [
-    const Offset(520, -620),
-    const Offset(640, -640),
-    const Offset(620, -520),
-    const Offset(480, -520),
-  ];
-  hillshadeShadowPath.addPath(_poly(projPts(chungramShadow)), Offset.zero);
-  hillshadeHighlightPath.addPath(_poly(projPts(chungramHighlight)), Offset.zero);
-
-  // 2. 기숙사 언덕 능선 (함덕당·다정관·다감관, 해발 62m 구릉지)
-  final dormShadow = [
-    const Offset(600, -320),
-    const Offset(710, -340),
-    const Offset(730, -220),
-    const Offset(630, -200),
-    const Offset(550, -250),
-  ];
-  final dormHighlight = [
-    const Offset(480, -380),
-    const Offset(600, -400),
-    const Offset(600, -320),
-    const Offset(460, -320),
-  ];
-  hillshadeShadowPath.addPath(_poly(projPts(dormShadow)), Offset.zero);
-  hillshadeHighlightPath.addPath(_poly(projPts(dormHighlight)), Offset.zero);
-
-  // 3. 연수원/서북 구릉지 (해발 58m)
-  final trainShadow = [
-    const Offset(220, -450),
-    const Offset(310, -430),
-    const Offset(320, -360),
-    const Offset(240, -340),
-    const Offset(160, -400),
-  ];
-  final trainHighlight = [
-    const Offset(120, -520),
-    const Offset(240, -500),
-    const Offset(220, -450),
-    const Offset(140, -460),
-  ];
-  hillshadeShadowPath.addPath(_poly(projPts(trainShadow)), Offset.zero);
-  hillshadeHighlightPath.addPath(_poly(projPts(trainHighlight)), Offset.zero);
-
-  // 언덕길·경사도 랜드마크 뱃지 투영
   final slopeMarkers = <MapEntry<CampusSlopeMarker, Offset>>[];
-  for (final marker in kCampusSlopeMarkers) {
-    final elev = CampusElevation.elevationAt(marker.position.dx, marker.position.dy);
-    final projected = p.project(marker.position.dx, marker.position.dy, elev * 0.45);
-    slopeMarkers.add(MapEntry(marker, projected));
-  }
 
   final parkingCombined = Path();
   for (final pts in terrain.parkingLots) {
     parkingCombined.addPath(_poly(projPts(pts)), Offset.zero);
   }
 
-  // 주차장 중심점 (네이버 지도 스타일 P 심볼 뱃지용)
+  // P 마크 제거: 빈 리스트 유지
   final parkingBadges = <Offset>[];
-  final allParkingPolys = [
-    ...terrain.traced.parking,
-    ...terrain.parkingLots,
-  ];
-  for (final poly in allParkingPolys) {
-    if (poly.length < 3) continue;
-    var sx = 0.0, sy = 0.0;
-    for (final pt in poly) {
-      sx += pt.dx;
-      sy += pt.dy;
-    }
-    final cx = sx / poly.length;
-    final cy = sy / poly.length;
-    final z = CampusElevation.elevationAt(cx, cy) * 0.45;
-    parkingBadges.add(p.project(cx, cy, z));
-  }
 
   // 네이버 지도 스타일 정갈한 3D 수목 (Soft Shadow, Trunk, Crisp Foliage)
   final treeShadows = Path();
@@ -1283,6 +1276,13 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
   );
 }
 
+/// 건물이 서 있는 지면 높이(언덕 고도). 지붕은 여기에 [IsoProjection.heightOf]를
+/// 더한 높이에 그린다.
+double buildingBaseZ(BaseBuilding b) {
+  final c = b.center;
+  return CampusElevation.elevationAt(c.dx, c.dy) * 0.45;
+}
+
 IsoBuilding buildIso(
   BaseBuilding b,
   IsoProjection p, {
@@ -1290,10 +1290,12 @@ IsoBuilding buildIso(
   bool isOneRoom = false,
   Color? zoneColor,
   String? displayName,
+  bool? windows,
+  bool labels = true,
 }) {
   final c = b.center;
   // 실제 언덕 지형 고도(Elevation)를 기저 z축으로 반영하여 언덕 위의 건물들이 입체적으로 솟아오름!
-  final baseZ = CampusElevation.elevationAt(c.dx, c.dy) * 0.45;
+  final baseZ = buildingBaseZ(b);
   final h = p.heightOf(b);
   final ring = b.ring;
 
@@ -1303,7 +1305,14 @@ IsoBuilding buildIso(
   final cosR = math.cos(p.rotation);
   final sinR = math.sin(p.rotation);
 
-  final walls = <_Wall>[];
+  // 창문: 기본은 자취방 건물만, [windows]로 건물마다 켜고 끈다(건물 편집의
+  // "창문 표시"). 위에서 보기는 높이가 없으니 뺀다. 층 높이는 지도에 그린
+  // 높이를 층수로 나눠, 지도 높이를 따로 준 건물도 맞게 나눈다.
+  final withWindows =
+      (windows ?? (isOneRoom && !b.isCampus)) && !p.topDown && b.floors >= 1;
+  final floorH = b.floors >= 1 ? h / b.floors : 0.0;
+
+  final walls = <IsoWall>[];
   for (var i = 0; i < ring.length; i++) {
     final j = (i + 1) % ring.length;
     final a = ring[i], c = ring[j];
@@ -1319,11 +1328,30 @@ IsoBuilding buildIso(
     final rdx = (dx * cosR - dy * sinR).abs();
     final rdy = (dx * sinR + dy * cosR).abs();
 
+    Path? windows;
+    if (withWindows) {
+      final spots = wallWindows((c - a).distance, b.floors, floorH);
+      if (spots.isNotEmpty) {
+        windows = Path();
+        Offset at(double t, double z) =>
+            p.project(a.dx + dx * t, a.dy + dy * t, baseZ + z);
+        for (final w in spots) {
+          windows.addPolygon([
+            at(w.t0, w.z1),
+            at(w.t1, w.z1),
+            at(w.t1, w.z0),
+            at(w.t0, w.z0),
+          ], true);
+        }
+      }
+    }
+
     walls.add(
-      _Wall(
+      IsoWall(
         _poly([topPts[i], topPts[j], bottomPts[j], bottomPts[i]]),
         d,
         rdx < rdy,
+        windows,
       ),
     );
   }
@@ -1342,7 +1370,8 @@ IsoBuilding buildIso(
   // 쓴다. 예전엔 조건에 `b.isCampus`가 걸려 있어서 **교외 건물은 이름이
   // 있어도 이름표가 아예 안 만들어졌다** — 자취방 탭이 학생 제보로 모은
   // 이름이 정작 지도에서만 사라지고 있었다.
-  final labelText = displayName ?? (b.isCampus ? b.officialName : null);
+  // [labels]가 false면(지도의 "이름표" 끄기) 교내 공식 명칭까지 모두 뺀다.
+  final labelText = labels ? (displayName ?? (b.isCampus ? b.officialName : null)) : null;
   if (highlighted || (labelText != null && labelText.isNotEmpty)) {
     cachedBadge = TextPainter(
       text: TextSpan(
@@ -1378,9 +1407,13 @@ List<IsoBuilding> layoutBuildings(
   Iterable<BaseBuilding> buildings,
   IsoProjection p, {
   String? selectedId,
+  Set<String> highlightedIds = const {},
   Set<String> oneRoomIds = const {},
   Map<String, Color> zoneColors = const {},
   Map<String, String> displayNames = const {},
+  Set<String>? windowIds,
+  bool showLabels = true,
+  Set<String> hiddenLabelIds = const {},
 }) {
   final sorted = buildings.toList()
     ..sort((a, b) => p.depthKey(a).compareTo(p.depthKey(b)));
@@ -1389,13 +1422,58 @@ List<IsoBuilding> layoutBuildings(
         (b) => buildIso(
           b,
           p,
-          highlighted: b.id == selectedId,
+          highlighted: b.id == selectedId || highlightedIds.contains(b.id),
           isOneRoom: oneRoomIds.contains(b.id),
           zoneColor: zoneColors[b.id],
           displayName: displayNames[b.id],
+          windows: windowIds?.contains(b.id),
+          // 이름표를 숨긴 건물은 교내 공식 명칭으로 대신 달지도 않는다 —
+          // 대신 달면 추가 건물이 처음 받은 "신규 원룸"이 떠 버렸다.
+          labels: showLabels && !hiddenLabelIds.contains(b.id),
         ),
       )
       .toList();
+}
+
+/// 2D 볼록 껍질 (Monotone Chain Convex Hull 알고리즘)
+/// 건물 블록들을 하나로 병합할 때 정점들을 매끄러운 외곽선 다각형으로 묶는다.
+List<Offset> computeConvexHull(List<Offset> points) {
+  if (points.length <= 3) return List.from(points);
+
+  final pts = points.toSet().toList()
+    ..sort((a, b) {
+      final cmp = a.dx.compareTo(b.dx);
+      if (cmp != 0) return cmp;
+      return a.dy.compareTo(b.dy);
+    });
+
+  if (pts.length <= 3) return pts;
+
+  double crossProduct(Offset o, Offset a, Offset b) {
+    return (a.dx - o.dx) * (b.dy - o.dy) - (a.dy - o.dy) * (b.dx - o.dx);
+  }
+
+  final lower = <Offset>[];
+  for (final p in pts) {
+    while (lower.length >= 2 &&
+        crossProduct(lower[lower.length - 2], lower.last, p) <= 0) {
+      lower.removeLast();
+    }
+    lower.add(p);
+  }
+
+  final upper = <Offset>[];
+  for (final p in pts.reversed) {
+    while (upper.length >= 2 &&
+        crossProduct(upper[upper.length - 2], upper.last, p) <= 0) {
+      upper.removeLast();
+    }
+    upper.add(p);
+  }
+
+  lower.removeLast();
+  upper.removeLast();
+  return [...lower, ...upper];
 }
 
 BaseBuilding? hitTestBuilding(List<IsoBuilding> list, Offset point) {
@@ -1566,10 +1644,18 @@ class HousingMapPainter extends CustomPainter {
   /// 교내 건물에 번호를 찍을지. 색을 눈으로 검수할 때 켠다.
   final bool showBuildingNumbers;
 
+  /// 도보 등시선 링 기준점(정문·도서관 같은 거점이나 GPS 내 위치). null이면 그리지 않음.
+  final IsochroneCenter? isochroneCenter;
+
+  /// 등시선 링 및 투영 계산용 프로젝션
+  final IsoProjection? projection;
+
+  /// 시간별 건물 그림자(화면 좌표 경로, housing_sun.dart). null이면 안 그린다.
+  final Path? shadows;
+
   /// 번호 TextPainter 재사용 캐시 — 프레임마다 layout()을 다시 돌리면
   /// 건물 100개분이 통째로 낭비된다.
   static final Map<int, TextPainter> _numberPainters = {};
-  static final Map<String, TextPainter> _poiPainters = {};
 
   /// 지금 확대 배율. 이름표를 화면에서 늘 같은 크기로 그리려고 쓴다
   /// ([_paintLandmarkBadges] 참고). 확대·축소할 때마다 다시 그려야 하므로
@@ -1578,6 +1664,15 @@ class HousingMapPainter extends CustomPainter {
 
   double get viewScale =>
       (view?.value.getMaxScaleOnAxis() ?? 1.0).clamp(0.1, 8.0);
+
+  /// 원룸 건물 시세 말풍선 맵 (건물 ID -> "300/35")
+  final Map<String, String>? priceTags;
+
+  /// 선택된 건물 -> 교원대 정문 도보 경로 가이드 좌표 및 소요 시간
+  final Offset? walkGuideStart;
+  final Offset? walkGuideEnd;
+  final int? walkGuideMinutes;
+  final int? walkGuideMeters;
 
   HousingMapPainter({
     required this.buildings,
@@ -1588,7 +1683,15 @@ class HousingMapPainter extends CustomPainter {
     this.landuse = IsoLandUse.empty,
     this.osmRoads = IsoOsmRoads.empty,
     this.showBuildingNumbers = false,
+    this.isochroneCenter,
+    this.projection,
     this.view,
+    this.shadows,
+    this.priceTags,
+    this.walkGuideStart,
+    this.walkGuideEnd,
+    this.walkGuideMinutes,
+    this.walkGuideMeters,
   }) : super(repaint: view);
 
   @override
@@ -1611,16 +1714,39 @@ class HousingMapPainter extends CustomPainter {
     // 주차장 면 및 주차 구획선 (도로와 겹침 없이 선명하게 표시)
     _paintParkingAreasAndStalls(canvas);
     _paintCrosswalksAndIslands(canvas);
+    // 도보 등시선 링 (노면 위, 건물 아래에 3D 동심원 배치하여 건물들이 링 위에 입체적으로 솟음)
+    if (isochroneCenter != null && projection != null) {
+      _paintIsochroneRings(canvas);
+    }
+    final shadowPath = shadows;
+    if (shadowPath != null) {
+      // 그림자끼리 겹친 곳이 두 번 어두워지지 않게, 불투명하게 한 층에 모두
+      // 칠한 뒤 그 층을 반투명으로 얹는다.
+      canvas.saveLayer(
+        shadowPath.getBounds(),
+        Paint()..color = Colors.black.withValues(alpha: isDark ? 0.38 : 0.2),
+      );
+      canvas.drawPath(shadowPath, Paint()..color = Colors.black);
+      canvas.restore();
+    }
     for (final b in buildings) {
       _paintBuilding(canvas, b);
     }
     _paintTrees(canvas);
-    // 주차장 P 심볼 뱃지 (건물 위/스케일 보정 렌더링)
-    _paintParkingBadges(canvas);
-    _paintPois(canvas);
     _paintBuildingNumbers(canvas);
     _paintLandmarkBadges(canvas);
-    _paintSlopeBadges(canvas);
+    // 도보 등시선 뱃지 핀 (건물 위 상단 레이어에 3분/5분/10분 라벨 및 기준점 핀)
+    if (isochroneCenter != null && projection != null) {
+      _paintIsochroneBadges(canvas);
+    }
+    // 도보 경로 가이드 (선택된 건물 -> 교원대 정문 점선 경로 및 소요 시간 캡슐)
+    if (walkGuideStart != null && walkGuideEnd != null && projection != null) {
+      _paintWalkRouteGuide(canvas);
+    }
+    // 지도 위 말풍선 시세 마커 (Price Tag HUD)
+    if (priceTags != null && priceTags!.isNotEmpty) {
+      _paintPriceTagHUD(canvas);
+    }
 
     canvas.restore();
   }
@@ -1785,61 +1911,6 @@ class HousingMapPainter extends CustomPainter {
   }
 
   void _paintTerrain(Canvas canvas) {
-    // 0. 언덕 3D 힐쉐이딩 & 엠보싱 (청람동산·기숙사 능선·연수원 구릉지의 입체 양각/음영)
-    // 0-1. 북서향 사면 햇빛 하이라이트 (은은한 웜 라이트 틴트)
-    if (!terrain.hillshadeHighlightPath.getBounds().isEmpty) {
-      final highlightPaint = Paint()
-        ..style = PaintingStyle.fill
-        ..color = isDark
-            ? Colors.white.withValues(alpha: 0.06)
-            : Colors.white.withValues(alpha: 0.22);
-      canvas.drawPath(terrain.hillshadeHighlightPath, highlightPaint);
-    }
-    // 0-2. 남동향 사면 그림자 (소프트 엠보싱 음영)
-    if (!terrain.hillshadeShadowPath.getBounds().isEmpty) {
-      final hillshadePaint = Paint()
-        ..style = PaintingStyle.fill
-        ..color = isDark
-            ? Colors.black.withValues(alpha: 0.24)
-            : const Color(0xFF4A6B22).withValues(alpha: 0.14);
-      canvas.drawPath(terrain.hillshadeShadowPath, hillshadePaint);
-    }
-
-    // 1. 5m 보조 등고선 (네이버 지도·수치지형도 감성의 섬세한 곡선)
-    final contourPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8
-      ..color = isDark
-          ? const Color(0xFF8A9A86).withValues(alpha: 0.18)
-          : const Color(0xFF8A9F80).withValues(alpha: 0.35);
-    canvas.drawPath(terrain.contoursCombined, contourPaint);
-
-    // 1-1. 10m 주등고선 (선명한 갈색/카키 계열의 굵은 등고선)
-    final majorContourPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.3
-      ..color = isDark
-          ? const Color(0xFF9EAF9A).withValues(alpha: 0.32)
-          : const Color(0xFF6D8362).withValues(alpha: 0.55);
-    canvas.drawPath(terrain.majorContours, majorContourPaint);
-
-    // 1-2. 등고선 표고 텍스트 라벨 (40m, 50m, 60m...)
-    for (final lbl in terrain.elevationLabels) {
-      final tp = TextPainter(
-        text: TextSpan(
-          text: lbl.text,
-          style: TextStyle(
-            color: isDark ? const Color(0xFFA5B8A1) : const Color(0xFF5A6F50),
-            fontSize: 7.5,
-            fontWeight: FontWeight.w600,
-            fontFamily: KnueTokens.fontFamily,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(lbl.screenPosition.dx - tp.width / 2, lbl.screenPosition.dy - tp.height / 2));
-    }
-
     // 2. 청람동산 구릉지 녹지/숲 (네이버 지도 포레스트 그린)
     final forestPaint = Paint()
       ..style = PaintingStyle.fill
@@ -1995,45 +2066,6 @@ class HousingMapPainter extends CustomPainter {
     );
   }
 
-  void _paintRoads(Canvas canvas) {
-    // 네이버 지도 도로 렌더링 (화이트 노면 + 정갈한 쿨 블루그레이 엣지 케이싱)
-    // 1. 차도 케이싱 (외곽선)
-    final carEdge = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 7.4
-      ..color = isDark ? const Color(0xFF1E242C) : const Color(0xFFCCD7E6);
-
-    // 2. 차도 노면 (네이버 지도의 밝고 깨끗한 순백색 아스팔트)
-    final carSurface = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 5.6
-      ..color = isDark ? const Color(0xFF2C323B) : const Color(0xFFFFFFFF);
-
-    canvas.drawPath(roads.carRoads, carEdge);
-    canvas.drawPath(roads.carRoads, carSurface);
-
-    // 3. 보행로 / 인도 (네이버 지도 인도 블록 톤)
-    final walkwayEdge = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 5.2
-      ..color = isDark ? const Color(0xFF1C222B) : const Color(0xFFDCE5F0);
-    final walkwaySurface = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 3.6
-      ..color = isDark ? const Color(0xFF2A303A) : const Color(0xFFFFFFFF);
-
-    canvas.drawPath(roads.walkways, walkwayEdge);
-    canvas.drawPath(roads.walkways, walkwaySurface);
-  }
-
   /// OSM 도로망 및 인도(보도) 정밀 분리 렌더링.
   ///
   /// - 일반 차도(road):
@@ -2161,41 +2193,6 @@ class HousingMapPainter extends CustomPainter {
     }
   }
 
-  /// 네이버 지도 스타일 🅿️ 주차장 심볼 뱃지
-  void _paintParkingBadges(Canvas canvas) {
-    if (terrain.parkingBadgeCenters.isEmpty) return;
-    final scale = viewScale;
-    if (scale < 0.55) return;
-
-    final badgeRadius = (6.0 / math.sqrt(scale)).clamp(4.5, 9.0);
-    final badgePaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = isDark ? const Color(0xFF1D4ED8) : const Color(0xFF007AFF);
-    final badgeBorder = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8
-      ..color = Colors.white;
-
-    for (final c in terrain.parkingBadgeCenters) {
-      canvas.drawCircle(c, badgeRadius, badgePaint);
-      canvas.drawCircle(c, badgeRadius, badgeBorder);
-
-      final tp = TextPainter(
-        text: TextSpan(
-          text: 'P',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: badgeRadius * 1.3,
-            fontWeight: FontWeight.w900,
-            fontFamily: KnueTokens.fontFamily,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(c.dx - tp.width / 2, c.dy - tp.height / 2));
-    }
-  }
-
   void _paintCrosswalksAndIslands(Canvas canvas) {
     final cwPaint = Paint()
       ..style = PaintingStyle.stroke
@@ -2221,10 +2218,13 @@ class HousingMapPainter extends CustomPainter {
     if (b.highlighted) {
       // 선택 하이라이트: 네이버 그린 포인트
       base = const Color(0xFF03C75A);
+    } else if (b.zoneColor != null) {
+      // 관리자가 칠한 색이 교내 용도 색보다 먼저다. 예전엔 교내 건물이면
+      // 용도 색부터 칠해 버려서 다정관 같은 교내 건물은 색을 바꿔도 그대로였다.
+      // (교내 건물엔 housingMapStyle이 관리자 색만 넘긴다 — 구역·도로 색은 없다.)
+      base = isDark ? _dimForDark(b.zoneColor!) : b.zoneColor!;
     } else if (b.building.isCampus) {
       base = campusUseColor(b.building.use, isDark);
-    } else if (b.zoneColor != null) {
-      base = isDark ? _dimForDark(b.zoneColor!) : b.zoneColor!;
     } else if (b.isOneRoom) {
       // 자취방/원룸 건물: 네이버 지도 실사의 깔끔한 소프트 화이트-민트 틴트
       base = isDark ? const Color(0xFF22352B) : const Color(0xFFFFFFFF);
@@ -2237,17 +2237,32 @@ class HousingMapPainter extends CustomPainter {
 
     // 네이버 지도 3D 입체 음영 체계:
     // 북서향 조명에 의한 맑은 쿨 화이트그레이 좌측벽 & 정돈된 소프트 슬레이트그레이 우측벽
+    // 색을 정한 건물(선택·구역·관리자 색)은 벽도 그 색으로 — 옥상만 칠하면
+    // 회색 상자에 색 뚜껑을 얹은 것처럼 보인다. 벽은 옥상보다 조금씩 어둡게.
+    final tinted = b.highlighted || b.zoneColor != null;
     final leftPaint = Paint()
-      ..color = b.highlighted
+      ..color = tinted
           ? _shade(base, 0.08)
           : (isDark ? const Color(0xFF222933) : const Color(0xFFEFF3F8));
     final rightPaint = Paint()
-      ..color = b.highlighted
+      ..color = tinted
           ? _shade(base, 0.16)
           : (isDark ? const Color(0xFF191F26) : const Color(0xFFE2E8F0));
 
+    // 창문: 멀리서 보면 점으로 뭉개지고 그리기만 무거우니 어느 정도 확대했을 때만.
+    final showWindows = viewScale >= 0.7;
+    // 창문 색은 그 벽 색에서 아주 조금만 밝게 — 벽에 녹아들어 가까이 봐야
+    // 보일 정도로. (흰 창·불 켜진 창은 너무 튀었다.) 흰 벽처럼 이미 밝은
+    // 벽은 더 밝힐 여지가 없어 조금 어둡게 낸다.
+    Paint windowPaintFor(Color wall) => Paint()..color = windowColorFor(wall);
+    final leftWindow = windowPaintFor(leftPaint.color);
+    final rightWindow = windowPaintFor(rightPaint.color);
     for (final w in b.walls) {
       canvas.drawPath(w.path, w.facingLeft ? leftPaint : rightPaint);
+      final win = w.windows;
+      if (showWindows && win != null) {
+        canvas.drawPath(win, w.facingLeft ? leftWindow : rightWindow);
+      }
     }
     canvas.drawPath(b.top, topPaint);
 
@@ -2345,57 +2360,6 @@ class HousingMapPainter extends CustomPainter {
       Paint()
         ..color = isDark ? const Color(0xFFBE185D) : const Color(0xFFFBCFE8),
     );
-  }
-
-  /// 지도 마커 — 버스정류장.
-  ///
-  /// 캡처의 마커 색에서 위치만 뽑았고(크기는 화면 고정이라 뜻이 없다),
-  /// 배지는 여기서 그린다.
-  ///
-  /// 편의점(C)·주차장(P) 배지는 뺐다. 원룸촌 골목마다 촘촘히 박혀 건물
-  /// 이름표를 덮었고, 자취방을 고를 때 먼저 보는 정보가 아니다. 위치
-  /// 데이터는 그대로 두었으니 다시 켜려면 여기에 항목만 되살리면 된다.
-  void _paintPois(Canvas canvas) {
-    if (terrain.pois.isEmpty) return;
-    const style = {
-      'bus': [Color(0xFF2E86DE), 'B'],
-    };
-    for (final e in terrain.pois) {
-      final st = style[e.key];
-      if (st == null) continue;
-      final c = e.value;
-      canvas.drawCircle(
-        c.translate(0, 1),
-        5.4,
-        Paint()..color = Colors.black.withValues(alpha: 0.18),
-      );
-      canvas.drawCircle(c, 5.2, Paint()..color = st[0] as Color);
-      canvas.drawCircle(
-        c,
-        5.2,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.9
-          ..color = Colors.white.withValues(alpha: 0.9),
-      );
-      final tp = _poiPainters.putIfAbsent(
-        e.key,
-        () => TextPainter(
-          text: TextSpan(
-            text: st[1] as String,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 6.5,
-              fontWeight: FontWeight.w900,
-              height: 1.0,
-              fontFamily: KnueTokens.fontFamily,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout(),
-      );
-      tp.paint(canvas, Offset(c.dx - tp.width / 2, c.dy - tp.height / 2));
-    }
   }
 
   /// 교내 건물 번호. 색이 이상한 동을 사람이 "몇 번"이라고 짚으라고 찍는다.
@@ -2532,75 +2496,255 @@ class HousingMapPainter extends CustomPainter {
     }
   }
 
-  /// 언덕길·경사도 랜드마크 뱃지 (청람동산 82m, 기숙사 오르막길 경사 8.5% 등)
-  void _paintSlopeBadges(Canvas canvas) {
-    if (terrain.slopeMarkers.isEmpty) return;
+  /// 선택된 건물에서 교원대 정문까지 도보 점선 경로 및 소요 시간 가이드 캡슐
+  void _paintWalkRouteGuide(Canvas canvas) {
+    if (walkGuideStart == null || walkGuideEnd == null || projection == null) return;
     final k = 1.0 / viewScale;
-    for (final entry in terrain.slopeMarkers) {
-      final marker = entry.key;
-      final pos = entry.value;
+    final p = projection!;
 
-      final titleTp = TextPainter(
+    final startZ = CampusElevation.elevationAt(walkGuideStart!.dx, walkGuideStart!.dy) * 0.45;
+    final startPt = p.project(walkGuideStart!.dx, walkGuideStart!.dy, startZ);
+
+    final endZ = CampusElevation.elevationAt(walkGuideEnd!.dx, walkGuideEnd!.dy) * 0.45;
+    final endPt = p.project(walkGuideEnd!.dx, walkGuideEnd!.dy, endZ);
+
+    final diff = endPt - startPt;
+    final totalDist = diff.distance;
+    if (totalDist < 1.0) return;
+    final dir = diff / totalDist;
+
+    // 1. 점선(Dashed Line) 경로 렌더링
+    final dashLen = 7.0 * k;
+    final gapLen = 4.5 * k;
+    final pathPaint = Paint()
+      ..color = const Color(0xFF007AFF)
+      ..strokeWidth = 2.4 * k
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: isDark ? 0.45 : 0.18)
+      ..strokeWidth = 3.6 * k
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    double d = 0;
+    while (d < totalDist) {
+      final curStart = startPt + dir * d;
+      final curLen = math.min(dashLen, totalDist - d);
+      final curEnd = curStart + dir * curLen;
+      // 그림자
+      canvas.drawLine(curStart + Offset(0, 1.2 * k), curEnd + Offset(0, 1.2 * k), shadowPaint);
+      // 점선
+      canvas.drawLine(curStart, curEnd, pathPaint);
+      d += dashLen + gapLen;
+    }
+
+    // 2. 정문 도착점 핀 마커 ("교원대 정문")
+    const gatePinColor = Color(0xFF10B981); // Emerald Green
+    // 그림자
+    canvas.drawOval(
+      Rect.fromCenter(center: endPt + Offset(0, 2 * k), width: 14 * k, height: 6 * k),
+      Paint()..color = Colors.black.withValues(alpha: 0.25),
+    );
+    // 핀 원형
+    canvas.drawCircle(endPt, 5.5 * k, Paint()..color = Colors.white);
+    canvas.drawCircle(endPt, 4.0 * k, Paint()..color = gatePinColor);
+
+    // 정문 라벨 뱃지
+    const gateLabel = '교원대 정문';
+    final gateTp = TextPainter(
+      text: TextSpan(
+        text: gateLabel,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 9.0,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.2,
+          fontFamily: KnueTokens.fontFamily,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final gateBadgeW = (gateTp.width + 10) * k;
+    final gateBadgeH = (gateTp.height + 5) * k;
+    final gateBadgeRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: endPt + Offset(0, -11 * k), width: gateBadgeW, height: gateBadgeH),
+      Radius.circular(6 * k),
+    );
+    canvas.drawRRect(gateBadgeRect, Paint()..color = gatePinColor);
+    canvas.drawRRect(
+      gateBadgeRect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8 * k
+        ..color = Colors.white.withValues(alpha: 0.8),
+    );
+    canvas.save();
+    canvas.translate(endPt.dx, endPt.dy - 11 * k);
+    canvas.scale(k);
+    gateTp.paint(canvas, Offset(-gateTp.width / 2, -gateTp.height / 2));
+    canvas.restore();
+
+    // 3. 경로 중간 "정문 도보 N분 (000m)" 소요 시간 캡슐 뱃지
+    if (walkGuideMinutes != null) {
+      final midPt = startPt + dir * (totalDist * 0.48);
+      final minutes = walkGuideMinutes!;
+      final meters = walkGuideMeters ?? (totalDist * 0.8).round();
+      final routeText = '정문 도보 $minutes분 (${meters}m)';
+
+      final routeTp = TextPainter(
         text: TextSpan(
-          text: marker.isSteep ? '⚠️ ${marker.title}' : '⛰️ ${marker.title}',
-          style: TextStyle(
-            fontSize: 8.2,
-            fontWeight: FontWeight.bold,
-            color: marker.isSteep
-                ? (isDark ? const Color(0xFFFFB74D) : const Color(0xFFD97706))
-                : (isDark ? const Color(0xFF81C784) : const Color(0xFF2E7D32)),
-            fontFamily: KnueTokens.fontFamily,
-          ),
+          children: [
+            const TextSpan(text: '🚶 ', style: TextStyle(fontSize: 9.5)),
+            TextSpan(
+              text: routeText,
+              style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+                fontFamily: KnueTokens.fontFamily,
+              ),
+            ),
+          ],
         ),
         textDirection: TextDirection.ltr,
       )..layout();
 
-      final descTp = TextPainter(
-        text: TextSpan(
-          text: marker.elevationText,
-          style: TextStyle(
-            fontSize: 7.0,
-            fontWeight: FontWeight.w500,
-            color: isDark ? Colors.white70 : Colors.black87,
-            fontFamily: KnueTokens.fontFamily,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-
-      final width = (math.max(titleTp.width, descTp.width) + 12) * k;
-      final height = (titleTp.height + descTp.height + 5) * k;
-      final rect = Rect.fromCenter(
-        center: Offset(pos.dx, pos.dy - 6 * k),
-        width: width,
-        height: height,
+      final routeW = (routeTp.width + 14) * k;
+      final routeH = (routeTp.height + 7) * k;
+      final routeRect = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: midPt + Offset(0, -10 * k), width: routeW, height: routeH),
+        Radius.circular(12 * k),
       );
 
-      final rrect = RRect.fromRectAndRadius(rect, Radius.circular(8 * k));
-
+      // 캡슐 배경 & 그림자
       canvas.drawRRect(
-        rrect.shift(const Offset(0, 1.2)),
-        Paint()..color = Colors.black.withValues(alpha: isDark ? 0.35 : 0.10),
+        routeRect.shift(Offset(0, 1.8 * k)),
+        Paint()..color = Colors.black.withValues(alpha: isDark ? 0.45 : 0.18),
       );
       canvas.drawRRect(
-        rrect,
-        Paint()..color = isDark ? const Color(0xFF1E222A) : Colors.white.withValues(alpha: 0.95),
+        routeRect,
+        Paint()..color = isDark ? const Color(0xFF1E222A) : Colors.white,
       );
       canvas.drawRRect(
-        rrect,
+        routeRect,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.9
-          ..color = marker.isSteep
-              ? Colors.orange.withValues(alpha: 0.6)
-              : Colors.green.withValues(alpha: 0.45),
+          ..strokeWidth = 1.2 * k
+          ..color = const Color(0xFF007AFF),
       );
 
       canvas.save();
-      canvas.translate(rect.left + 6 * k, rect.top + 2.5 * k);
+      canvas.translate(midPt.dx, midPt.dy - 10 * k);
       canvas.scale(k);
-      titleTp.paint(canvas, Offset.zero);
-      descTp.paint(canvas, Offset(0, titleTp.height + 1));
+      routeTp.paint(canvas, Offset(-routeTp.width / 2, -routeTp.height / 2));
+      canvas.restore();
+    }
+  }
+
+  /// 지도 위 말풍선 시세 마커 (Price Tag HUD)
+  void _paintPriceTagHUD(Canvas canvas) {
+    if (priceTags == null || priceTags!.isEmpty) return;
+    final k = 1.0 / viewScale;
+
+    final targetBuildings = buildings.where((b) {
+      if (!priceTags!.containsKey(b.building.id)) return false;
+      if (b.building.isCampus) return false;
+      return true;
+    }).toList();
+
+    // 선택된 건물이 가장 위로 오도록 정렬
+    targetBuildings.sort((a, b) {
+      if (a.highlighted != b.highlighted) return a.highlighted ? -1 : 1;
+      return b.building.footprintArea.compareTo(a.building.footprintArea);
+    });
+
+    final placed = <Rect>[];
+    for (final b in targetBuildings) {
+      final tag = priceTags![b.building.id];
+      if (tag == null || tag.isEmpty) continue;
+
+      final isHighlight = b.highlighted;
+      final tp = TextPainter(
+        text: TextSpan(
+          text: tag,
+          style: TextStyle(
+            color: isHighlight
+                ? Colors.white
+                : (isDark ? Colors.white : const Color(0xFF0F172A)),
+            fontSize: isHighlight ? 9.5 : 8.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.3,
+            fontFamily: KnueTokens.fontFamily,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      final w = (tp.width + (isHighlight ? 12 : 9)) * k;
+      final h = (tp.height + (isHighlight ? 6 : 4.5)) * k;
+      final center = b.topCenter;
+
+      // 건물 이름 뱃지가 있으면 그 위(-22k), 없으면 지붕 위(-10k)
+      final dyOffset = (b.cachedBadgePainter != null ? -22.0 : -10.0) * k;
+      final rect = Rect.fromCenter(
+        center: Offset(center.dx, center.dy + dyOffset),
+        width: w,
+        height: h,
+      );
+
+      // 선택된 건물이 아닌 경우 겹치면 패스
+      if (!isHighlight && placed.any(rect.overlaps)) continue;
+      placed.add(rect);
+
+      final rrect = RRect.fromRectAndRadius(rect, Radius.circular(5 * k));
+
+      if (isHighlight) {
+        // 하이라이트 말풍선: 선명한 블루(#007AFF) 알약 태그
+        canvas.drawRRect(
+          rrect.shift(Offset(0, 1.5 * k)),
+          Paint()..color = Colors.black.withValues(alpha: 0.35),
+        );
+        canvas.drawRRect(
+          rrect,
+          Paint()..color = const Color(0xFF007AFF),
+        );
+        canvas.drawRRect(
+          rrect,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.0 * k
+            ..color = Colors.white,
+        );
+      } else {
+        // 일반 말풍선: 정갈한 카드 칩
+        canvas.drawRRect(
+          rrect.shift(Offset(0, 1.2 * k)),
+          Paint()..color = Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
+        );
+        canvas.drawRRect(
+          rrect,
+          Paint()..color = isDark ? const Color(0xFF1E2228) : Colors.white,
+        );
+        canvas.drawRRect(
+          rrect,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.8 * k
+            ..color = isDark
+                ? Colors.white.withValues(alpha: 0.15)
+                : const Color(0xFF007AFF).withValues(alpha: 0.35),
+        );
+      }
+
+      // 글씨 렌더링
+      canvas.save();
+      canvas.translate(rect.center.dx, rect.center.dy);
+      canvas.scale(k);
+      tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
       canvas.restore();
     }
   }
@@ -2646,6 +2790,213 @@ class HousingMapPainter extends CustomPainter {
         .toColor();
   }
 
+  /// 도보 등시선 링 3D 경로 생성 (지형 고도를 반영하여 매끄러운 아이소메트릭 등시선 생성)
+  Path _buildIsochroneRingPath(Offset center, double radiusMeters) {
+    final path = Path();
+    const count = 72;
+    for (var i = 0; i <= count; i++) {
+      final rad = (i * 2 * math.pi) / count;
+      final wx = center.dx + radiusMeters * math.cos(rad);
+      final wy = center.dy + radiusMeters * math.sin(rad);
+      final elev = CampusElevation.elevationAt(wx, wy) * 0.45;
+      final pt = projection!.project(wx, wy, elev);
+      if (i == 0) {
+        path.moveTo(pt.dx, pt.dy);
+      } else {
+        path.lineTo(pt.dx, pt.dy);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  /// 도보 등시선 링 (지표면 바닥에 3분 / 5분 / 10분 동심원과 은은한 채색)
+  void _paintIsochroneRings(Canvas canvas) {
+    if (isochroneCenter == null || projection == null) return;
+    final center = isochroneCenter!.position;
+
+    // 10분(약 558m), 5분(약 279m), 3분(약 168m)
+    // 외곽부터 채워 안쪽 링이 자연스럽게 중첩되도록 렌더링
+    final path10 = _buildIsochroneRingPath(center, 558.0);
+    final path5 = _buildIsochroneRingPath(center, 279.0);
+    final path3 = _buildIsochroneRingPath(center, 168.0);
+
+    // 1. 내부 은은한 반투명 채우기
+    final fill10 = Paint()
+      ..style = PaintingStyle.fill
+      ..color = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.03 : 0.025);
+    final fill5 = Paint()
+      ..style = PaintingStyle.fill
+      ..color = const Color(0xFF007AFF).withValues(alpha: isDark ? 0.045 : 0.035);
+    final fill3 = Paint()
+      ..style = PaintingStyle.fill
+      ..color = const Color(0xFF03C75A).withValues(alpha: isDark ? 0.065 : 0.05);
+
+    canvas.drawPath(path10, fill10);
+    canvas.drawPath(path5, fill5);
+    canvas.drawPath(path3, fill3);
+
+    // 2. 등시선 대시 점선 스트로크 테두리
+    final stroke10 = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.55 : 0.65);
+    final stroke5 = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = const Color(0xFF007AFF).withValues(alpha: isDark ? 0.65 : 0.75);
+    final stroke3 = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..color = const Color(0xFF03C75A).withValues(alpha: isDark ? 0.8 : 0.9);
+
+    canvas.drawPath(_dashPath(path10, 5.0, 4.0), stroke10);
+    canvas.drawPath(_dashPath(path5, 6.0, 3.5), stroke5);
+    canvas.drawPath(_dashPath(path3, 8.0, 3.0), stroke3);
+
+    // 3. 중심점 기준점 펄스 링 (지표면)
+    final centerElev = CampusElevation.elevationAt(center.dx, center.dy) * 0.45;
+    final centerPt = projection!.project(center.dx, center.dy, centerElev);
+
+    canvas.drawCircle(
+      centerPt,
+      7.0,
+      Paint()..color = const Color(0xFF007AFF).withValues(alpha: 0.18),
+    );
+    canvas.drawCircle(
+      centerPt,
+      3.5,
+      Paint()..color = const Color(0xFF007AFF),
+    );
+    canvas.drawCircle(
+      centerPt,
+      3.5,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0
+        ..color = Colors.white,
+    );
+  }
+
+  /// 도보 등시선 뱃지 핀 (건물 상단 레이어에 3분/5분/10분 및 거점명 라벨 노출)
+  void _paintIsochroneBadges(Canvas canvas) {
+    if (isochroneCenter == null || projection == null) return;
+    final k = 1.0 / viewScale;
+    final center = isochroneCenter!.position;
+
+    // 1. 기준 거점 핀 뱃지
+    final centerElev = CampusElevation.elevationAt(center.dx, center.dy) * 0.45;
+    final centerPt = projection!.project(center.dx, center.dy, centerElev);
+
+    final landmarkTp = TextPainter(
+      text: TextSpan(
+        text: '📍 ${isochroneCenter!.label} 기준 도보권',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          fontFamily: KnueTokens.fontFamily,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final lmWidth = (landmarkTp.width + 14) * k;
+    final lmHeight = (landmarkTp.height + 6) * k;
+    final lmRect = Rect.fromCenter(
+      center: Offset(centerPt.dx, centerPt.dy - 12 * k),
+      width: lmWidth,
+      height: lmHeight,
+    );
+    final lmRRect = RRect.fromRectAndRadius(lmRect, Radius.circular(8 * k));
+
+    // 그림자 + 블루 캡슐
+    canvas.drawRRect(
+      lmRRect.shift(Offset(0, 1.5 * k)),
+      Paint()..color = Colors.black.withValues(alpha: isDark ? 0.35 : 0.18),
+    );
+    canvas.drawRRect(
+      lmRRect,
+      Paint()..color = isDark ? const Color(0xFF1D4ED8) : const Color(0xFF007AFF),
+    );
+    canvas.drawRRect(
+      lmRRect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0 * k
+        ..color = Colors.white.withValues(alpha: 0.9),
+    );
+
+    canvas.save();
+    canvas.translate(lmRect.left + 7 * k, lmRect.top + 3 * k);
+    canvas.scale(k);
+    landmarkTp.paint(canvas, Offset.zero);
+    canvas.restore();
+
+    // 2. 링별 도보 뱃지 (남서-남 방향 각도로 배치하여 건물 간섭 최소화)
+    final badgeItems = [
+      (168.0, '🚶 3분 (약 200m)', const Color(0xFF03C75A)),
+      (279.0, '🚶 5분 (약 340m)', const Color(0xFF007AFF)),
+      (558.0, '🚶 10분 (약 670m)', const Color(0xFFF59E0B)),
+    ];
+
+    const labelAngle = 0.42 * math.pi; // 남동-남 방향
+    for (final item in badgeItems) {
+      final r = item.$1;
+      final text = item.$2;
+      final color = item.$3;
+
+      final wx = center.dx + r * math.cos(labelAngle);
+      final wy = center.dy + r * math.sin(labelAngle);
+      final elev = CampusElevation.elevationAt(wx, wy) * 0.45;
+      final pt = projection!.project(wx, wy, elev);
+
+      final tp = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 8.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: KnueTokens.fontFamily,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      final w = (tp.width + 10) * k;
+      final h = (tp.height + 4) * k;
+      final rect = Rect.fromCenter(
+        center: Offset(pt.dx, pt.dy),
+        width: w,
+        height: h,
+      );
+      final rrect = RRect.fromRectAndRadius(rect, Radius.circular(6 * k));
+
+      canvas.drawRRect(
+        rrect.shift(Offset(0, 1.2 * k)),
+        Paint()..color = Colors.black.withValues(alpha: isDark ? 0.3 : 0.15),
+      );
+      canvas.drawRRect(
+        rrect,
+        Paint()..color = isDark ? color.withValues(alpha: 0.9) : color,
+      );
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8 * k
+          ..color = Colors.white.withValues(alpha: 0.85),
+      );
+
+      canvas.save();
+      canvas.translate(rect.left + 5 * k, rect.top + 2 * k);
+      canvas.scale(k);
+      tp.paint(canvas, Offset.zero);
+      canvas.restore();
+    }
+  }
+
   @override
   bool shouldRepaint(HousingMapPainter old) =>
       old.buildings != buildings ||
@@ -2653,7 +3004,9 @@ class HousingMapPainter extends CustomPainter {
       old.terrain != terrain ||
       old.landuse != landuse ||
       old.isDark != isDark ||
-      old.origin != origin;
+      old.origin != origin ||
+      old.isochroneCenter != isochroneCenter ||
+      old.shadows != shadows;
 }
 
 /// 교내 건물 지붕 색 (네이버 지도 정밀 매칭: 정갈하고 눈부신 순백색 화이트 #FFFFFF)

@@ -66,9 +66,9 @@ class _HousingAdminScreenState extends State<HousingAdminScreen>
     });
     if (result == AdminUnlockResult.wrongPassword) {
       _passwordController.clear();
-      showToast(context, "비밀번호가 일치하지 않습니다");
-    } else if (result == AdminUnlockResult.failed) {
-      showToast(context, "확인에 실패했습니다. 연결을 확인해주세요");
+      showToast(context, result.message);
+    } else if (result != AdminUnlockResult.ok) {
+      showToast(context, result.message);
     }
   }
 
@@ -225,7 +225,7 @@ class _BuildingOverrideTabState extends State<_BuildingOverrideTab> {
 
   OneRoomName? _resolvedKnown(String buildingId) {
     final override = _overrides[buildingId];
-    if (override != null) return override.toOneRoomName();
+    if (override != null && override.isNamed) return override.toOneRoomName();
     final oneRoomId = _summaries[buildingId]?.oneRoomId;
     return oneRoomId == null ? null : kOneRoomNameById[oneRoomId];
   }
