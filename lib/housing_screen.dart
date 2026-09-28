@@ -151,7 +151,7 @@ class _HousingScreenState extends State<HousingScreen>
         final now = nowInKst();
         _shadowDay = now;
         _sunTimes = sunriseSunsetKst(now.year, now.month, now.day);
-        _shadowMinute = _clampToDaylight(now.minute);
+        _shadowMinute = _sunTimes.sunrise;
       }
       _rebuildShadows();
     });
