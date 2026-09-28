@@ -41,6 +41,83 @@ class JsonCache {
       return null;
     }
   }
+
+  /// 마지막으로 저장한 시각. 저장한 적이 없으면 null.
+  static Future<DateTime?> savedAt(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ts = prefs.getInt('${key}_ts');
+    return ts == null ? null : DateTime.fromMillisecondsSinceEpoch(ts);
+  }
+}
+
+/// [keys] 중 마지막 시도가 [gap] 이상 지난 것. 순수 함수 — 테스트 대상.
+///
+/// 마지막 시도가 **미래**로 적혀 있으면(기기 시계를 되돌린 경우) 지난 것으로
+/// 본다. 안 그러면 시계가 따라잡을 때까지 영영 잠긴다.
+List<String> throttleDueKeys(
+  Map<String, int> lastMs,
+  Iterable<String> keys,
+  DateTime now,
+  Duration gap,
+) {
+  final nowMs = now.millisecondsSinceEpoch;
+  final due = <String>[];
+  for (final k in keys) {
+    if (due.contains(k)) continue;
+    final last = lastMs[k];
+    if (last == null || last > nowMs || nowMs - last >= gap.inMilliseconds) {
+      due.add(k);
+    }
+  }
+  return due;
+}
+
+/// 기기에 저장되는 요청 간격 제한.
+///
+/// [RefreshThrottle]은 메모리에만 있어서 앱을 다시 켜면 풀린다. 학교 서버로
+/// 가는 요청은 그러면 안 된다 — 2026-09-28 정보전산원이 "앱이 게시판 목록
+/// 전송량의 70%를 차지한다"고 알려 왔다. 키마다 마지막 **시도** 시각을
+/// 적는다(성공 시각이 아니다 — 학교 서버가 느릴 때 오히려 더 두드리지 않게).
+class PersistentThrottle {
+  /// 이보다 오래된 기록은 지운다. 가장 긴 간격(하루)보다 넉넉하면 된다.
+  static const Duration _keepFor = Duration(days: 14);
+
+  /// [keys] 중 [gap]이 지난 것만 골라 지금 시각으로 적고 돌려준다.
+  ///
+  /// 읽기와 쓰기 사이에 await가 없어서, 같은 isolate 안에서 동시에 불려도
+  /// 같은 키를 두 번 내주지 않는다.
+  static Future<List<String>> acquire(
+    String bucket,
+    Iterable<String> keys,
+    Duration gap,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final storeKey = 'throttle_$bucket';
+    final last = <String, int>{};
+    try {
+      final raw = prefs.getString(storeKey);
+      if (raw != null) {
+        (jsonDecode(raw) as Map).forEach((k, v) {
+          if (v is int) last[k as String] = v;
+        });
+      }
+    } catch (_) {
+      // 기록이 깨졌으면 없는 것으로 친다.
+    }
+    final now = DateTime.now();
+    final due = throttleDueKeys(last, keys, now, gap);
+    if (due.isEmpty) return due;
+    final nowMs = now.millisecondsSinceEpoch;
+    for (final k in due) {
+      last[k] = nowMs;
+    }
+    last.removeWhere((_, ms) => nowMs - ms > _keepFor.inMilliseconds);
+    await prefs.setString(storeKey, jsonEncode(last));
+    return due;
+  }
+
+  static Future<bool> tryAcquire(String bucket, String key, Duration gap) async =>
+      (await acquire(bucket, [key], gap)).isNotEmpty;
 }
 
 /// Firestore가 지금 쓸 만한 상태인지 기억하는 회로 차단기.

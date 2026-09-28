@@ -17,6 +17,7 @@ import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
 import 'offline_cache.dart';
 import 'schedule_model.dart';
+import 'school_http.dart';
 
 // [1] 전역 설정
 const String kBaseUrl = "https://knue-meal-api.onrender.com";
@@ -751,6 +752,11 @@ class MealCache {
   }
 }
 
+/// 같은 날짜·식당의 식단 페이지를 한 기기가 학교에서 다시 받는 최소 간격.
+/// 너무 길면 늦게 올라온 메뉴가 그만큼 늦게 뜬다(다른 기기가 먼저 받아
+/// 공용 캐시에 올리면 그 전에 뜬다).
+const Duration kMealSchoolGap = Duration(hours: 1);
+
 Future<dynamic> fetchMealApi(
   DateTime date,
   MealSource source, {
@@ -805,12 +811,24 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
       return cachedMeal;
     }
 
-    // 2. 직접 스크래핑 시도
+    // 2. 직접 스크래핑 시도.
+    //    같은 날짜·식당은 기기당 [kMealSchoolGap]에 한 번만 학교에 간다.
+    //    메뉴가 없는 날(주말·방학)은 공용 캐시에 올리지 않아서, 이게 없으면
+    //    그런 날엔 열 때마다(위젯은 15분마다) 학교 페이지를 다시 받았다.
+    //    처음 보는 날짜(기기 캐시 없음)는 기다리게 할 수 없으니 그대로 받는다.
+    final local = await MealCache.load(date, source);
+    final allowed = await PersistentThrottle.tryAcquire(
+      'meal_school',
+      MealCache._key(date, source),
+      kMealSchoolGap,
+    );
+    if (!allowed && local != null) return local;
+
     final response = await http
         .get(
           Uri.parse(url),
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36',
+            ...await SchoolHttp.headers(),
             'Accept': 'text/html,*/*',
           },
         )

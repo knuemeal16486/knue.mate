@@ -159,6 +159,10 @@ service cloud.firestore {
     match /realtime/{doc=**}       { allow read: if true; allow write: if studentWrite(); }
     match /notices/{doc=**}        { allow read: if true; allow write: if studentWrite(); }
 
+    // 학사일정 학년도별 1년치(academic_calendar/{학년도}). 기기 한 대가 하루에
+    // 한 번 학교에서 받아 모두가 나눠 쓴다 — 학교 서버 부담 때문(2026-09-28).
+    match /academic_calendar/{doc=**} { allow read: if true; allow write: if studentWrite(); }
+
     // Gemini 칼로리 추정 캐시. 규칙이 아예 없어서 기본 거부에 걸렸고,
     // 그래서 캐시가 한 번도 쌓이지 않아 매번 Gemini를 다시 불렀다.
     match /calorie_cache/{doc=**}  { allow read: if true; allow write: if studentWrite(); }

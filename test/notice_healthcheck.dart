@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:cp949_codec/cp949_codec.dart';
 import 'package:knue_mate/notice_model.dart';
 import 'package:knue_mate/notice_service.dart';
+import 'package:knue_mate/school_http.dart';
 
 class Result {
   final String group, category, url;
@@ -32,8 +33,7 @@ Future<Result> check(String group, String category, String url) async {
   http.Response res;
   try {
     res = await http.get(Uri.parse(url), headers: {
-      'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'User-Agent': schoolUserAgent('healthcheck'),
     }).timeout(const Duration(seconds: 15));
   } catch (e) {
     r.status = 'ERR';
@@ -108,11 +108,10 @@ void main() {
         jobs.add([g.key, b.key, b.value]);
       }
     }
+    // 하나씩 차례로 보낸다(학교 서버 부담, 2026-09-28 정보전산원 메일).
     final results = <Result>[];
-    for (var i = 0; i < jobs.length; i += 6) {
-      final end = (i + 6).clamp(0, jobs.length);
-      results.addAll(await Future.wait(
-          jobs.sublist(i, end).map((j) => check(j[0], j[1], j[2]))));
+    for (final j in jobs) {
+      results.add(await check(j[0], j[1], j[2]));
     }
 
     String pad(String s, int n) {

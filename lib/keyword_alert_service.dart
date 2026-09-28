@@ -7,6 +7,13 @@ import 'notice_service.dart';
 
 const String kNoticeCheckTask = 'knue_notice_check_task';
 
+/// 백그라운드 새 공지 확인 간격. iOS는 AppDelegate.swift에도 같은 값이 있다.
+///
+/// 예전엔 2시간마다 48개 게시판 전체를 받아, 기기 한 대가 학교 서버에 하루
+/// 최대 480건을 보냈다(2026-09-28 정보전산원 메일). 이제 알릴 게시판만
+/// 4시간마다 받는다 — 기본 4개면 하루 최대 24건.
+const Duration kNoticeCheckInterval = Duration(hours: 4);
+
 /// scheduled 모드에서 다음 지정 시각까지 쌓아두는 공지 제목들.
 const String _kPendingTitlesKey = 'notice_pending_digest_titles';
 
@@ -81,14 +88,18 @@ class KeywordAlertService {
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool(PreferencesService.keyNoticeAlarm) ?? true)) return;
 
-    final notices =
-        await KnueScraper().fetchAllNotices(forceRefresh: true);
-    if (notices.isEmpty) return;
-
     final keywords =
         prefs.getStringList(PreferencesService.keyNoticeKeywords) ?? [];
     final favBoards =
         prefs.getStringList(PreferencesService.keyFavBoards) ?? [];
+
+    // 알릴 게시판만 받는다(backgroundNoticeBoards 참고). 전체를 받으면
+    // 학교 서버에 기기당 40건씩 간다.
+    final notices = await KnueScraper().fetchAllNotices(
+      forceRefresh: true,
+      onlyCategories: backgroundNoticeBoards(favBoards, keywords),
+    );
+    if (notices.isEmpty) return;
     final notified = prefs.getStringList('notified_ids') ?? [];
 
     if (!(prefs.getBool(_kSeededKey) ?? false)) {
@@ -213,9 +224,11 @@ class KeywordAlertService {
         await Workmanager().registerPeriodicTask(
           kNoticeCheckTask,
           kNoticeCheckTask,
-          frequency: const Duration(hours: 2),
+          frequency: kNoticeCheckInterval,
           constraints: Constraints(networkType: NetworkType.connected),
-          existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+          // keep이면 이미 2시간으로 등록된 기기는 옛 간격을 그대로 쓴다.
+          // update는 간격만 바꾸고 예정된 실행 시각은 유지한다.
+          existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
         );
       } else {
         await Workmanager().cancelByUniqueName(kNoticeCheckTask);

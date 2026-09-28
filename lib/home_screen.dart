@@ -144,15 +144,17 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 사용자가 직접 당겨서 새로고침할 때. 갱신 제한을 풀어 즉시 다시 받아온다.
   Future<void> _pullToRefresh() async {
     RefreshThrottle.reset();
-    await _refreshAll();
+    await _refreshAll(force: true);
   }
 
-  Future<void> _refreshAll() async {
+  /// [force]: 사용자가 당겨서 새로 고쳤다. 공지는 기기에 저장된 간격 제한
+  /// (게시판마다 30분)이 있어서, 이걸 안 넘기면 당겨도 안 바뀐다.
+  Future<void> _refreshAll({bool force = false}) async {
     await Future.wait([
       _loadMeal(),
       _loadBus(),
       _loadKeywordAlerts(),
-      _loadNoticePreview(),
+      _loadNoticePreview(force: force),
       _loadUpcoming(),
       _loadClubEvents(),
       _loadWeather(),
@@ -345,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadNoticePreview() async {
+  Future<void> _loadNoticePreview({bool force = false}) async {
     if (mounted) {
       setState(() {
         _noticeLoading = _favNotices.isEmpty;
@@ -354,9 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     try {
       var favBoards = PreferencesService.favoriteBoards.value.toSet();
-      if (favBoards.isEmpty) {
-        favBoards = const {"대학소식", "학사공지", "청람소양", "장학금"};
-      }
+      if (favBoards.isEmpty) favBoards = kDefaultFavoriteBoards;
 
       // 1. 오프라인 캐시에서 먼저 즉시 로드
       final cached = await NoticeCache.load();
@@ -374,7 +374,10 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       // 2. 최신 공지 스크래핑
-      final fetched = await _scraper.fetchAllNotices(onlyCategories: favBoards);
+      final fetched = await _scraper.fetchAllNotices(
+        onlyCategories: favBoards,
+        forceRefresh: force,
+      );
       final filtered = fetched
           .where((n) => favBoards.contains(n.category))
           .take(4)

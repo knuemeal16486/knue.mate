@@ -5,62 +5,92 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cp949_codec/cp949_codec.dart';
 import 'package:flutter/foundation.dart';
+import 'academic_calendar.dart';
 import 'notice_model.dart';
 import 'offline_cache.dart';
+import 'school_http.dart';
 
-/// 학교 학사일정 페이지는 searchM을 받아도 그 학년도 전체 일정을 한 번에
-/// 돌려준다(실측: searchM=09로 요청해도 1~12월 행이 전부 섞여 온다). 여기서
-/// 걸러내지 않으면 9월 카드에 1월 일정까지 그대로 들어간다. 월 경계에 걸친
-/// 일정(예: 8.31~9.4)은 양쪽 달 모두에 걸리는 게 맞으므로 날짜 범위가 그
-/// 달과 겹치는지로 판단한다. 순수 함수 — 테스트 대상.
-List<CalendarEvent> scopeEventsToMonth(
-  List<CalendarEvent> events,
-  int year,
-  int month,
+export 'academic_calendar.dart';
+
+// ── 학교 서버 부담 ─────────────────────────────────────────────────────
+//
+// 2026-09-28 정보전산원 메일: 이 앱의 공지 요청이 학교 게시판 목록 전송량의
+// 약 70%(하루 약 7.5GB, 9/23 약 8만 3천 건)였다. 원인은 기기마다 백그라운드로
+// 2시간마다 48개 게시판을 **한꺼번에** 받던 구조다. 아래 값들은 그 부담을
+// 줄이려고 정한 것이라, 늘리거나 병렬로 되돌리기 전에 학교와 이야기해야 한다.
+
+/// 앱이 켜져 있을 때 뒤에서 하는 자동 갱신 간격(게시판마다, 기기에 저장).
+const Duration kNoticeAutoRefreshGap = Duration(minutes: 30);
+
+/// 캐시가 비어 있을 때(첫 실행, 또는 전부 실패했을 때) 다시 받는 최소 간격.
+/// 이게 없으면 학교 서버가 막혔을 때 화면을 열 때마다 전체를 다시 받는다.
+const Duration kNoticeFirstLoadGap = Duration(minutes: 5);
+
+/// 한 서버에 동시에 보내는 요청 수. 예전엔 40개를 1초 안에 한꺼번에 보냈다.
+/// 하나씩 차례로 보내면 전체 새로 고침이 10~20초 걸려서, 브라우저가 한
+/// 사이트에 여는 연결 수(보통 6)보다 적게 잡았다. 전체가 2~4초면 끝난다.
+const int kSchoolMaxConcurrent = 4;
+
+/// 즐겨찾기 게시판이 없을 때 홈 카드와 백그라운드 알림이 보는 게시판.
+const Set<String> kDefaultFavoriteBoards = {'대학소식', '학사공지', '청람소양', '장학금'};
+
+/// 백그라운드 알림 작업이 받을 게시판. null이면 전체. 순수 함수 — 테스트 대상.
+///
+/// 예전엔 늘 전체 48개를 받았다. 알림은 즐겨찾기 게시판 것만 보내므로 그것만
+/// 받는다. 즐겨찾기가 없을 때:
+/// - 키워드가 있으면 전체 — 키워드 알림은 원래 모든 게시판에서 찾아 줬다.
+///   이걸 줄이면 사용자가 받던 알림이 말없이 끊긴다.
+/// - 키워드도 없으면 기본 4개 — 예전엔 48개 게시판의 새 글이 전부 알림으로
+///   왔다(아무것도 설정 안 한 사람에게).
+Set<String>? backgroundNoticeBoards(
+  Iterable<String> favBoards,
+  Iterable<String> keywords,
 ) {
-  final monthStart = DateTime(year, month, 1);
-  final monthEnd = DateTime(year, month + 1, 1);
-  return events
-      .where(
-        (e) => e.startDate.isBefore(monthEnd) && !e.endDate.isBefore(monthStart),
-      )
-      .toList();
+  if (favBoards.isNotEmpty) return favBoards.toSet();
+  if (keywords.isNotEmpty) return null;
+  return kDefaultFavoriteBoards;
 }
 
-/// 같은 일정이 여러 번 실려 오는 걸 하나로 합친다.
+/// 게시판 하나. 같은 이름(category)의 게시판이 두 개 있어서('교육대학원' —
+/// 사도교육원과 대학원) 이름만으로는 구분이 안 된다. url이 고유하다.
+typedef NoticeBoard = ({String group, String category, String url});
+
+/// 서버(host)별로 줄을 세운다. 순수 함수 — 테스트 대상.
 ///
-/// 학교 페이지가 기간 일정을 행마다 반복해 싣거나, 기간이 겹치는 같은
-/// 일정이 따로 등록돼 있어서 같은 제목이 두세 번씩 잡힌다. 학사일정 화면은
-/// 목록이 길어 중복이 눈에만 거슬리는 정도지만, **홈 카드는 앞의 3개만
-/// 보여주므로 중복 하나가 자리를 통째로 먹는다** — 같은 일정만 세 줄 뜨고
-/// 정작 다음 일정은 안 보이는 일이 생긴다.
-///
-/// 제목만이 아니라 기간까지 같아야 같은 일정으로 본다. 제목만 보면
-/// "중간고사" 같은 이름이 학기마다 반복될 때 뒤쪽을 잘못 지운다.
-/// 순수 함수 — 테스트 대상.
-List<CalendarEvent> dedupeCalendarEvents(List<CalendarEvent> events) {
-  final seen = <String>{};
-  return events
-      .where((e) => seen.add('${e.title.trim()}|${e.startDate}|${e.endDate}'))
-      .toList();
+/// 같은 서버에는 한 번에 하나씩 차례로 보내고, 서로 다른 서버끼리만 동시에
+/// 받는다. 'LINK:' 게시판은 받지 않으므로 뺀다.
+Map<String, List<NoticeBoard>> boardQueuesByHost(Iterable<NoticeBoard> boards) {
+  final queues = <String, List<NoticeBoard>>{};
+  for (final b in boards) {
+    if (b.url.startsWith('LINK:')) continue;
+    final host = Uri.tryParse(b.url)?.host ?? '';
+    (queues[host] ??= []).add(b);
+  }
+  return queues;
 }
 
-/// 홈 카드의 "다가오는 학사일정" 고르기.
+/// 새로 받은 게시판 목록을 캐시에 합친다. 순수 함수 — 테스트 대상.
 ///
-/// 오늘 아직 안 끝난 일정만 남겨 시작이 이른 순으로 [take]개.
-/// 여러 달치를 받아 넘기는 걸 전제로 한다 — 이번 달만 넘기면 월말에
-/// 빈 카드가 된다. 순수 함수 — 테스트 대상.
-List<CalendarEvent> upcomingAcademicEvents(
-  List<CalendarEvent> events,
-  DateTime now, {
-  int take = 3,
-}) {
-  final today = DateTime(now.year, now.month, now.day);
-  final upcoming = dedupeCalendarEvents(events).where((e) {
-    final end = DateTime(e.endDate.year, e.endDate.month, e.endDate.day);
-    return !end.isBefore(today);
-  }).toList()..sort((a, b) => a.startDate.compareTo(b.startDate));
-  return upcoming.take(take).toList();
+/// 받은 게시판은 그 게시판 몫을 **통째로 바꾼다**(글 id로 합치면 지워진
+/// 글이 캐시에 영영 남는다). 빈 결과는 실패로 보고 기존 것을 둔다.
+/// [validBoards]에 없는 게시판(목록에서 빠진 것)의 옛 글은 버린다.
+List<Notice> mergeNoticeCache(
+  List<Notice> cached,
+  Map<(String, String), List<Notice>> fresh,
+  Set<(String, String)> validBoards,
+) {
+  final replaced = {
+    for (final e in fresh.entries)
+      if (e.value.isNotEmpty) e.key,
+  };
+  final merged = <Notice>[
+    for (final n in cached)
+      if (validBoards.contains((n.group, n.category)) &&
+          !replaced.contains((n.group, n.category)))
+        n,
+    for (final e in fresh.entries) ...e.value,
+  ]..sort((a, b) => b.date.compareTo(a.date));
+  return merged;
 }
 
 class KnueScraper {
@@ -240,76 +270,130 @@ class KnueScraper {
     },
   };
 
-  // 최대 재시도 횟수
-  static const int maxRetries = 3;
+  /// 네트워크 오류·시간 초과 때 다시 보내는 횟수. 예전엔 3번(최대 4배)이라
+  /// 학교 서버가 느려질수록 요청이 불어났다. 서버가 **응답한** 오류(4xx·5xx)는
+  /// 곧바로 다시 보내도 소용없으니 다시 보내지 않는다.
+  static const int maxRetries = 1;
+  static const Duration retryDelay = Duration(seconds: 5);
 
-  /// 공지 가져오기. 캐시가 있으면 즉시 반환하고 백그라운드 갱신.
-  /// [onlyCategories] 지정 시 해당 게시판만 크롤링(홈 대시보드 경량 경로).
+  /// 한 서버에서 이만큼 연달아 실패하면 그 회차엔 그 서버를 건너뛴다.
+  static const int _maxFailuresInRow = 3;
+
+  /// 한 번에 캐시에 반영하는 게시판 수. 전체를 차례로 받으면 20초쯤 걸려서,
+  /// 다 받을 때까지 기다리지 않고 중간중간 화면에 채워 넣는다.
+  static const int _flushEvery = 10;
+
+  List<NoticeBoard> get _allBoards => [
+    for (final g in boardGroups.entries)
+      for (final b in g.value.entries)
+        (group: g.key, category: b.key, url: b.value),
+  ];
+
+  /// 공지 가져오기. 캐시가 있으면 즉시 돌려주고 갱신은 뒤에서 한다.
+  ///
+  /// [onlyCategories]를 주면 그 게시판만 받고 그 게시판 글만 돌려준다.
+  /// 학교 서버로는 게시판마다 [kNoticeAutoRefreshGap](자동) /
+  /// [kNoticeFirstLoadGap](캐시가 없을 때) 안에 두 번 가지 않는다 — 이 제한은
+  /// 기기에 저장돼 앱을 다시 켜도 유지된다. 제한에 걸린 게시판은 캐시에 있는
+  /// 글을 그대로 쓴다.
+  ///
+  /// [forceRefresh](당겨서 새로 고침·새로고침 버튼·백그라운드 알림)는 제한 없이
+  /// 매번 받는다. 사람이 직접 요청한 것이고 드물다. 다만 받은 시각은 기록돼서,
+  /// 곧이어 도는 자동 갱신이 같은 게시판을 또 받지는 않는다.
   Future<List<Notice>> fetchAllNotices({
     bool forceRefresh = false,
     Set<String>? onlyCategories,
   }) async {
-    if (!forceRefresh) {
-      final cached = await NoticeCache.load();
-      if (cached != null && cached.isNotEmpty) {
-        // throttle이 없으면 revision→재로드→갱신이 끝없이 돌며 즐겨찾기
-        // 게시판 전체를 계속 스크래핑한다.
-        final key = 'notices_${(onlyCategories?.toList()?..sort())?.join(",") ?? "all"}';
-        RefreshThrottle.deferred(
-          key,
-          () => _fetchAndUpdateCache(onlyCategories: onlyCategories),
-        );
-        return cached;
-      }
-    }
-    return _fetchAndUpdateCache(onlyCategories: onlyCategories);
-  }
-
-  Future<List<Notice>> _fetchAndUpdateCache({Set<String>? onlyCategories}) async {
-    List<Notice> all = [];
-    List<Future<List<Notice>>> futures = [];
-
-    for (var groupEntry in boardGroups.entries) {
-      String groupName = groupEntry.key;
-      for (var entry in groupEntry.value.entries) {
-        if (onlyCategories != null && !onlyCategories.contains(entry.key)) {
-          continue;
+    final wanted = [
+      for (final b in _allBoards)
+        if (onlyCategories == null || onlyCategories.contains(b.category)) b,
+    ];
+    final cached = await NoticeCache.load();
+    if (!forceRefresh && cached != null && cached.isNotEmpty) {
+      Future.delayed(RefreshThrottle.warmupDelay, () async {
+        try {
+          await _refreshBoards(wanted, kNoticeAutoRefreshGap);
+        } catch (e) {
+          debugPrint('공지 배경 갱신 실패: $e');
         }
-        futures.add(
-          _fetchBoardWithRetry(groupName, entry.key, entry.value)
-              .catchError((e) {
-            debugPrint('Error fetching $groupName - ${entry.key}: $e');
-            return <Notice>[];
-          }),
-        );
-      }
+      });
+      return _scope(cached, onlyCategories);
     }
-
-    for (int i = 0; i < futures.length; i += 5) {
-      int end = (i + 5 < futures.length) ? i + 5 : futures.length;
-      final results = await Future.wait(futures.sublist(i, end));
-      for (var res in results) {
-        all.addAll(res);
-      }
-    }
-
-    all.sort((a, b) => b.date.compareTo(a.date));
-
-    if (onlyCategories == null) {
-      await NoticeCache.save(all);
-    } else if (all.isNotEmpty) {
-      // 부분 크롤링은 기존 캐시에 병합
-      final existing = await NoticeCache.load() ?? [];
-      final ids = all.map((n) => n.id).toSet();
-      existing.removeWhere((n) => ids.contains(n.id));
-      final merged = [...all, ...existing]
-        ..sort((a, b) => b.date.compareTo(a.date));
-      await NoticeCache.save(merged);
-    }
-    return all;
+    await _refreshBoards(
+      wanted,
+      forceRefresh ? Duration.zero : kNoticeFirstLoadGap,
+    );
+    return _scope(await NoticeCache.load() ?? const [], onlyCategories);
   }
 
-  // 재시도 로직이 포함된 게시판 가져오기
+  static List<Notice> _scope(List<Notice> notices, Set<String>? only) =>
+      only == null
+          ? notices
+          : notices.where((n) => only.contains(n.category)).toList();
+
+  /// [boards] 중 간격 제한이 지난 것만 받아 캐시에 합친다.
+  /// 서버마다 동시에 [kSchoolMaxConcurrent]개까지만 보낸다.
+  Future<void> _refreshBoards(List<NoticeBoard> boards, Duration gap) async {
+    final dueUrls = (await PersistentThrottle.acquire(
+      'notice_board',
+      boards.where((b) => !b.url.startsWith('LINK:')).map((b) => b.url),
+      gap,
+    )).toSet();
+    if (dueUrls.isEmpty) return;
+
+    final valid = {for (final b in _allBoards) (b.group, b.category)};
+    var pending = <(String, String), List<Notice>>{};
+    var flushing = Future<void>.value();
+    void flush() {
+      if (pending.isEmpty) return;
+      final batch = pending;
+      pending = {};
+      // 합치기는 차례로 — 동시에 하면 앞의 결과를 뒤의 것이 덮어쓴다.
+      flushing = flushing.then((_) async {
+        final merged =
+            mergeNoticeCache(await NoticeCache.load() ?? const [], batch, valid);
+        await NoticeCache.save(merged);
+      });
+    }
+
+    final queues = boardQueuesByHost(boards.where((b) => dueUrls.contains(b.url)));
+    await Future.wait(queues.entries.map((q) async {
+      final queue = q.value;
+      var next = 0;
+      var failuresInRow = 0;
+      // 서버마다 일꾼 [kSchoolMaxConcurrent]명이 줄에서 하나씩 꺼내 간다.
+      Future<void> worker() async {
+        while (next < queue.length) {
+          // 서버가 연달아 실패하면 이번 회차엔 그 서버를 그만 두드린다.
+          // 남은 게시판은 다음 간격이 지난 뒤에 다시 받는다.
+          if (failuresInRow >= _maxFailuresInRow) {
+            debugPrint('${q.key}: 연속 $failuresInRow번 실패 — 남은 ${queue.length - next}개 건너뜀');
+            next = queue.length;
+            return;
+          }
+          final b = queue[next++];
+          try {
+            final list = await _fetchBoardWithRetry(b.group, b.category, b.url);
+            // 같은 이름 게시판('교육대학원')이 두 개라 키에 그룹까지 넣는다.
+            (pending[(b.group, b.category)] ??= []).addAll(list);
+            failuresInRow = 0;
+          } catch (e) {
+            failuresInRow++;
+            debugPrint('Error fetching ${b.group} - ${b.category}: $e');
+          }
+          if (pending.length >= _flushEvery) flush();
+        }
+      }
+
+      await Future.wait([
+        for (var i = 0; i < kSchoolMaxConcurrent && i < queue.length; i++)
+          worker(),
+      ]);
+    }));
+    flush();
+    await flushing;
+  }
+
   Future<List<Notice>> _fetchBoardWithRetry(
     String group,
     String category,
@@ -319,8 +403,8 @@ class KnueScraper {
     try {
       return await _fetchBoard(group, category, url);
     } catch (e) {
-      if (retry < maxRetries) {
-        await Future.delayed(Duration(seconds: 1 * (retry + 1)));
+      if (e is! _HttpStatusException && retry < maxRetries) {
+        await Future.delayed(retryDelay);
         return _fetchBoardWithRetry(group, category, url, retry: retry + 1);
       }
       rethrow;
@@ -335,17 +419,11 @@ class KnueScraper {
     if (url.startsWith('LINK:')) return [];
 
     final response = await http
-        .get(
-          Uri.parse(url),
-          headers: {
-            'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          },
-        )
+        .get(Uri.parse(url), headers: await SchoolHttp.headers())
         .timeout(const Duration(seconds: 10));
 
     if (response.statusCode != 200) {
-      throw Exception('HTTP ${response.statusCode}');
+      throw _HttpStatusException(response.statusCode);
     }
 
     final notices = <Notice>[];
@@ -576,146 +654,23 @@ class KnueScraper {
 
   // Isolate에서는 정적 메서드만 사용하므로 기존 인스턴스 메서드들은 삭제되었습니다.
 
-  // 달력 행사 스크래핑
-  /// 학사일정. 공지·동아리와 같은 "캐시 먼저, 갱신은 뒤에서" 방식이다.
-  /// 한 달치 일정은 자주 바뀌지 않는데 매번 스크래핑을 기다리느라 홈 카드가
-  /// 800ms 가까이 비어 있었다.
-  Future<List<CalendarEvent>> fetchCalendarEvents(
-    int year,
-    int month, {
-    bool forceRefresh = false,
-  }) async {
-    if (!forceRefresh) {
-      final cached = await CalendarCache.load(year, month);
-      if (cached != null) {
-        // throttle이 없으면 갱신→재로드→갱신으로 계속 스크래핑한다.
-        RefreshThrottle.deferred(
-          "calendar_${year}_$month",
-          () => _fetchCalendarAndCache(year, month),
-        );
-        return cached;
-      }
-    }
-    return _fetchCalendarAndCache(year, month);
-  }
-
-  Future<List<CalendarEvent>> _fetchCalendarAndCache(
-      int year, int month) async {
-    final baseUrl = 'https://www.knue.ac.kr/www/selectSchdleWebList.do';
-    final monthStr = month.toString().padLeft(2, '0');
-    final url = Uri.parse('$baseUrl?key=542&searchY=$year&searchM=$monthStr');
-
-    try {
-      // 타임아웃이 없어서, 응답이 안 오면 카드가 영원히 로딩 상태였다.
-      final response =
-          await http.get(url).timeout(const Duration(seconds: 8));
-      if (response.statusCode != 200) return [];
-
-      final document = parser.parse(response.body);
-      final listBody = document.querySelectorAll('tbody');
-      if (listBody.isEmpty) return [];
-
-      final scheduleTrs = document.querySelectorAll('tbody tr').where((tr) {
-        return tr.querySelector('.more_link') != null;
-      });
-
-      final List<CalendarEvent> events = [];
-      for (var tr in scheduleTrs) {
-        final titleElem = tr.querySelector('.more_link');
-        if (titleElem == null) continue;
-        final title = titleElem.text.trim();
-
-        final startSpan = tr.querySelector('.start');
-        final endSpan = tr.querySelector('.end');
-
-        DateTime? startDate;
-        DateTime? endDate;
-
-        if (startSpan != null) {
-          final mStr = startSpan.querySelector('.month')?.text.trim() ?? '01';
-          final dStr = startSpan.querySelector('.days')?.text.trim() ?? '01';
-          startDate = DateTime(
-            year,
-            int.tryParse(mStr) ?? 1,
-            int.tryParse(dStr) ?? 1,
-          );
-        }
-
-        if (endSpan != null) {
-          final mStr = endSpan.querySelector('.month')?.text.trim() ?? '01';
-          final dStr = endSpan.querySelector('.days')?.text.trim() ?? '01';
-          final endMonth = int.tryParse(mStr) ?? 1;
-          // 종료월이 시작월보다 앞이면(예: 12.28 ~ 1.3) 해가 넘어간 것이다.
-          // 둘 다 요청한 year를 그대로 쓰면 종료일이 시작일보다 앞서게 된다.
-          final rolledYear =
-              startDate != null && endMonth < startDate.month ? year + 1 : year;
-          endDate = DateTime(rolledYear, endMonth, int.tryParse(dStr) ?? 1);
-        } else {
-          endDate = startDate;
-        }
-
-        if (startDate != null && endDate != null && title.isNotEmpty) {
-          events.add(
-            CalendarEvent(startDate: startDate, endDate: endDate, title: title),
-          );
-        }
-      }
-
-      final scoped = scopeEventsToMonth(events, year, month);
-      await CalendarCache.save(year, month, scoped);
-      return scoped;
-    } catch (e) {
-      debugPrint('Calendar Fetch Error: $e');
-      // 네트워크가 실패해도 저장해둔 값이 있으면 그걸 쓴다.
-      return await CalendarCache.load(year, month) ?? [];
-    }
+  /// 학사일정. [year]년 [month]월에 걸친 일정.
+  ///
+  /// 학년도 하나를 공용 캐시(Firestore)에 두고 모든 기기가 나눠 쓴다 —
+  /// [AcademicCalendarStore] 참고. 호출부는 예전처럼 달 단위로 부르면 된다.
+  Future<List<CalendarEvent>> fetchCalendarEvents(int year, int month) async {
+    final events =
+        await AcademicCalendarStore.load(academicYearOf(year, month));
+    return scopeEventsToMonth(events, year, month);
   }
 }
 
-/// 학사일정 캐시. 월 단위로 저장한다.
-class CalendarCache {
-  /// 백그라운드 갱신이 끝나면 값이 바뀐다. 화면은 이걸 구독해 다시 그린다.
-  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
-
-  // v2: 이전 버전은 월 필터링 버그로 전체 학년도 일정을 그대로 캐싱했다.
-  // 버전을 올려 기존 기기의 잘못된 캐시를 무시하고 새로 받게 한다.
-  static String _key(int year, int month) => 'calendarCache_v2_${year}_$month';
-
-  static Future<List<CalendarEvent>?> load(int year, int month) async {
-    // 학사일정은 학기 중 드물게 바뀐다. 오래된 값이라도 빈 카드보다 낫고,
-    // 어차피 백그라운드로 갱신된다.
-    final raw = await JsonCache.load(_key(year, month),
-        maxAge: const Duration(days: 3));
-    if (raw is! List) return null;
-    try {
-      return raw
-          .map((e) => CalendarEvent(
-                startDate: DateTime.parse(e['start'] as String),
-                endDate: DateTime.parse(e['end'] as String),
-                title: e['title'] as String,
-              ))
-          .toList();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static Future<void> save(
-      int year, int month, List<CalendarEvent> events) async {
-    final changed = await JsonCache.save(
-      _key(year, month),
-      events
-          .map((e) => {
-                'start': e.startDate.toIso8601String(),
-                'end': e.endDate.toIso8601String(),
-                'title': e.title,
-              })
-          .toList(),
-    );
-    // 내용이 같으면 revision을 올리지 않는다 — 올리면 화면이 다시 로드하고,
-    // 그게 또 갱신을 불러 무한 루프가 된다.
-    if (changed) revision.value++;
-  }
+/// 서버가 200이 아닌 응답을 줬다. 네트워크 오류와 달리 다시 보내지 않는다.
+class _HttpStatusException implements Exception {
+  final int statusCode;
+  const _HttpStatusException(this.statusCode);
+  @override
+  String toString() => 'HTTP $statusCode';
 }
 
 /// 공지 캐시 — bus의 OfflineCache와 동일 패턴 (SharedPreferences + JSON)
