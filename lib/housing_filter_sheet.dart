@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'housing_service.dart';
 
@@ -151,6 +152,9 @@ class _HousingFilterSheetState extends State<HousingFilterSheet> {
                       child: TextField(
                         controller: _deposit,
                         keyboardType: TextInputType.number,
+                        // 숫자만. 숫자 키패드에도 . , - 가 있어서 "35.5"를 넣으면 조건이
+                        // 조용히 풀렸다(칸엔 글자가 그대로 남아 걸린 줄 알았다).
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         onChanged: (_) => _syncNumbers(),
                         decoration: const InputDecoration(
                           labelText: "보증금",
@@ -165,6 +169,9 @@ class _HousingFilterSheetState extends State<HousingFilterSheet> {
                       child: TextField(
                         controller: _monthly,
                         keyboardType: TextInputType.number,
+                        // 숫자만. 숫자 키패드에도 . , - 가 있어서 "35.5"를 넣으면 조건이
+                        // 조용히 풀렸다(칸엔 글자가 그대로 남아 걸린 줄 알았다).
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         onChanged: (_) => _syncNumbers(),
                         decoration: const InputDecoration(
                           labelText: "월 부담",

@@ -940,17 +940,21 @@ class HousingSummary {
       }
     }
 
+    // 시세가 든 제보만 센다. 전화번호만 남긴 제보는 보증금·월세가 0이라,
+    // 예전엔 그런 제보만 있는 건물이 "제보 1건"·"월 0만원"으로 떠서 월세순
+    // 맨 앞에 서고 [월 35 이하]에도 걸렸다. 번호·후기·장단점은 그대로 모은다.
+    final priced = [
+      for (final r in list)
+        if (r.deposit > 0 || r.monthlyRent > 0) r,
+    ];
     return HousingSummary(
-      reportCount: list.length,
-      surveyCount: list.where((r) => r.survey).length,
-      reports: [
-        for (final r in list)
-          if (r.deposit > 0 || r.monthlyRent > 0) r,
-      ]..sort((a, b) => b.reportedAt.compareTo(a.reportedAt)),
-      avgDeposit: avg(validDeposits.isNotEmpty ? validDeposits : list.map((r) => r.deposit).toList()),
-      avgRent: avg(validRents.isNotEmpty ? validRents : list.map((r) => r.monthlyRent).toList()),
+      reportCount: priced.length,
+      surveyCount: priced.where((r) => r.survey).length,
+      reports: priced..sort((a, b) => b.reportedAt.compareTo(a.reportedAt)),
+      avgDeposit: avg(validDeposits.isNotEmpty ? validDeposits : priced.map((r) => r.deposit).toList()),
+      avgRent: avg(validRents.isNotEmpty ? validRents : priced.map((r) => r.monthlyRent).toList()),
       avgMaintenance: avg(fees),
-      avgMonthlyTotal: avg(validTotals.isNotEmpty ? validTotals : list.map((r) => r.monthlyTotal).toList()),
+      avgMonthlyTotal: avg(validTotals.isNotEmpty ? validTotals : priced.map((r) => r.monthlyTotal).toList()),
       roomTypes: list.map((r) => r.roomType).whereType<HousingRoomType>().toSet(),
       topFeatures: sortedFeatures.take(5).map((e) => e.key).toList(),
       allFeatures: featureCount.keys.toSet(),
@@ -1714,11 +1718,16 @@ List<BaseBuilding> applyBuildingOverrides(
 ///
 /// [matches]가 비어 있지 않으면("내 조건 찾기"를 건 상태) 맞는 건물만
 /// 색·이름표를 남겨 후보가 지도에서 바로 눈에 띄게 한다.
+///
+/// [filtering]이 true면 [matches]가 비어 있어도 거른다 — 조건에 맞는 곳이
+/// 0곳이면 지도에서도 0곳이어야 한다. 예전엔 빈 결과를 "거르지 않음"으로
+/// 읽어서, 맞는 곳이 없을 때 오히려 모든 건물이 후보처럼 칠해졌다.
 HousingMapStyle housingMapStyle(
   Iterable<BaseBuilding> buildings, {
   Map<String, HousingSummary> summaries = const {},
   Map<String, HousingBuildingOverride> overrides = const {},
   Set<String> matches = const {},
+  bool filtering = false,
 }) {
   OneRoomName? known(String id) {
     final o = overrides[id];
@@ -1771,7 +1780,7 @@ HousingMapStyle housingMapStyle(
   // 관리자가 이름표를 끈 건물.
   displayNames.removeWhere((id, _) => overrides[id]?.hideLabel == true);
 
-  if (matches.isNotEmpty) {
+  if (filtering || matches.isNotEmpty) {
     zoneColors.removeWhere((id, _) => !matches.contains(id));
     displayNames.removeWhere((id, _) => !matches.contains(id));
   }
@@ -1782,6 +1791,28 @@ HousingMapStyle housingMapStyle(
     displayNames: displayNames,
     windowIds: windowIds,
   );
+}
+
+/// 원룸 사전 항목([kOneRoomNames])이 지도의 어느 건물인지. 순수 함수 — 테스트 대상.
+///
+/// 학생 제보로 이어진 건물을 먼저, 없으면 건물 이름([nameOf], 관리자가 붙인
+/// 이름이나 조사한 이름)이 사전 이름과 같은 건물을 찾는다. 둘 다 없으면 null —
+/// 예전 검색은 이때 **아무 원룸 건물**로 옮겨 가서, "다솜빌"을 찾으면 엉뚱한
+/// 건물이 떴다.
+BaseBuilding? buildingForOneRoom(
+  OneRoomName item,
+  Iterable<BaseBuilding> buildings, {
+  required String? Function(String buildingId) linkedOneRoomId,
+  required String? Function(BaseBuilding b) nameOf,
+}) {
+  for (final b in buildings) {
+    if (linkedOneRoomId(b.id) == item.id) return b;
+  }
+  for (final b in buildings) {
+    if (b.isCampus) continue;
+    if (oneRoomByName(nameOf(b))?.id == item.id) return b;
+  }
+  return null;
 }
 
 /// 관리자 쓰기 실패를 알릴 문구. 원인마다 할 일이 달라서 나눠 알린다.

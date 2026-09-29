@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'constants.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'housing_iso.dart';
@@ -35,9 +36,7 @@ class HousingCompareSheet extends StatelessWidget {
       await launchUrl(uri);
     } else {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('전화 앱을 열 수 없습니다: $phone')),
-      );
+      showOverlayToast(context, '전화 앱을 열 수 없습니다: $phone');
     }
   }
 
@@ -47,9 +46,7 @@ class HousingCompareSheet extends StatelessWidget {
 혹시 다가오는 학기에 입주 가능한 공실이 있는지 여쭙고 싶습니다.
 편하신 시간에 방을 한번 둘러볼 수 있을까요? 감사합니다!''';
     Clipboard.setData(ClipboardData(text: template));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('직거래 문의 문자 양식이 복사되었습니다!')),
-    );
+    showOverlayToast(context, '직거래 문의 문자 양식이 복사되었습니다!');
   }
 
   @override
@@ -217,12 +214,15 @@ class HousingCompareSheet extends StatelessWidget {
     final known = knowns[b.id];
     final override = overrides[b.id];
     final s = summaries[b.id] ?? HousingSummary.empty;
-    final name = override?.name ?? known?.name ?? b.officialName ?? '이름 미확인';
+    // known에 관리자가 붙인 이름이 이미 들어 있다(_resolvedKnown). override.name을
+    // 먼저 보면, 색·층수만 고친 건물은 이름이 ''이라 비교함에 이름이 비었다.
+    final name = known?.name ?? b.officialName ?? '이름 미확인';
     final addr = displayAddress(b, override);
     // 구역 표시는 "캠퍼스 시설"만 — 원룸 구역 태그는 뺐다.
     final zone = b.isCampus ? HousingZone.campus : null;
     final phone = override?.landlordPhone ?? s.publicContactPhone;
 
+    // 직선거리×1.2 어림값 — 목록과 같이 "약 n분"으로만 적는다.
     final distGate = walkingDistanceMeters(b.center, CampusLandmark.mainGate);
     final distLib = walkingDistanceMeters(b.center, CampusLandmark.library);
     final distTopyeon = walkingDistanceMeters(b.center, CampusLandmark.topyeonStop);
@@ -335,7 +335,7 @@ class HousingCompareSheet extends StatelessWidget {
             height: 44,
             alignment: Alignment.centerLeft,
             child: Text(
-              '도보 ${walkingMinutes(distGate)}분 (${distGate}m)',
+              '도보 약 ${walkingMinutes(distGate)}분',
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
@@ -350,7 +350,7 @@ class HousingCompareSheet extends StatelessWidget {
             height: 44,
             alignment: Alignment.centerLeft,
             child: Text(
-              '도보 ${walkingMinutes(distLib)}분 (${distLib}m)',
+              '도보 약 ${walkingMinutes(distLib)}분',
               style: TextStyle(fontSize: 11.5, color: isDark ? Colors.white70 : Colors.black87),
             ),
           ),
@@ -361,7 +361,7 @@ class HousingCompareSheet extends StatelessWidget {
             height: 44,
             alignment: Alignment.centerLeft,
             child: Text(
-              '도보 ${walkingMinutes(distTopyeon)}분 (${distTopyeon}m)',
+              '도보 약 ${walkingMinutes(distTopyeon)}분',
               style: TextStyle(
                 fontSize: 11.5,
                 color: walkingMinutes(distTopyeon) <= 6 ? const Color(0xFF007AFF) : (isDark ? Colors.white70 : Colors.black87),

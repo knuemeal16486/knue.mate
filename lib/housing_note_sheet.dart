@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'constants.dart';
 import 'housing_note_service.dart';
 
 /// 나만의 원룸 발품 점검표 바텀시트
@@ -63,13 +64,9 @@ class _HousingNoteSheetState extends State<HousingNoteSheet> {
       widget.onSaved?.call(note);
       if (!mounted) return;
       Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('발품 메모가 내 폰에 저장되었습니다.')),
-      );
+      showOverlayToast(context, '발품 메모가 내 폰에 저장되었습니다.');
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('저장에 실패했습니다.')),
-      );
+      showOverlayToast(context, '저장에 실패했습니다.');
     }
   }
 

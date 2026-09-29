@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'constants.dart';
 import 'housing_iso.dart';
 import 'housing_service.dart';
 
@@ -51,7 +52,10 @@ class _HousingReportSheetState extends State<HousingReportSheet> {
 
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) return;
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     final phone = _contactPhone.text.trim();
     final report = HousingReport(
       buildingId: widget.building.id,
@@ -73,22 +77,25 @@ class _HousingReportSheetState extends State<HousingReportSheet> {
     setState(() => _submitting = false);
     switch (result) {
       case HousingSubmitResult.ok:
+        // 창을 닫기 전에 오버레이를 잡아 둔다. 닫은 뒤엔 이 창의 context가
+        // 트리에서 떨어지고, 다시 받아오기(onSubmitted)가 닫히는 애니메이션보다
+        // 길면 mounted도 false가 돼서 예전엔 성공 알림을 아예 건너뛰었다.
+        final overlay = overlayOf(context);
         Navigator.pop(context);
         await widget.onSubmitted();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('제보가 등록되었어요. 고마워요!')),
-        );
+        if (overlay != null && overlay.mounted) {
+          showOverlayToastOn(overlay, '제보가 등록되었어요. 고마워요!');
+        }
+      // 실패는 창 안에 적는다. SnackBar는 이 창 아래에 깔려 안 보였다.
       case HousingSubmitResult.alreadyReported:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('같은 내용을 이미 보냈어요. 다른 방이면 금액이나 구조를 바꿔 보내 주세요.')),
-        );
+        setState(() => _error = '같은 내용을 이미 보냈어요. 다른 방이면 금액이나 구조를 바꿔 보내 주세요.');
       case HousingSubmitResult.failed:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('저장하지 못했어요. 네트워크를 확인하고 다시 눌러 주세요.')),
-        );
+        setState(() => _error = '저장하지 못했어요. 네트워크를 확인하고 다시 눌러 주세요.');
     }
   }
+
+  /// 마지막 제보가 왜 안 됐는지. 다시 누르면 지운다.
+  String? _error;
 
   InputDecoration _deco(String label, {String? hint}) => InputDecoration(
         labelText: label,
@@ -244,6 +251,24 @@ class _HousingReportSheetState extends State<HousingReportSheet> {
                     ),
                   ),
                   const SizedBox(height: 8),
+
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.error_outline_rounded, size: 16, color: Color(0xFFEF4444)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(fontSize: 12.5, color: Color(0xFFEF4444), height: 1.35),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
                   SizedBox(
                     width: double.infinity,

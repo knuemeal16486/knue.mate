@@ -705,6 +705,63 @@ void showToastOn(ScaffoldMessengerState messenger, String msg) {
   );
 }
 
+OverlayEntry? _overlayToast;
+
+/// 바텀시트가 열려 있어도 보이는 토스트.
+///
+/// [showToast]의 SnackBar는 화면 Scaffold에 그려져서, 모달 바텀시트가 열려
+/// 있으면 **시트 아래에 깔려 안 보인다**(눌림도 닿지 않는 것을 테스트로
+/// 확인했다). 자취방 상세·제보·비교 창처럼 시트 안에서 알릴 때는 이걸 쓴다.
+/// 앱 맨 위 오버레이에 올리므로, 창을 닫는 중에 불러도 그대로 보인다 —
+/// 닫기 전에 [overlayOf]로 잡아 두었다가 [showOverlayToastOn]에 넘기면 된다.
+void showOverlayToast(BuildContext context, String msg) {
+  final overlay = overlayOf(context);
+  if (overlay != null) showOverlayToastOn(overlay, msg);
+}
+
+OverlayState? overlayOf(BuildContext context) =>
+    Overlay.maybeOf(context, rootOverlay: true);
+
+void showOverlayToastOn(OverlayState overlay, String msg) {
+  _overlayToast?.remove();
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (ctx) {
+      final mq = MediaQuery.of(ctx);
+      return Positioned(
+        left: 24,
+        right: 24,
+        bottom: mq.viewInsets.bottom + mq.padding.bottom + 28,
+        child: IgnorePointer(
+          child: Material(
+            color: Colors.transparent,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.82),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Text(
+                  msg,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+  _overlayToast = entry;
+  overlay.insert(entry);
+  Timer(const Duration(milliseconds: 1800), () {
+    if (entry.mounted) entry.remove();
+    if (identical(_overlayToast, entry)) _overlayToast = null;
+  });
+}
+
 // [3] API 및 위젯 로직
 /// 위젯이 받아와야 할 날짜.
 ///

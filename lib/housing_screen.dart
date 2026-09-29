@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -227,11 +227,15 @@ class _HousingScreenState extends State<HousingScreen>
   /// "내 조건 찾기"로 건 조건. 비어 있으면 아무것도 안 거른다.
   HousingFilter _filter = const HousingFilter();
 
-  /// 퀵 필터: 월 35만원 이하
-  bool _quickMaxRent35 = false;
-
-  /// 퀵 필터: 원룸/1.5룸만
-  bool _quickRoomTypes = false;
+  /// 퀵 필터 칩은 따로 켜짐 상태를 들고 있지 않고 [_filter]에서 읽는다.
+  /// 예전엔 bool을 따로 들고 있어서, "내 조건 찾기"에서 금액을 40으로 바꿔도
+  /// [월 35 이하] 칩이 켜진 채 남았고, 그 칩을 끄면 직접 넣은 금액까지 지워졌다.
+  static const Set<HousingRoomType> _quickRoomTypeSet = {
+    HousingRoomType.oneRoom,
+    HousingRoomType.onePointFive,
+  };
+  bool get _quickMaxRent35 => _filter.maxMonthly == 35;
+  bool get _quickRoomTypes => setEquals(_filter.roomTypes, _quickRoomTypeSet);
 
   /// 지도 위 말풍선 시세 마커 표시 여부 (기본값: false로 끈 상태, 버튼을 누르면 켜짐)
   bool _showPriceTags = false;
@@ -294,15 +298,16 @@ class _HousingScreenState extends State<HousingScreen>
   /// 실행 취소(Undo) 스냅샷 스택
   final List<_EditUndoSnapshot> _undoStack = [];
 
+  /// 상세 창 안에서 누르므로 알림은 창 위에 띄운다(SnackBar는 창에 가려졌다).
   void _toggleCompare(String buildingId) {
     setState(() {
       if (_compareBuildingIds.contains(buildingId)) {
         _compareBuildingIds.remove(buildingId);
       } else if (_compareBuildingIds.length < 3) {
         _compareBuildingIds.add(buildingId);
-        showToast(context, '비교함에 담겼습니다 (${_compareBuildingIds.length}/3)');
+        showOverlayToast(context, '비교함에 담겼습니다 (${_compareBuildingIds.length}/3)');
       } else {
-        showToast(context, '최대 3개까지 비교할 수 있어요. 먼저 하나를 빼주세요.');
+        showOverlayToast(context, '최대 3개까지 비교할 수 있어요. 먼저 하나를 빼주세요.');
       }
     });
   }
@@ -313,24 +318,32 @@ class _HousingScreenState extends State<HousingScreen>
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => HousingCompareSheet(
-        buildings: _base.buildings.where((b) => _compareBuildingIds.contains(b.id)).toList(),
+      // 하나를 빼도 창은 그대로 두고 그 열만 없앤다. 예전엔 빼는 순간 창이
+      // 닫혀 남은 두 곳을 보려면 [비교 보기]를 다시 눌러야 했다.
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) => HousingCompareSheet(
+        buildings: _effectiveBuildings.where((b) => _compareBuildingIds.contains(b.id)).toList(),
         summaries: _summaries,
         knowns: {for (final id in _compareBuildingIds) id: _resolvedKnown(id)},
         overrides: {for (final id in _compareBuildingIds) id: _overrides[id]},
         isDark: isDark,
         onRemove: (id) {
-          Navigator.pop(context);
           setState(() => _compareBuildingIds.remove(id));
+          if (_compareBuildingIds.isEmpty) {
+            Navigator.pop(sheetCtx);
+          } else {
+            setSheet(() {});
+          }
         },
         onClearAll: () {
-          Navigator.pop(context);
+          Navigator.pop(sheetCtx);
           setState(() => _compareBuildingIds.clear());
         },
         onShowOnMap: (b) {
           setState(() => _isListView = false);
           _focusBuilding(b, openDetail: false);
         },
+        ),
       ),
     );
   }
@@ -340,34 +353,22 @@ class _HousingScreenState extends State<HousingScreen>
       _filter = const HousingFilter();
       _selectedZone = null;
       _onlyFavorites = false;
-      _quickMaxRent35 = false;
-      _quickRoomTypes = false;
       _rebuild();
     });
   }
 
   void _toggleQuickMaxRent35() {
     setState(() {
-      _quickMaxRent35 = !_quickMaxRent35;
-      if (_quickMaxRent35) {
-        _filter = _filter.copyWith(maxMonthly: 35);
-      } else {
-        _filter = _filter.copyWith(clearMonthly: true);
-      }
+      _filter = _quickMaxRent35
+          ? _filter.copyWith(clearMonthly: true)
+          : _filter.copyWith(maxMonthly: 35);
       _rebuild();
     });
   }
 
   void _toggleQuickRoomTypes() {
     setState(() {
-      _quickRoomTypes = !_quickRoomTypes;
-      if (_quickRoomTypes) {
-        _filter = _filter.copyWith(
-          roomTypes: {HousingRoomType.oneRoom, HousingRoomType.onePointFive},
-        );
-      } else {
-        _filter = _filter.copyWith(roomTypes: {});
-      }
+      _filter = _filter.copyWith(roomTypes: _quickRoomTypes ? {} : _quickRoomTypeSet);
       _rebuild();
     });
   }
@@ -570,7 +571,11 @@ class _HousingScreenState extends State<HousingScreen>
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _centerHome();
+        if (!mounted) return;
+        _centerHome();
+        // 불러오는 동안 온 "지도에서 보기" 요청은 _onFocusRequest가 버렸다 —
+        // 캠퍼스맵을 열자마자 장소 탭에서 누르면 아무 일도 안 일어났다. 지금 처리한다.
+        if (widget.focusRequests?.value != null) _onFocusRequest();
       });
 
       try {
@@ -704,24 +709,26 @@ class _HousingScreenState extends State<HousingScreen>
       _summaries = summarizeWithSurvey(_reports, nameById);
     }
 
-    // 무엇을 칠하고 어떤 이름표를 달지는 housingMapStyle이 정한다 — 지도
-    final matches = Set<String>.from(_matchingBuildingIds);
-    if (_onlyFavorites) {
-      if (matches.isEmpty) {
-        matches.addAll(_favoriteIds);
-      } else {
-        matches.retainAll(_favoriteIds);
-      }
-    }
-
     _effectiveBuildings = effectiveBuildings;
     _rebuildShadows();
+
+    // 무엇을 칠하고 어떤 이름표를 달지는 housingMapStyle이 정한다.
+    // 캠퍼스 모드에선 자취방 조건을 걸지 않는다(칩도 숨겨져 있다).
+    final byFilter = !_campusMode && !_filter.isEmpty;
+    final byFavorites = !_campusMode && _onlyFavorites;
+    final matches = <String>{
+      if (byFilter) ..._matchingBuildingIds else if (byFavorites) ..._favoriteIds,
+    };
+    // 조건과 찜을 같이 걸면 둘 다 맞는 곳만. 예전엔 조건에 맞는 곳이 0곳이면
+    // 찜한 곳 전부를 조건과 상관없이 칠했다.
+    if (byFilter && byFavorites) matches.retainAll(_favoriteIds);
 
     final style = housingMapStyle(
       effectiveBuildings,
       summaries: _summaries,
       overrides: _overrides,
       matches: matches,
+      filtering: byFilter || byFavorites,
     );
 
     _buildings = layoutBuildings(
@@ -1380,7 +1387,37 @@ class _HousingScreenState extends State<HousingScreen>
         const topBase = 10.0;
         final embeddedTop = widget.isEmbedded ? MediaQuery.of(context).padding.top : 0.0;
 
-        return Scaffold(
+        // 아래쪽에 뜨는 막대들. 예전엔 비교함·그림자 막대와 오른쪽 지도
+        // 도구가 같은 높이(아래 66~72)에 놓여, 막대가 도구의 축소·중심·더보기
+        // 버튼을 덮었다. 막대끼리도 겹쳤다. 막대를 아래부터 쌓고 도구는 그 위로.
+        final showCompareBar = _compareBuildingIds.isNotEmpty && (_isListView || _peekBuilding == null);
+        final showShadowBar = !_isListView &&
+            _showShadows &&
+            _peekBuilding == null &&
+            _shapeDraft == null &&
+            _mergeSelectedBuildingIds.length < 2;
+        final showEditBar = !_isListView && (_shapeDraft != null || _mergeSelectedBuildingIds.length >= 2);
+        const barBase = 66.0, barGap = 8.0;
+        const compareBarH = 64.0, shadowBarH = 92.0, editBarH = 72.0;
+        final compareBottom = barBase;
+        final shadowBottom = showCompareBar ? compareBottom + compareBarH + barGap : barBase + 6;
+        // 카드에 가게 줄이 붙으면 그만큼(약 26) 카드가 높아진다.
+        final peekHasShops = _peekBuilding != null &&
+            (_overrides[_peekBuilding!.id]?.shops.isNotEmpty ?? false);
+        var hudBottom = _peekBuilding != null ? (peekHasShops ? 180.0 : 150.0) : barBase;
+        if (showCompareBar) hudBottom = math.max(hudBottom, compareBottom + compareBarH + barGap);
+        if (showShadowBar) hudBottom = math.max(hudBottom, shadowBottom + shadowBarH + barGap);
+        if (showEditBar) hudBottom = math.max(hudBottom, 76 + editBarH + barGap);
+
+        // 뒤로가기는 카드부터 닫는다. 예전엔 카드가 떠 있어도 화면째 나갔다.
+        // 캠퍼스맵 안에 끼운 경우는 빼는데, 그땐 앱 루트의 종료 팝업
+        // PopScope(root_screen)와 같은 경로라 둘 다 반응하기 때문이다.
+        return PopScope(
+          canPop: widget.isEmbedded || _peekBuilding == null,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _closePeek();
+          },
+          child: Scaffold(
           appBar: widget.isEmbedded
               ? null
               : AppBar(
@@ -1473,7 +1510,10 @@ class _HousingScreenState extends State<HousingScreen>
                           Positioned.fill(
                             child: _isListView
                                 ? HousingListView(
-                                    buildings: inheritMergedCampus(_base.buildings, _overrides),
+                                    // 지도와 같은 목록 — 삭제·병합한 건물은 뺀다.
+                                    // (예전엔 에셋 목록을 그대로 넘겨 지운 건물
+                                    // 38곳·합친 조각 32곳이 목록에 남았다.)
+                                    buildings: _effectiveBuildings,
                                     summaries: _summaries,
                                     overrides: _overrides,
                                     favoriteIds: _favoriteIds,
@@ -1509,23 +1549,6 @@ class _HousingScreenState extends State<HousingScreen>
                             child: _buildSearchBar(isDark),
                           ),
 
-                          // 개발자 지도 편집 툴바 (블록 추가, 병합, 색칠, 삭제, Undo)
-                          // Positioned는 반드시 바깥에 둔다. 일반 사용자일 때
-                          // 위치 없는 SizedBox.shrink가 Stack 자식이 되면 Stack이
-                          // 거기에 맞춰 폭 0으로 줄어 지도 전체가 사라진다.
-                          if (!_isListView)
-                            Positioned(
-                              top: topBase + 82,
-                              left: 12,
-                              right: 12,
-                              child: ValueListenableBuilder<bool>(
-                                valueListenable: AdminAuthService.isAdmin,
-                                builder: (context, isAdmin, _) => isAdmin
-                                    ? _buildDevEditorToolbar(isDark, color)
-                                    : const SizedBox.shrink(),
-                              ),
-                            ),
-
                           // 건물 블록 병합 모드 플로팅 바 (2개 이상 선택 시)
                           if (!_isListView && _shapeDraft != null)
                             Positioned(
@@ -1548,7 +1571,7 @@ class _HousingScreenState extends State<HousingScreen>
                             AnimatedPositioned(
                               duration: const Duration(milliseconds: 250),
                               curve: Curves.easeOutCubic,
-                              bottom: _peekBuilding != null ? 150 : 66,
+                              bottom: hudBottom,
                               right: 14,
                               child: _buildRotationControls(isDark, color),
                             ),
@@ -1559,24 +1582,26 @@ class _HousingScreenState extends State<HousingScreen>
                               bottom: 16,
                               left: 12,
                               right: 12,
-                              child: _buildPeekCard(_peekBuilding!, isDark, color),
+                              // 아래로 밀어 닫는다(바텀시트처럼).
+                              child: GestureDetector(
+                                onVerticalDragEnd: (d) {
+                                  if ((d.primaryVelocity ?? 0) > 250) _closePeek();
+                                },
+                                child: _buildPeekCard(_peekBuilding!, isDark, color),
+                              ),
                             ),
 
                                                     // 비교함 플로팅 바 (1개 이상 담겼을 때)
-                          if (_compareBuildingIds.isNotEmpty && (_isListView || _peekBuilding == null))
+                          if (showCompareBar)
                             Positioned(
-                              bottom: 66,
+                              bottom: compareBottom,
                               left: 24,
                               right: 24,
                               child: _buildCompareFloatingBar(isDark, color),
                             ),
-                          if (!_isListView &&
-                              _showShadows &&
-                              _peekBuilding == null &&
-                              _shapeDraft == null &&
-                              _mergeSelectedBuildingIds.length < 2)
+                          if (showShadowBar)
                             Positioned(
-                              bottom: 72,
+                              bottom: shadowBottom,
                               left: 16,
                               right: 16,
                               child: _buildShadowTimeBar(isDark, color),
@@ -1598,6 +1623,7 @@ class _HousingScreenState extends State<HousingScreen>
                   ],
                 ),
             ),
+          ),
           ),
         );
       },
@@ -1848,6 +1874,11 @@ class _HousingScreenState extends State<HousingScreen>
               ],
               if (!_campusMode) ...[
                 if (_hasActiveFilters) _buildResetFilterChip(isDark),
+                // 캠퍼스맵 안에 끼우면 상단바가 없어서 "내 조건 찾기"로 갈 길이
+                // 없었다. 칩으로 둔다.
+                if (widget.isEmbedded)
+                  _buildQuickFilterChip('내 조건 찾기', !_filter.isEmpty, isDark,
+                      onTap: () => _openFilterSheet(isDark)),
                 _buildPriceTagToggleChip(isDark),
               ],
               _buildLabelToggleChip(isDark),
@@ -1855,10 +1886,26 @@ class _HousingScreenState extends State<HousingScreen>
                 _buildFavoriteChip(isDark),
                 _buildQuickFilterChip('월 35 이하', _quickMaxRent35, isDark, onTap: _toggleQuickMaxRent35),
                 _buildQuickFilterChip('원룸/1.5룸', _quickRoomTypes, isDark, onTap: _toggleQuickRoomTypes),
+                if (widget.isEmbedded)
+                  _buildQuickFilterChip('지도 안내', false, isDark, onTap: () => _showHelp(isDark)),
               ],
             ],
           ),
         ),
+
+        // 개발자 편집 도구는 검색창·칩 줄 바로 아래에 잇는다. 예전엔 따로
+        // 고정 위치(위에서 92)에 띄워서 검색 결과 목록을 덮었고(결과를 눌러도
+        // 도구가 눌렸다), 글자를 키운 기기에선 칩 줄과도 겹칠 수 있었다.
+        if (!_isListView)
+          ValueListenableBuilder<bool>(
+            valueListenable: AdminAuthService.isAdmin,
+            builder: (context, isAdmin, _) => isAdmin
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _buildDevEditorToolbar(isDark, themeColor.value),
+                  )
+                : const SizedBox.shrink(),
+          ),
       ],
     );
   }
@@ -2064,7 +2111,9 @@ class _HousingScreenState extends State<HousingScreen>
 
   Widget _buildFavoriteChip(bool isDark) {
     final isSelected = _onlyFavorites;
-    final count = _favoriteIds.length;
+    // 지도에 있는 건물만 센다. 찜한 뒤 지워지거나 합쳐진 건물까지 세면
+    // "찜 3"인데 찜만 보기엔 2곳만 뜬다.
+    final count = _effectiveBuildings.where((b) => _favoriteIds.contains(b.id)).length;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: GestureDetector(
@@ -2073,6 +2122,9 @@ class _HousingScreenState extends State<HousingScreen>
             _onlyFavorites = !_onlyFavorites;
             _rebuild();
           });
+          if (_onlyFavorites && _favoriteIds.isEmpty) {
+            showToast(context, '아직 찜한 곳이 없어요. 건물의 하트를 눌러 찜해 보세요.');
+          }
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -2280,7 +2332,7 @@ class _HousingScreenState extends State<HousingScreen>
     // 0. 가게 이름·업종 — 그 가게가 든 건물로 옮겨 간다.
     for (final (id, shop) in findShops(_overrides, q, matchesKoreanHousingSearch)) {
       BaseBuilding? b;
-      for (final elem in _base.buildings) {
+      for (final elem in _effectiveBuildings) {
         if (elem.id == id) {
           b = elem;
           break;
@@ -2305,7 +2357,7 @@ class _HousingScreenState extends State<HousingScreen>
       if (matchesKoreanHousingSearch(o.name, q) ||
           (o.address != null && matchesKoreanHousingSearch(o.address!, q))) {
         BaseBuilding? b;
-        for (final elem in _base.buildings) {
+        for (final elem in _effectiveBuildings) {
           if (elem.id == entry.key) {
             b = elem;
             break;
@@ -2332,18 +2384,18 @@ class _HousingScreenState extends State<HousingScreen>
       }
     }
 
-    // 2. 알려진 원룸 사전 검색 (kOneRoomNames - 초성 검색 지원)
+    // 2. 알려진 원룸 사전 검색 (kOneRoomNames - 초성 검색 지원).
+    //    지도 건물과 이어진 이름만 — 이어진 건물이 없으면 결과에 넣지 않는다.
     for (final item in kOneRoomNames) {
       if (matchesKoreanHousingSearch(item.name, q) ||
           matchesKoreanHousingSearch(item.id, q)) {
-        final b = _base.buildings.firstWhere(
-          (elem) => _summaries[elem.id]?.oneRoomId == item.id,
-          orElse: () => _base.buildings.firstWhere(
-            (elem) => !elem.isCampus && !matchedIds.contains(elem.id),
-            orElse: () => _base.buildings.first,
-          ),
+        final b = buildingForOneRoom(
+          item,
+          _effectiveBuildings,
+          linkedOneRoomId: (id) => _summaries[id]?.oneRoomId,
+          nameOf: (x) => (_overrides[x.id]?.isNamed ?? false) ? _overrides[x.id]!.name : x.officialName,
         );
-        if (matchedIds.contains(b.id)) continue;
+        if (b == null || matchedIds.contains(b.id)) continue;
         matchedIds.add(b.id);
 
         final s = _summaries[b.id];
@@ -2363,11 +2415,11 @@ class _HousingScreenState extends State<HousingScreen>
     }
 
     // 3. 교내 건물 및 일반 건물 검색
-    for (final b in _base.buildings) {
+    for (final b in _effectiveBuildings) {
       if (matchedIds.contains(b.id)) continue;
       final name = b.officialName ?? b.id;
       if (matchesKoreanHousingSearch(name, q) ||
-          matchesKoreanHousingSearch(b.addressLabel, q)) {
+          matchesKoreanHousingSearch(displayAddress(b, _overrides[b.id]), q)) {
         matchedIds.add(b.id);
         final isCamp = b.isCampus;
         final s = _summaries[b.id];
@@ -2493,7 +2545,7 @@ class _HousingScreenState extends State<HousingScreen>
           // 중심 맞춤
           _hudIconButton(
             icon: Icons.my_location_rounded,
-            tooltip: "캠퍼스 중심으로",
+            tooltip: "처음 위치로", // 자취방 모드에선 원룸촌으로 간다(캠퍼스 중심이 아니다)
             onTap: _centerMap,
             isDark: isDark,
           ),
@@ -2567,6 +2619,32 @@ class _HousingScreenState extends State<HousingScreen>
   }
 
   /// 지도 상에서 건물을 터치했을 때 화면 하단에 뜨는 콤팩트 스니크픽 카드
+  Widget _peekIconButton({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required VoidCallback onTap,
+  }) =>
+      Semantics(
+        button: true,
+        label: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: SizedBox(width: 44, height: 44, child: Icon(icon, color: color, size: 22)),
+        ),
+      );
+
+  /// 미리보기 카드를 닫고 고른 건물도 푼다. X·아래로 밀기·뒤로가기가 다 이걸 쓴다.
+  void _closePeek() {
+    if (_peekBuilding == null && _selectedId == null) return;
+    setState(() {
+      _peekBuilding = null;
+      _selectedId = null;
+      _rebuild();
+    });
+  }
+
   Widget _buildPeekCard(BaseBuilding b, bool isDark, Color themeClr) {
     final s = _summaries[b.id] ?? HousingSummary.empty;
     final known = _resolvedKnown(b.id);
@@ -2596,7 +2674,8 @@ class _HousingScreenState extends State<HousingScreen>
           onTap: () => _showDetail(b),
           borderRadius: BorderRadius.circular(20),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            // 위·오른쪽은 44px 버튼이 여백을 대신한다.
+            padding: const EdgeInsets.fromLTRB(16, 4, 4, 13),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2639,7 +2718,7 @@ class _HousingScreenState extends State<HousingScreen>
                     ],
                     Expanded(
                       child: Text(
-                        b.addressLabel,
+                        displayAddress(b, _overrides[b.id]), // 관리자가 고친 주소까지(상세 창과 같게)
                         style: TextStyle(
                           fontSize: 11,
                           color: isDark ? Colors.white54 : Colors.black54,
@@ -2649,34 +2728,21 @@ class _HousingScreenState extends State<HousingScreen>
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () => _toggleFavorite(b.id),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                          color: isFav ? Colors.redAccent : (isDark ? Colors.white54 : Colors.black38),
-                          size: 20,
-                        ),
+                    // 찜은 자취방 것 — 교내 건물엔 하트를 달지 않는다.
+                    // 하트·닫기는 누를 곳을 44px로. 예전엔 28px(아이콘 20 +
+                    // 여백 4)이라 빗나가면 카드 전체가 눌려 상세 창이 열렸다.
+                    if (!b.isCampus)
+                      _peekIconButton(
+                        icon: isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                        color: isFav ? Colors.redAccent : (isDark ? Colors.white54 : Colors.black38),
+                        label: isFav ? '찜 해제' : '찜하기',
+                        onTap: () => _toggleFavorite(b.id),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _peekBuilding = null;
-                          _selectedId = null;
-                          _rebuild();
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.close_rounded,
-                          color: isDark ? Colors.white38 : Colors.black38,
-                          size: 20,
-                        ),
-                      ),
+                    _peekIconButton(
+                      icon: Icons.close_rounded,
+                      color: isDark ? Colors.white54 : Colors.black45,
+                      label: '카드 닫기',
+                      onTap: _closePeek,
                     ),
                   ],
                 ),
@@ -5435,8 +5501,14 @@ class _HousingScreenState extends State<HousingScreen>
                 style: TextStyle(fontSize: 11.5, color: sub),
               ),
               const SizedBox(height: 14),
+              // 아래 목록과 같은 금액(조건에 맞는 가장 싼 방)으로 견준다. 예전엔
+              // 건물 평균을 써서 목록의 "가장 싼 곳"과 숫자가 달랐고, 확인 시세만
+              // 있는 건물은 아예 빠졌다.
               _buildDormComparison(
-                [for (final r in matched) if (_summaries[r.building.id] case final s?) s],
+                [
+                  for (final r in matched)
+                    if (r.best?.monthly(withMaintenance: _filter.includeMaintenance) case final m?) m,
+                ],
                 isDark,
               ),
               const SizedBox(height: 14),
@@ -5570,11 +5642,10 @@ class _HousingScreenState extends State<HousingScreen>
   /// 결과 창의 기숙사 비교 카드에서 고른 기숙사.
   int _filterDormIndex = 0;
 
-  Widget _buildDormComparison(List<HousingSummary> matched, bool isDark) {
-    final monthlies =
-        matched.map((s) => s.avgMonthlyTotal).whereType<int>().toList()
-          ..sort();
-    final int? cheapest = monthlies.isEmpty ? null : monthlies.first;
+  Widget _buildDormComparison(List<int> matchedMonthlies, bool isDark) {
+    final int? cheapest = matchedMonthlies.isEmpty
+        ? null
+        : matchedMonthlies.reduce(math.min);
 
     return StatefulBuilder(
       builder: (context, setCardState) {
@@ -5705,15 +5776,15 @@ class _HousingScreenState extends State<HousingScreen>
                   ),
                 ),
                 const SizedBox(height: 12),
-                _line('건물 모양·층수·도로는 VWorld(국토교통부) 실측 공간 데이터입니다.', isDark),
+                // 예전 안내는 지도 출처(VWorld)와 건물을 누르면 나오는 도보
+                // 시간을 적어 두었는데, 둘 다 지금과 달라서 고쳤다.
+                _line('건물 모양·층수는 공개 자료로 직접 그렸고, 도로는 OpenStreetMap 데이터예요. 실제와 조금 다를 수 있어요.', isDark),
+                _line('건물을 누르면 보증금·월세 시세와 학생 후기를 보고, 직접 시세를 제보할 수 있어요.', isDark),
+                _line('"내 조건 찾기"로 예산·방 구조·원하는 조건에 맞는 원룸만 골라 볼 수 있어요.', isDark),
+                _line('하단 "목록 보기"에서 월 부담·보증금·정문 거리 순으로 정렬해 볼 수 있어요.', isDark),
+                _line('하트를 누르면 찜한 곳만 모아 보고, 최대 3곳까지 나란히 비교할 수 있어요.', isDark),
                 _line(
-                  '우측 하단 나침반과 회전 버튼을 통해 360도 어느 방향에서든 시점을 돌려볼 수 있습니다.',
-                  isDark,
-                ),
-                _line('하단 "목록 보기" 버튼을 누르면 원룸 목록을 시세순·거리순으로 정렬해 볼 수 있습니다.', isDark),
-                _line('원하는 원룸의 하트 아이콘을 누르면 "찜한 곳"만 모아볼 수 있습니다.', isDark),
-                _line(
-                  '건물을 탭하면 정문/도서관 도보 시간, 보증금/월세 시세, 학생들의 실제 거주 후기를 확인하고 직접 제보할 수 있습니다.',
+                  '오른쪽 도구로 시점을 360도 돌리고, 등시선을 켜면 누른 건물에서 걸어서 3·5·10분 거리를 어림으로 볼 수 있어요.',
                   isDark,
                 ),
               ],

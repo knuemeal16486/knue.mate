@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import 'constants.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -118,7 +119,10 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
     buffer.writeln('📍 위치: $addr');
     buffer.writeln('🏠 방 구조: ${_selectedRoomType.label}');
     if (pricing != null) {
-      buffer.writeln('💰 시세: 보증금 ${pricing.deposit}만원 / 월세 ${pricing.monthlyRent}만원 (관리비 ${pricing.maintenanceFee}만원)');
+      // 관리비 0은 "아무도 안 적음"이다(HousingSummary). 0만원이라고 보내면
+      // 관리비가 없는 집으로 읽힌다.
+      final fee = pricing.maintenanceFee > 0 ? '관리비 ${pricing.maintenanceFee}만원' : '관리비 모름';
+      buffer.writeln('💰 시세: 보증금 ${pricing.deposit}만원 / 월세 ${pricing.monthlyRent}만원 ($fee)');
     }
     if (s.topFeatures.isNotEmpty) {
       buffer.writeln('✨ 특징: ${s.topFeatures.join(', ')}');
@@ -146,9 +150,7 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
       await launchUrl(uri);
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('통화 기능을 열 수 없습니다: $phone')),
-        );
+        showOverlayToast(context, '통화 기능을 열 수 없습니다: $phone');
       }
     }
   }
@@ -161,9 +163,7 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
     } else {
       await Clipboard.setData(ClipboardData(text: text));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('문자 앱을 열 수 없어 문의 내용이 클립보드에 복사되었습니다.')),
-        );
+        showOverlayToast(context, '문자 앱을 열 수 없어 문의 내용이 클립보드에 복사되었습니다.');
       }
     }
   }
@@ -234,13 +234,10 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
               if (mounted) {
                 if (ok) {
                   await widget.onReported();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('외벽 연락처가 제보되었습니다. 감사합니다!')),
-                  );
+                  if (!mounted) return;
+                  showOverlayToast(context, '외벽 연락처가 제보되었습니다. 감사합니다!');
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('제보에 실패했습니다. 잠시 후 다시 시도해주세요.')),
-                  );
+                  showOverlayToast(context, '제보에 실패했습니다. 잠시 후 다시 시도해주세요.');
                 }
               }
             },
@@ -263,7 +260,7 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
 
 혹시 다가오는 학기에 입주 가능한 [$roomName] 공실이 있는지 여쭙고 싶습니다.
 - 문의 구조: $roomName
-${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 / 월세 ${pricing.monthlyRent}만원 (관리비 ${pricing.maintenanceFee}만원)\n' : ''}- 희망 입주시기: 개강 전 (협의 가능)
+${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 / 월세 ${pricing.monthlyRent}만원${pricing.maintenanceFee > 0 ? ' (관리비 ${pricing.maintenanceFee}만원)' : ''}\n' : ''}- 희망 입주시기: 개강 전 (협의 가능)
 - 기본 옵션 및 난방 방식(도시가스 등) 확인 요청
 
 편하신 시간에 방을 한번 둘러볼 수 있을까요? 감사합니다!''';
@@ -338,9 +335,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                       onPressed: () async {
                         await Clipboard.setData(ClipboardData(text: textController.text));
                         if (ctx.mounted) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(content: Text('문의 내용이 클립보드에 복사되었습니다!')),
-                          );
+                          showOverlayToast(ctx, '문의 내용이 클립보드에 복사되었습니다!');
                         }
                       },
                       icon: const Icon(Icons.copy_rounded, size: 16),
@@ -1887,9 +1882,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                       onPressed: () async {
                         await Clipboard.setData(ClipboardData(text: phone));
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('$roleTitle 번호가 복사되었습니다: $phone')),
-                          );
+                          showOverlayToast(context, '$roleTitle 번호가 복사되었습니다: $phone');
                         }
                       },
                     ),

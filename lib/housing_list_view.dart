@@ -74,15 +74,13 @@ class HousingListView extends StatelessWidget {
         if (!housingPassesFilter(v, filter)) return false;
       }
 
-      // 검색어 필터
+      // 검색어 필터. 지도 검색과 같이 초성("ㄷㅅ")도 받는다 — 검색창 안내가
+      // 초성을 예로 드는데, 목록에선 그대로 비교해서 아무것도 안 나왔다.
       if (searchQuery.isNotEmpty) {
-        final q = searchQuery.toLowerCase();
-        final name = _displayName(b).toLowerCase();
-        final road = (b.road ?? '').toLowerCase();
-        final no = (b.buildingNo ?? '').toLowerCase();
-        if (!name.contains(q) && !road.contains(q) && !no.contains(q)) {
-          return false;
-        }
+        final hit = matchesKoreanHousingSearch(_displayName(b), searchQuery) ||
+            matchesKoreanHousingSearch(b.road ?? '', searchQuery) ||
+            matchesKoreanHousingSearch(b.buildingNo ?? '', searchQuery);
+        if (!hit) return false;
       }
 
       return true;
@@ -236,6 +234,8 @@ class HousingListView extends StatelessWidget {
                     final isFav = favoriteIds.contains(b.id);
                     final name = _displayName(b);
 
+                    // 직선거리×1.2 어림값이라 "약 n분"으로만 적는다. 미터까지 적으면
+                    // 정확한 값처럼 보인다(상세 창에선 같은 이유로 뺐다).
                     final distGate = walkingDistanceMeters(b.center, CampusLandmark.mainGate);
                     final distLib = walkingDistanceMeters(b.center, CampusLandmark.library);
 
@@ -345,7 +345,7 @@ class HousingListView extends StatelessWidget {
                             // 주소 및 층수
                             Text(
                               [
-                                b.addressLabel,
+                                displayAddress(b, overrides[b.id]),
                                 '지상 ${overrides[b.id]?.floors ?? b.floors}층',
                                 if (known?.builtYear ?? builtYearByName(b.officialName) case final year?)
                                   '$year년 준공',
@@ -461,7 +461,7 @@ class HousingListView extends StatelessWidget {
                                         const SizedBox(width: 4),
                                         Flexible(
                                           child: Text(
-                                            '정문 ${walkingMinutes(distGate)}분 (${distGate}m)',
+                                            '정문 약 ${walkingMinutes(distGate)}분',
                                             style: TextStyle(
                                               fontSize: 11,
                                               fontWeight: FontWeight.w700,
@@ -496,7 +496,7 @@ class HousingListView extends StatelessWidget {
                                         const SizedBox(width: 4),
                                         Flexible(
                                           child: Text(
-                                            '도서관 ${walkingMinutes(distLib)}분 (${distLib}m)',
+                                            '도서관 약 ${walkingMinutes(distLib)}분',
                                             style: TextStyle(
                                               fontSize: 11,
                                               fontWeight: FontWeight.w700,
