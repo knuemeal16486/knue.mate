@@ -16,6 +16,12 @@ flutter test                 # 전부 통과
 flutter build apk --debug    # 실제로 빌드되는지
 ```
 
+Android 리소스 축소: `android.r8.optimizedResourceShrinking=true`(gradle.properties).
+이름 문자열로만 찾는 리소스(알림 아이콘 `ic_stat_notify`, 네이티브 광고 레이아웃)는
+`res/raw/keep.xml`에 남겨 둔다 — 새로 이런 리소스를 쓰면 거기 더한다.
+스플래시 `styles.xml`의 `windowLayoutInDisplayCutoutMode shortEdges`는 Android 15에서
+지원 중단이라 뺐다. `flutter_native_splash:create`를 다시 돌리면 도로 생기니 또 지운다.
+
 `flutter clean` 뒤 처음 빌드는 느리다. 플러그인을 추가하면 Gradle이 옛 상태를
 들고 있어 "cannot find symbol"이 나는데, `flutter clean && flutter pub get`이면
 풀린다(실제 의존성 문제가 아니다).

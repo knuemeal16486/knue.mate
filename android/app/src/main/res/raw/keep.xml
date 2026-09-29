@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 리소스 축소(isShrinkResources·optimizedResourceShrinking)가 지우면 안 되는 것.
+     - ic_stat_notify: flutter_local_notifications가 Dart에서 **이름 문자열**로 찾는다.
+       코드에서 R.drawable로 안 쓰니 축소기가 안 쓰는 줄 알고 지울 수 있다.
+       지워지면 알림이 기본 아이콘으로 바뀌거나 초기화가 조용히 실패한다.
+     - native_ad_layout*: 네이티브 광고 팩토리(MainActivity)가 쓰는 레이아웃. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_notify,@layout/native_ad_layout,@layout/native_ad_layout_compact" />
