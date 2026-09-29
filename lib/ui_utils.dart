@@ -179,7 +179,10 @@ class KnueTokens {
   /// 글자(TextPainter)는 테마를 안 탄다** — 지정 안 하면 그 부분만 기본
   /// 글씨체(Roboto)로 나온다. 지도 라벨처럼 직접 그리는 곳은 이 값을 쓴다.
   /// GoogleFonts가 런타임에 등록한 패밀리 이름을 그대로 가져온다.
-  static String? get fontFamily => GoogleFonts.notoSansKr().fontFamily;
+  /// 한 번만 구한다(처음 쓸 때). 예전엔 getter라 부를 때마다
+  /// GoogleFonts.notoSansKr()로 TextStyle을 새로 만들고 글꼴 로딩 상태를
+  /// 확인했다 — 빌드마다 여러 번 불리는 값인데 늘 같은 이름이다.
+  static final String? fontFamily = GoogleFonts.notoSansKr().fontFamily;
 
   /// 보조색(웜 앰버). 시간 긴급 신호 전용.
   static const Color warmLight = Color(0xFFD97706);
@@ -684,7 +687,7 @@ class _WeatherParticlesOverlayState extends State<WeatherParticlesOverlay>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 20),
-    )..repeat();
+    );
     _rebuild();
   }
 
@@ -705,6 +708,13 @@ class _WeatherParticlesOverlayState extends State<WeatherParticlesOverlay>
 
   void _rebuild() {
     final kind = _kindFor(widget.weather);
+    // 입자가 있을 때만 돌린다. 예전엔 맑은 날(아무것도 안 그림)에도 계속 돌아서
+    // 홈 탭을 보는 내내 매 화면 갱신마다 프레임을 요청했다(배터리·버벅임).
+    if (kind == null) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
     setState(() {
       _kind = kind;
       if (kind == null) {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
@@ -1373,20 +1374,7 @@ IsoBuilding buildIso(
   // [labels]가 false면(지도의 "이름표" 끄기) 교내 공식 명칭까지 모두 뺀다.
   final labelText = labels ? (displayName ?? (b.isCampus ? b.officialName : null)) : null;
   if (highlighted || (labelText != null && labelText.isNotEmpty)) {
-    cachedBadge = TextPainter(
-      text: TextSpan(
-        text: labelText ?? '',
-        style: TextStyle(
-          color: highlighted ? Colors.white : const Color(0xFF222831),
-          fontSize: highlighted ? 10.5 : 9.0,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
-          // Canvas 텍스트는 테마를 안 타서 지정 안 하면 여기만 기본 글씨체가 된다.
-          fontFamily: KnueTokens.fontFamily,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
+    cachedBadge = _badgePainter(labelText ?? '', highlighted);
   }
 
   return IsoBuilding(
@@ -1403,6 +1391,70 @@ IsoBuilding buildIso(
   );
 }
 
+/// 이름표 글자 배치 캐시. 글자와 강조 여부가 같으면 같은 모양이라 다시
+/// layout()할 필요가 없다 — 예전엔 건물을 하나 누르거나 검색어를 한 글자
+/// 칠 때마다 이름표 수백 개를 전부 다시 배치했다(지도 다시 그리기의 대부분).
+final Map<String, TextPainter> _badgePainters = {};
+
+/// 글꼴이 새로 들어오면(google_fonts는 비동기로 받는다) 올라가는 번호.
+/// 그 전에 배치한 이름표는 대체 글꼴 폭이라 알약 크기가 글자와 어긋난다 —
+/// 캐시를 비우고, 건물 모양 캐시도 이 번호가 키에 들어 있어 다시 만든다.
+int _fontGeneration = 0;
+bool _watchingFonts = false;
+
+void _watchFonts() {
+  if (_watchingFonts) return;
+  _watchingFonts = true;
+  try {
+    PaintingBinding.instance.systemFonts.addListener(() {
+      _badgePainters.clear();
+      _fontGeneration++;
+    });
+  } catch (_) {
+    // 바인딩이 없는 순수 단위 테스트 — 글꼴이 바뀔 일도 없다.
+  }
+}
+
+TextPainter _badgePainter(String text, bool highlighted) =>
+    _badgePainters.putIfAbsent('${highlighted ? 1 : 0}|$text', () {
+      return TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            color: highlighted ? Colors.white : const Color(0xFF222831),
+            fontSize: highlighted ? 10.5 : 9.0,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+            // Canvas 텍스트는 테마를 안 타서 지정 안 하면 여기만 기본 글씨체가 된다.
+            fontFamily: KnueTokens.fontFamily,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+    });
+
+/// 건물마다 만든 입체 모양을 기억해 둔다.
+///
+/// 건물 하나를 누르면 강조가 바뀌는 건 그 건물뿐인데, 예전엔 559동을 전부
+/// 다시 만들었다(테스트 환경에서 약 23ms — 한 프레임 16ms를 넘겨 버벅였다).
+/// 같은 건물 객체·같은 시점·같은 표시 조건이면 지난번 것을 그대로 쓴다.
+/// 건물 객체는 **같은 인스턴스**여야 같은 것으로 본다(값 비교를 안 한다) —
+/// 호출부가 바뀌지 않은 건물은 같은 객체를 넘겨야 캐시가 먹는다.
+class IsoLayoutCache {
+  final Map<String, ({BaseBuilding b, Object key, IsoBuilding iso})> _entries = {};
+
+  IsoBuilding get(BaseBuilding b, Object key, IsoBuilding Function() build) {
+    final hit = _entries[b.id];
+    if (hit != null && identical(hit.b, b) && hit.key == key) return hit.iso;
+    final iso = build();
+    _entries[b.id] = (b: b, key: key, iso: iso);
+    return iso;
+  }
+
+  /// 이번에 쓰지 않은 건물(지워진 건물)은 버린다.
+  void retainOnly(Set<String> ids) => _entries.removeWhere((id, _) => !ids.contains(id));
+}
+
 List<IsoBuilding> layoutBuildings(
   Iterable<BaseBuilding> buildings,
   IsoProjection p, {
@@ -1414,25 +1466,40 @@ List<IsoBuilding> layoutBuildings(
   Set<String>? windowIds,
   bool showLabels = true,
   Set<String> hiddenLabelIds = const {},
+  IsoLayoutCache? cache,
 }) {
+  _watchFonts();
   final sorted = buildings.toList()
     ..sort((a, b) => p.depthKey(a).compareTo(p.depthKey(b)));
-  return sorted
-      .map(
-        (b) => buildIso(
+  final out = sorted.map((b) {
+    final highlighted = b.id == selectedId || highlightedIds.contains(b.id);
+    final isOneRoom = oneRoomIds.contains(b.id);
+    final zoneColor = zoneColors[b.id];
+    final displayName = displayNames[b.id];
+    final windows = windowIds?.contains(b.id);
+    // 이름표를 숨긴 건물은 교내 공식 명칭으로 대신 달지도 않는다 —
+    // 대신 달면 추가 건물이 처음 받은 "신규 원룸"이 떠 버렸다.
+    final labels = showLabels && !hiddenLabelIds.contains(b.id);
+    IsoBuilding build() => buildIso(
           b,
           p,
-          highlighted: b.id == selectedId || highlightedIds.contains(b.id),
-          isOneRoom: oneRoomIds.contains(b.id),
-          zoneColor: zoneColors[b.id],
-          displayName: displayNames[b.id],
-          windows: windowIds?.contains(b.id),
-          // 이름표를 숨긴 건물은 교내 공식 명칭으로 대신 달지도 않는다 —
-          // 대신 달면 추가 건물이 처음 받은 "신규 원룸"이 떠 버렸다.
-          labels: showLabels && !hiddenLabelIds.contains(b.id),
-        ),
-      )
-      .toList();
+          highlighted: highlighted,
+          isOneRoom: isOneRoom,
+          zoneColor: zoneColor,
+          displayName: displayName,
+          windows: windows,
+          labels: labels,
+        );
+    if (cache == null) return build();
+    final key = (
+      p.scale, p.rotation, p.topDown, p.floorHeight,
+      highlighted, isOneRoom, zoneColor, displayName, windows, labels,
+      _fontGeneration,
+    );
+    return cache.get(b, key, build);
+  }).toList();
+  cache?.retainOnly({for (final b in sorted) b.id});
+  return out;
 }
 
 /// 2D 볼록 껍질 (Monotone Chain Convex Hull 알고리즘)
@@ -1628,6 +1695,15 @@ Rect boundsOf(List<IsoBuilding> list, CombinedRoads roads) {
 }
 
 /// 네이버 지도(Naver Map) 감성의 정갈하고 맑은 3D 입체 지도 렌더러
+/// 지도를 어느 층으로 그릴지.
+///
+/// 예전엔 한 painter가 확대·축소·이동 **매 프레임마다** 지도 전체(바닥·지형·
+/// 도로·주차 구획·건물 559동)를 다시 그렸다(테스트 환경에서 한 프레임 약 9ms).
+/// 배율에 따라 달라지는 건 이름표·시세 말풍선·등시선 뱃지·경로 안내뿐이라,
+/// 나머지는 [base]로 한 번 그려 두고(RepaintBoundary로 캐시) 배율이 바뀔 땐
+/// [overlay]만 다시 그린다. 옮기기만 할 땐 둘 다 다시 안 그린다.
+enum HousingMapLayer { all, base, overlay }
+
 class HousingMapPainter extends CustomPainter {
   final List<IsoBuilding> buildings;
   final CombinedRoads roads;
@@ -1674,6 +1750,13 @@ class HousingMapPainter extends CustomPainter {
   final int? walkGuideMinutes;
   final int? walkGuideMeters;
 
+  /// 어느 층을 그릴지. 기본은 전부(미리보기 도구 등).
+  final HousingMapLayer layer;
+
+  /// [HousingMapLayer.base]에서 창문을 그릴지. 이 층은 배율을 구독하지 않으므로
+  /// 호출부가 문턱(0.7배)을 넘을 때만 바꿔 넘긴다. null이면 배율로 정한다.
+  final bool? windowsVisible;
+
   HousingMapPainter({
     required this.buildings,
     required this.roads,
@@ -1692,13 +1775,20 @@ class HousingMapPainter extends CustomPainter {
     this.walkGuideEnd,
     this.walkGuideMinutes,
     this.walkGuideMeters,
-  }) : super(repaint: view);
+    this.layer = HousingMapLayer.all,
+    this.windowsVisible,
+  }) : super(repaint: layer == HousingMapLayer.base ? null : view);
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.translate(origin.dx, origin.dy);
+    if (layer != HousingMapLayer.overlay) _paintBase(canvas);
+    if (layer != HousingMapLayer.base) _paintOverlay(canvas);
+    canvas.restore();
+  }
 
+  void _paintBase(Canvas canvas) {
     // 바닥(지적) → 손으로 만든 지형 → 도로 → 건물 순.
     // 실측 바닥면이 가장 아래에 깔려야 나머지가 그 위에 얹힌 것처럼 보인다.
     _paintLandUse(canvas);
@@ -1734,6 +1824,10 @@ class HousingMapPainter extends CustomPainter {
     }
     _paintTrees(canvas);
     _paintBuildingNumbers(canvas);
+  }
+
+  /// 배율에 따라 크기가 달라지는 것들(화면에서 늘 같은 크기로 보이게 그린다).
+  void _paintOverlay(Canvas canvas) {
     _paintLandmarkBadges(canvas);
     // 도보 등시선 뱃지 핀 (건물 위 상단 레이어에 3분/5분/10분 라벨 및 기준점 핀)
     if (isochroneCenter != null && projection != null) {
@@ -1747,8 +1841,6 @@ class HousingMapPainter extends CustomPainter {
     if (priceTags != null && priceTags!.isNotEmpty) {
       _paintPriceTagHUD(canvas);
     }
-
-    canvas.restore();
   }
 
   /// 지적 기반 바닥면. 그리는 순서가 곧 위아래라서, 넓게 깔리는 것부터
@@ -2250,7 +2342,7 @@ class HousingMapPainter extends CustomPainter {
           : (isDark ? const Color(0xFF191F26) : const Color(0xFFE2E8F0));
 
     // 창문: 멀리서 보면 점으로 뭉개지고 그리기만 무거우니 어느 정도 확대했을 때만.
-    final showWindows = viewScale >= 0.7;
+    final showWindows = windowsVisible ?? viewScale >= 0.7;
     // 창문 색은 그 벽 색에서 아주 조금만 밝게 — 벽에 녹아들어 가까이 봐야
     // 보일 정도로. (흰 창·불 켜진 창은 너무 튀었다.) 흰 벽처럼 이미 밝은
     // 벽은 더 밝힐 여지가 없어 조금 어둡게 낸다.
@@ -2999,6 +3091,14 @@ class HousingMapPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(HousingMapPainter old) =>
+      old.layer != layer ||
+      old.windowsVisible != windowsVisible ||
+      // 시세 말풍선: 예전엔 비교하지 않아서 [시세 뱃지]를 눌러도 지도를
+      // 조금 움직이기 전까지 말풍선이 안 떴다.
+      !mapEquals(old.priceTags, priceTags) ||
+      old.walkGuideStart != walkGuideStart ||
+      old.walkGuideEnd != walkGuideEnd ||
+      old.osmRoads != osmRoads ||
       old.buildings != buildings ||
       old.roads != roads ||
       old.terrain != terrain ||

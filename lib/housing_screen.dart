@@ -400,9 +400,19 @@ class _HousingScreenState extends State<HousingScreen>
       TransformationController();
   final TextEditingController _searchController = TextEditingController();
 
+  /// 창문을 그릴 만큼 확대했는지(0.7배 이상). 바닥 층은 배율을 구독하지 않으므로
+  /// 문턱을 넘을 때만 바꿔 다시 그리게 한다.
+  bool _windowsVisible = true;
+
+  void _onViewChanged() {
+    final visible = _transformController.value.getMaxScaleOnAxis() >= 0.7;
+    if (visible != _windowsVisible && mounted) setState(() => _windowsVisible = visible);
+  }
+
   @override
   void initState() {
     super.initState();
+    _transformController.addListener(_onViewChanged);
     _load();
     _loadNoticeDismissed();
     widget.focusRequests?.addListener(_onFocusRequest);
@@ -682,14 +692,34 @@ class _HousingScreenState extends State<HousingScreen>
       ..scale(targetScale);
   }
 
+  // ── 다시 그리기 캐시 ──
+  // _rebuild는 건물을 누르거나 검색어를 한 글자 칠 때마다 불린다. 예전엔 그때마다
+  // 관리자 수정 적용·건물 559동 입체 모양·도로·지형·바닥을 전부 새로 만들어
+  // (테스트 환경 약 29ms) 한 프레임(16ms)을 넘겼다. 입력이 같으면 지난번 것을 쓴다.
+
+  /// 관리자 수정을 적용한 건물. [_base]·[_overrides]가 그대로면 같은 객체를
+  /// 돌려줘야 건물 모양 캐시([_layoutCache])가 먹는다.
+  List<BaseBuilding> _appliedBuildings = const [];
+  (CampusBase, Map<String, HousingBuildingOverride>)? _appliedInput;
+
+  /// 시점(회전·위에서 보기)에만 달린 도로·지형·바닥 투영.
+  (CampusBase, List<OsmRoad>, double, bool)? _projectedInput;
+
+  final IsoLayoutCache _layoutCache = IsoLayoutCache();
+
   void _rebuild() {
     final proj = _proj;
 
     // 관리자 수정 반영: 삭제·병합 제외, 고친 외곽선, 고친 층수(=높이)
-    var effectiveBuildings = applyBuildingOverrides(
-      inheritMergedCampus(_base.buildings, _overrides),
-      _overrides,
-    );
+    final applied = _appliedInput;
+    if (applied == null || !identical(applied.$1, _base) || !identical(applied.$2, _overrides)) {
+      _appliedInput = (_base, _overrides);
+      _appliedBuildings = applyBuildingOverrides(
+        inheritMergedCampus(_base.buildings, _overrides),
+        _overrides,
+      );
+    }
+    var effectiveBuildings = _appliedBuildings;
     final draft = _shapeDraft;
     if (_shapeEditId != null && draft != null && draft.length >= 3) {
       effectiveBuildings = [
@@ -752,11 +782,20 @@ class _HousingScreenState extends State<HousingScreen>
         for (final e in _overrides.entries)
           if (e.value.hideLabel == true) e.key,
       },
+      cache: _layoutCache,
     );
-    _roadPaths = projectRoads(_base.roads, proj);
-    _isoOsmRoads = projectOsmRoads(_osmRoads, proj);
-    _isoTerrain = projectTerrain(_base.terrain, proj);
-    _landuse = projectLandUse(_base.landuse, proj);
+    final projected = _projectedInput;
+    if (projected == null ||
+        !identical(projected.$1, _base) ||
+        !identical(projected.$2, _osmRoads) ||
+        projected.$3 != _rotationAngle ||
+        projected.$4 != _topDown) {
+      _projectedInput = (_base, _osmRoads, _rotationAngle, _topDown);
+      _roadPaths = projectRoads(_base.roads, proj);
+      _isoOsmRoads = projectOsmRoads(_osmRoads, proj);
+      _isoTerrain = projectTerrain(_base.terrain, proj);
+      _landuse = projectLandUse(_base.landuse, proj);
+    }
 
     final b = boundsOf(_buildings, _roadPaths);
     _origin = Offset(-b.left + 80, -b.top + 80);
@@ -5245,24 +5284,53 @@ class _HousingScreenState extends State<HousingScreen>
         children: [
       GestureDetector(
         onTapUp: (d) => _onTapMap(d.localPosition),
-        child: CustomPaint(
+        // 두 층으로 그린다(HousingMapLayer 참고). 바닥·도로·건물은 한 번 그려
+        // 캐시해 두고, 확대·축소 땐 이름표 층만 다시 그린다. 예전엔 옮기거나
+        // 확대할 때마다 매 프레임 지도 전체를 다시 그렸다.
+        child: SizedBox.fromSize(
           size: _canvas,
-          painter: HousingMapPainter(
-            buildings: _buildings,
-            roads: _roadPaths,
-            terrain: _isoTerrain,
-            landuse: _landuse,
-            isDark: isDark,
-            origin: _origin,
-            osmRoads: _isoOsmRoads,
-            // 건물 번호 배지는 쓰지 않는다(숫자 마커가 지도를 어지럽혔다).
-            showBuildingNumbers: false,
-            shadows: _shadowPath,
-            projection: _proj,
-            // 이름표를 화면 고정 크기로 그리려면 지금 배율을 알아야 한다.
-            view: _transformController,
-            priceTags: priceTags,
-            isochroneCenter: isochrone,
+          child: Stack(
+            children: [
+              RepaintBoundary(
+                child: CustomPaint(
+                  size: _canvas,
+                  painter: HousingMapPainter(
+                    layer: HousingMapLayer.base,
+                    windowsVisible: _windowsVisible,
+                    buildings: _buildings,
+                    roads: _roadPaths,
+                    terrain: _isoTerrain,
+                    landuse: _landuse,
+                    isDark: isDark,
+                    origin: _origin,
+                    osmRoads: _isoOsmRoads,
+                    // 건물 번호 배지는 쓰지 않는다(숫자 마커가 지도를 어지럽혔다).
+                    showBuildingNumbers: false,
+                    shadows: _shadowPath,
+                    projection: _proj,
+                    isochroneCenter: isochrone,
+                  ),
+                ),
+              ),
+              RepaintBoundary(
+                child: CustomPaint(
+                  size: _canvas,
+                  painter: HousingMapPainter(
+                    layer: HousingMapLayer.overlay,
+                    buildings: _buildings,
+                    roads: _roadPaths,
+                    terrain: _isoTerrain,
+                    isDark: isDark,
+                    origin: _origin,
+                    projection: _proj,
+                    // 이름표를 화면 고정 크기로 그리려면 지금 배율을 알아야 한다.
+                    view: _transformController,
+                    priceTags: priceTags,
+                    isochroneCenter: isochrone,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
