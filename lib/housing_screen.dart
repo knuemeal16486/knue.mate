@@ -2598,6 +2598,8 @@ class _HousingScreenState extends State<HousingScreen>
             tooltip: _showPriceTags ? "원룸 시세 뱃지 끄기" : "원룸 시세 뱃지 켜기",
             onTap: () => setState(() => _showPriceTags = !_showPriceTags),
             isDark: isDark,
+            active: _showPriceTags,
+            activeColor: themeClr,
           ),
           const SizedBox(height: 4),
 
@@ -2607,6 +2609,8 @@ class _HousingScreenState extends State<HousingScreen>
             tooltip: _showLabels ? "건물 이름표 끄기" : "건물 이름표 켜기",
             onTap: _toggleLabels,
             isDark: isDark,
+            active: _showLabels,
+            activeColor: themeClr,
           ),
           const SizedBox(height: 4),
 
@@ -2621,6 +2625,8 @@ class _HousingScreenState extends State<HousingScreen>
               }
             },
             isDark: isDark,
+            active: _showIsochrone,
+            activeColor: themeClr,
           ),
           const SizedBox(height: 4),
 
@@ -2630,15 +2636,20 @@ class _HousingScreenState extends State<HousingScreen>
             tooltip: _showShadows ? "그림자 끄기" : "시간별 그림자 보기",
             onTap: _toggleShadows,
             isDark: isDark,
+            active: _showShadows,
+            activeColor: themeClr,
           ),
           const SizedBox(height: 4),
 
-          // 위에서 보기(평면) ↔ 3D
+          // 위에서 보기(평면) ↔ 3D. 켜진 표시가 "위에서 보기"를 가리키도록
+          // 아이콘은 지도 하나로 둔다(3D 아이콘이 칠해지면 3D가 켜진 걸로 읽힌다).
           _hudIconButton(
-            icon: _topDown ? Icons.view_in_ar_rounded : Icons.map_outlined,
+            icon: _topDown ? Icons.map_rounded : Icons.map_outlined,
             tooltip: _topDown ? "3D로 보기" : "위에서 보기",
             onTap: _toggleTopDown,
             isDark: isDark,
+            active: _topDown,
+            activeColor: themeClr,
           ),
           ],
 
@@ -5141,25 +5152,39 @@ class _HousingScreenState extends State<HousingScreen>
     required String tooltip,
     required VoidCallback onTap,
     required bool isDark,
+    // 켜고 끄는 버튼이 지금 켜져 있으면 테마색으로 채워 눌린 것처럼 보인다.
+    bool active = false,
+    Color? activeColor,
   }) {
+    final fill = activeColor ?? const Color(0xFF007AFF);
+    final onFill =
+        ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
+            ? Colors.white
+            : Colors.black87;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Tooltip(
         message: tooltip,
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
           width: 32,
           height: 32,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.04),
+            color: active
+                ? fill
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.04)),
           ),
           child: Icon(
             icon,
             size: 18,
-            color: isDark ? Colors.white70 : Colors.black87,
+            color: active
+                ? onFill
+                : (isDark ? Colors.white70 : Colors.black87),
           ),
         ),
       ),
