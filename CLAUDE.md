@@ -186,13 +186,20 @@ Firestore는 한도에 걸린 쓰기를 끝없이 재시도해서 저장 창이 
 - 기기마다 학교 서버를 긁는 기능이나 주기를 새로 넣지 않는다.
 - 1.3.0~1.6.1은 원격으로 끌 방법이 없어서, 업데이트될 때까지 옛 방식으로 요청한다.
 
-### 2단계 — 공지 중앙 수집 (수집기는 만듦, 켜지 않음 · 앱 쪽은 아직)
+### 2단계 — 공지 중앙 수집 (수집기는 2026-10-02에 켬 · 앱 쪽은 아직)
 
 학교는 해외 IP를 막지 않으며 GitHub Actions 수집을 허락했다(2026-10-02 메일).
 
 ```bash
 dart run tool/collect_notices.dart --out build/feed --force   # 손으로 한 번(학교에 48건)
+gh run list --workflow collect-notices.yml --limit 5          # 최근 회차
+gh workflow run collect-notices.yml                           # 지금 한 번 돌리기
+gh workflow disable collect-notices.yml                       # 멈추기(배포본은 남는다)
 ```
+
+한 회차는 Flutter 캐시가 있으면 40초쯤, 전부 받는 회차는 2~4분 걸린다.
+첫 회차에 `tot.knue.ac.kr`(종합연수원·영유아연수원)만 20초 시간 초과가 났고
+4분 뒤 회차에는 받혔다 — 가끔 그런다. 실패한 게시판은 다음 회차에 다시 받는다.
 
 - `.github/workflows/collect-notices.yml`이 30분마다(매시 7·37분) 돌려
   GitHub Pages(`https://knuemeal16486.github.io/knue.mate/feed/`)에 올린다.
@@ -217,8 +224,9 @@ dart run tool/collect_notices.dart --out build/feed --force   # 손으로 한 �
   커밋·API 호출을 자동으로 돌리지 않는다** — 그 용도로 널리 쓰이던
   `keepalive-workflow` 저장소가 약관 위반으로 GitHub에 차단됐다(2025-04).
   개발이 아예 멈추는 때가 오면 수집기를 다른 곳(Cloudflare 등)으로 옮긴다.
-- 켜기 전에 **버전·일정·두 User-Agent를 학교에 먼저 알린다**(로그로 효과를
-  확인해 주기로 했다).
+- 학교는 **버전·일정·두 User-Agent**를 알려 주면 로그로 효과를 확인해 주기로
+  했다. 수집기를 켠 사실과 앱 배포 일정을 회신한다. 간격이나 수집기 이름을
+  바꾸면 다시 알린다.
 
 ## 남은 일
 
