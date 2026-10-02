@@ -1,16 +1,18 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as parser;
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cp949_codec/cp949_codec.dart';
 import 'package:flutter/foundation.dart';
 import 'academic_calendar.dart';
+import 'notice_boards.dart';
 import 'notice_model.dart';
+import 'notice_parse.dart';
 import 'offline_cache.dart';
 import 'school_http.dart';
 
 export 'academic_calendar.dart';
+export 'notice_boards.dart';
+export 'notice_parse.dart';
 
 // ── 학교 서버 부담 ─────────────────────────────────────────────────────
 //
@@ -34,21 +36,58 @@ const int kSchoolMaxConcurrent = 4;
 /// 즐겨찾기 게시판이 없을 때 홈 카드와 백그라운드 알림이 보는 게시판.
 const Set<String> kDefaultFavoriteBoards = {'대학소식', '학사공지', '청람소양', '장학금'};
 
-/// 백그라운드 알림 작업이 받을 게시판. null이면 전체. 순수 함수 — 테스트 대상.
+/// 학교 대표 홈페이지(www.knue.ac.kr/www/)의 게시판 13개.
+///
+/// 2026-10-02 정보전산원: "대부분은 대표 홈페이지 게시판과 본인 학과 게시판을
+/// 본다. 기기에서 학교 서버로 직접 요청할 때는 선택한 게시판만 조회해 달라."
+/// 그래서 고른 게 없을 때의 기본 범위는 여기까지다(학과·대학원은 고른 것만).
+const Set<String> kMainHomepageBoards = {
+  '대학소식', '학사공지', '청람소양', '학점교류', '등록금', '장학금', '교환학생',
+  '행사세미나', '채용공고', '입찰공고', '학생지원', '임용안내', '취업정보',
+};
+
+/// 공지 화면에서 "전체"로 두면 고른 학과만 받는 큰 탭. 학과·대학원 27개를
+/// 통째로 받지 않으려는 것이다.
+const String kNoticeOnDemandTab = '대학/대학원';
+
+/// 백그라운드 알림 작업이 받을 게시판. 순수 함수 — 테스트 대상.
 ///
 /// 예전엔 늘 전체 48개를 받았다. 알림은 즐겨찾기 게시판 것만 보내므로 그것만
 /// 받는다. 즐겨찾기가 없을 때:
-/// - 키워드가 있으면 전체 — 키워드 알림은 원래 모든 게시판에서 찾아 줬다.
-///   이걸 줄이면 사용자가 받던 알림이 말없이 끊긴다.
+/// - 키워드가 있으면 대표 홈페이지 13개에서 찾는다. 한동안 전체 48개에서
+///   찾았는데(2026-09-29), 학교가 직접 요청은 고른 게시판만으로 줄여 달라고
+///   해서 좁혔다. 학과 공지에서 키워드를 받으려면 그 학과를 즐겨찾기한다.
 /// - 키워드도 없으면 기본 4개 — 예전엔 48개 게시판의 새 글이 전부 알림으로
 ///   왔다(아무것도 설정 안 한 사람에게).
-Set<String>? backgroundNoticeBoards(
+Set<String> backgroundNoticeBoards(
   Iterable<String> favBoards,
   Iterable<String> keywords,
 ) {
   if (favBoards.isNotEmpty) return favBoards.toSet();
-  if (keywords.isNotEmpty) return null;
+  if (keywords.isNotEmpty) return kMainHomepageBoards;
   return kDefaultFavoriteBoards;
+}
+
+/// 공지 화면이 지금 학교에서 받을 게시판. 순수 함수 — 테스트 대상.
+///
+/// 예전엔 화면을 열면 48개를 전부 받고 탭·칩은 걸러 보여 주기만 했다. 이제
+/// **보고 있는 범위만** 받는다:
+/// - 게시판을 하나 골랐으면 그 게시판만.
+/// - 하위 탭(학사안내·제2대학…)을 골랐으면 그 안의 게시판.
+/// - 큰 탭 "전체": [공지사항]은 그 탭의 게시판 전부, [대학/대학원]은
+///   즐겨찾기한 학과만(27개를 한꺼번에 받지 않는다).
+Set<String> noticeFetchScope({
+  required String mainTab,
+  String? subGroup,
+  String? category,
+  required Iterable<String> favorites,
+}) {
+  if (category != null) return {category};
+  final groups = KnueScraper.noticeTabStructure[mainTab] ?? const {};
+  if (subGroup != null) return {...?groups[subGroup]};
+  final all = {for (final g in groups.values) ...g};
+  if (mainTab == kNoticeOnDemandTab) return all.intersection(favorites.toSet());
+  return all;
 }
 
 /// 게시판 하나. 같은 이름(category)의 게시판이 두 개 있어서('교육대학원' —
@@ -94,181 +133,12 @@ List<Notice> mergeNoticeCache(
 }
 
 class KnueScraper {
-  // 모든 게시판 그룹 (기존과 동일)
-  final Map<String, Map<String, String>> boardGroups = {
-    'MAIN': {
-      '대학소식': 'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=25&key=806',
-      '학사공지': 'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=26&key=807',
-      '청람소양':
-          'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=256&key=1609',
-      '학점교류':
-          'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=254&key=1562',
-      '등록금': 'https://www.knue.ac.kr/www/selectBbsNttList.do?key=550&bbsNo=11',
-      '장학금':
-          'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=207&key=1443',
-      '교환학생': 'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=13&key=597',
-      '행사세미나':
-          'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=28&key=809',
-      '채용공고': 'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=27&key=808',
-      '입찰공고': 'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=29&key=810',
-    },
-    'ANNEX': {
-      '도서관일반':
-          'https://lib.knue.ac.kr/pyxis-api/1/bulletin-boards/1/bulletins?max=20&offset=0',
-      '도서관학술':
-          'https://lib.knue.ac.kr/pyxis-api/1/bulletin-boards/2/bulletins?max=20&offset=0',
-      // 종합교육연수원 (공통 게시판 패턴)
-      '종합연수원':
-          'https://tot.knue.ac.kr/common/bbs/management/selectCmmnBBSMgmtList.do?menuId=3000001755&bbsId=BBSMSTR_003000000094',
-      // 영유아교육연수원
-      '영유아연수원':
-          'https://tot.knue.ac.kr/common/bbs/management/selectCmmnBBSMgmtList.do?menuId=3000001756&bbsId=BBSMSTR_003000000576',
-      // 신문방송사 (기사 목록 URL)
-      '신문방송사':
-          'https://m.news.knue.ac.kr/news/articleList.html?sc_section_code=S1N3',
-      // 사도교육원
-      '일반공지': 'http://rec.knue.ac.kr/bbs/lstBoard.jsp?bodcode=edunotice',
-      '학부/대학원': 'http://rec.knue.ac.kr/bbs/lstBoard.jsp?bodcode=notice',
-      '교육대학원': 'http://rec.knue.ac.kr/bbs/lstBoard.jsp?bodcode=boardt',
-    },
-    'LIFE': {
-      '학생지원':
-          'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=258&key=1625',
-      '임용안내':
-          'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=259&key=1630',
-      '취업정보': 'https://www.knue.ac.kr/www/selectBbsNttList.do?bbsNo=12&key=574',
-    },
-    'DEPT': {
-      // 제1대학
-      '교육학과':
-          'https://www.knue.ac.kr/education/selectBbsNttList.do?bbsNo=86&key=985',
-      '유아교육과':
-          'https://www.knue.ac.kr/ece/selectBbsNttList.do?bbsNo=93&key=1005',
-      '초등교육과': 'LINK:https://m.cafe.daum.net/knue-primary/_rec',
-      '특수교육과':
-          'https://www.knue.ac.kr/sped/selectBbsNttList.do?bbsNo=100&key=1025',
+  /// 크롤링 대상 게시판(notice_boards.dart). 중앙 수집기와 같은 목록이다.
+  Map<String, Map<String, String>> get boardGroups => kNoticeBoardGroups;
 
-      // 제2대학
-      '국어교육과':
-          'https://www.knue.ac.kr/korean/selectBbsNttList.do?bbsNo=106&key=1044',
-      '영어교육과':
-          'https://www.knue.ac.kr/english/selectBbsNttList.do?bbsNo=113&key=1114',
-      '독어교육과':
-          'https://www.knue.ac.kr/german/selectBbsNttList.do?bbsNo=223&key=1065',
-      '불어교육과':
-          'https://www.knue.ac.kr/french/selectBbsNttList.do?bbsNo=119&key=1079',
-      '중국어교육과':
-          'https://www.knue.ac.kr/chinese/selectBbsNttList.do?bbsNo=226&key=1143',
-      '윤리교육과':
-          'https://www.knue.ac.kr/ethics/selectBbsNttList.do?bbsNo=189&key=1343',
-      '일반사회교육과':
-          'https://www.knue.ac.kr/social/selectBbsNttList.do?bbsNo=133&key=1132',
-      '지리교육과':
-          'https://www.knue.ac.kr/geography/selectBbsNttList.do?bbsNo=229&key=1158',
-      '역사교육과':
-          'https://www.knue.ac.kr/history/selectBbsNttList.do?bbsNo=141&key=1092',
-
-      // 제3대학
-      '수학교육과':
-          'https://www.knue.ac.kr/math/selectBbsNttList.do?bbsNo=151&key=1231',
-      '물리교육과':
-          'https://www.knue.ac.kr/phys/selectBbsNttList.do?bbsNo=194&key=1202',
-      '화학교육과':
-          'https://www.knue.ac.kr/chemedu/selectBbsNttList.do?bbsNo=235&key=1273',
-      '생물교육과':
-          'https://www.knue.ac.kr/bioedu/selectBbsNttList.do?bbsNo=161&key=1216',
-      '지구과학교육과':
-          'https://www.knue.ac.kr/earth/selectBbsNttList.do?bbsNo=166&key=1247',
-      '가정교육과':
-          'https://www.knue.ac.kr/homeedu/selectBbsNttList.do?bbsNo=199&key=1176',
-      '환경교육과':
-          'https://www.knue.ac.kr/envi/selectBbsNttList.do?bbsNo=178&key=1285',
-      '기술교육과':
-          'https://www.knue.ac.kr/techedu/selectBbsNttList.do?bbsNo=169&key=1189',
-      '컴퓨터교육과':
-          'https://www.knue.ac.kr/comedu/selectBbsNttList.do?bbsNo=242&key=1258',
-
-      // 제4대학
-      '음악교육과':
-          'https://www.knue.ac.kr/music/selectBbsNttList.do?bbsNo=204&key=1314',
-      '체육교육과':
-          'https://www.knue.ac.kr/phy/selectBbsNttList.do?bbsNo=211&key=1327',
-      '미술교육과':
-          'https://www.knue.ac.kr/artedu/selectBbsNttList.do?bbsNo=181&key=1300',
-    },
-    'GRAD': {
-      '대학원': 'https://www.knue.ac.kr/grad/selectBbsNttList.do?bbsNo=67&key=645',
-      '교육대학원':
-          'https://www.knue.ac.kr/grad/selectBbsNttList.do?bbsNo=68&key=646',
-      '교육정책대학원':
-          'https://www.knue.ac.kr/edupol/selectBbsNttList.do?bbsNo=73&key=659',
-    },
-  };
-
-  /// 청람공지 화면의 표시 구조 — 큰 탭(공지사항 / 대학·대학원) → 하위 탭 →
-  /// 게시판. boardGroups(크롤링 대상)와는 별개의 "보여주는 방식"만 담당한다
-  /// — 여기 값을 바꿔도 크롤링이나 즐겨찾기·키워드 알림 저장 키(게시판
-  /// 이름 그 자체)는 그대로다.
-  ///
-  /// '교육대학원'이 캠퍼스 생활(사도교육원 소속, 기숙사 공지)과 대학원
-  /// (GRAD 소속, 학사 공지) 양쪽에 나오는데, 이건 boardGroups에 실제로
-  /// 이름이 같은 게시판 두 개가 따로 있어서다(원래부터 있던 것 — 두 게시판이
-  /// 같은 category 문자열을 공유해 즐겨찾기/알림이 서로 엮일 수 있는 상태).
-  static const Map<String, Map<String, List<String>>> noticeTabStructure = {
-    '공지사항': {
-      '학사안내': [
-        '대학소식',
-        '학사공지',
-        '등록금',
-        '장학금',
-        '청람소양',
-        '행사세미나',
-        '채용공고',
-        '입찰공고',
-      ],
-      '교류 프로그램': ['학점교류', '교환학생'],
-      '캠퍼스 생활': [
-        '학생지원',
-        '임용안내',
-        '취업정보',
-        '일반공지',
-        '학부/대학원',
-        '교육대학원',
-        '도서관일반',
-        '도서관학술',
-        '종합연수원',
-        '영유아연수원',
-        '신문방송사',
-      ],
-    },
-    '대학/대학원': {
-      '제1대학': ['교육학과', '유아교육과', '초등교육과', '특수교육과'],
-      '제2대학': [
-        '국어교육과',
-        '영어교육과',
-        '독어교육과',
-        '불어교육과',
-        '중국어교육과',
-        '윤리교육과',
-        '일반사회교육과',
-        '지리교육과',
-        '역사교육과',
-      ],
-      '제3대학': [
-        '수학교육과',
-        '물리교육과',
-        '화학교육과',
-        '생물교육과',
-        '지구과학교육과',
-        '가정교육과',
-        '환경교육과',
-        '기술교육과',
-        '컴퓨터교육과',
-      ],
-      '제4대학': ['음악교육과', '체육교육과', '미술교육과'],
-      '대학원': ['대학원', '교육대학원', '교육정책대학원'],
-    },
-  };
+  /// 청람공지 화면의 표시 구조(notice_boards.dart).
+  static const Map<String, Map<String, List<String>>> noticeTabStructure =
+      kNoticeTabStructure;
 
   /// 네트워크 오류·시간 초과 때 다시 보내는 횟수. 예전엔 3번(최대 4배)이라
   /// 학교 서버가 느려질수록 요청이 불어났다. 서버가 **응답한** 오류(4xx·5xx)는
@@ -325,6 +195,22 @@ class KnueScraper {
     );
     return _scope(await NoticeCache.load() ?? const [], onlyCategories);
   }
+
+  /// [categories] 게시판 중 [gap]이 지난 것만 지금 받아 캐시에 합치고, 끝날
+  /// 때까지 기다린다. 공지 화면이 보고 있는 범위를 받을 때 쓴다
+  /// ([noticeFetchScope]). [gap]이 0이면 당겨서 새로 고침처럼 무조건 받는다.
+  /// 결과는 [NoticeCache]에서 읽는다.
+  Future<void> refreshBoards(
+    Set<String> categories, {
+    Duration gap = kNoticeAutoRefreshGap,
+  }) =>
+      _refreshBoards(
+        [
+          for (final b in _allBoards)
+            if (categories.contains(b.category)) b,
+        ],
+        gap,
+      );
 
   static List<Notice> _scope(List<Notice> notices, Set<String>? only) =>
       only == null
@@ -426,44 +312,14 @@ class KnueScraper {
       throw _HttpStatusException(response.statusCode);
     }
 
-    final notices = <Notice>[];
-
     // 도서관 게시판 (JSON API 처리)
     if (url.contains('pyxis-api')) {
       try {
-        final decoded = jsonDecode(response.body);
-        final list = decoded['data']['list'] as List;
-        for (var item in list) {
-          String title = item['title'] ?? '제목없음';
-          String date =
-              _normalizeDate((item['dateCreated'] ?? '').split(' ')[0]) ?? '';
-          String author = item['writer'] ?? '학교';
-          // 공지사항 1번, 학술 2번
-
-          String fullLink =
-              'https://lib.knue.ac.kr/#/bbs/notice/${item['id']}?offset=0&max=20';
-
-          // Stable ID generation using title and link
-          int id = (title + fullLink).hashCode;
-          bool isNew = date == DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-          notices.add(
-            Notice(
-              id: id,
-              category: category,
-              group: group,
-              title: title,
-              date: date,
-              author: author,
-              link: fullLink,
-              isNew: isNew,
-            ),
-          );
-        }
+        return parsePyxisNotices(response.body, group: group, category: category);
       } catch (e) {
         debugPrint('Parsing JSON error in $category: $e');
+        return [];
       }
-      return notices;
     }
 
     String decodedHtml;
@@ -482,175 +338,9 @@ class KnueScraper {
     });
   }
 
-  // 🔥 Isolate에서 실행할 static 파싱 함수 (테스트를 위해 public)
-  static List<Notice> parseHtml(Map<String, dynamic> params) {
-    final String html = params['html'];
-    final String group = params['group'];
-    final String category = params['category'];
-    final String url = params['url'];
-
-    final doc = parser.parse(html);
-    // 신문방송사는 게시판이 아니라 기사 목록이라 표가 없다. 구조가 아예 달라
-    // 전용 경로로 보낸다.
-    if (url.contains('news.knue.ac.kr')) {
-      return _parseNewsList(doc, group, category, url);
-    }
-
-    final notices = <Notice>[];
-    final rows = doc.querySelectorAll('tbody tr');
-
-    for (var row in rows) {
-      try {
-        var titleEl =
-            row.querySelector('.p-subject a') ?? row.querySelector('a');
-        if (titleEl == null) continue;
-
-        String title = titleEl.text.trim();
-        title = title.replaceAll(RegExp(r'\[?새글\]?\s*'), '').trim();
-
-        String relativeLink = titleEl.attributes['href'] ?? '';
-        String fullLink = _resolveLinkStatic(url, relativeLink);
-
-        var tds = row.querySelectorAll('td');
-        String? date;
-        String author = '학교';
-
-        // 제목 칸은 건너뛴다. 제목에 날짜가 들어간 공지가 있어서
-        // ("제42권 제6호(2026.11.30.발간예정)") 앞에서부터 찾으면 그 날짜를
-        // 게시일로 읽고, 미래 날짜라 목록 맨 위에 박힌다. 등록일은 보통
-        // 마지막 날짜 칸이다.
-        for (var td in tds) {
-          if (td.querySelector('a') != null) continue;
-          final d = _normalizeDate(td.text.trim());
-          if (d != null) date = d;
-        }
-
-        // 날짜 칸을 하나도 못 찾았을 때만 제목 칸까지 포함해 훑는다.
-        if (date == null) {
-          for (var td in tds) {
-            date = _normalizeDate(td.text.trim());
-            if (date != null) break;
-          }
-        }
-
-        // 그래도 없으면 컬럼 위치로 추정 — 이 추정치도 실제 날짜
-        // 형태일 때만 채택한다(조회수/작성자 등 엉뚱한 값이 날짜로 둔갑하는 것 방지).
-        if (date == null && tds.length > 2) {
-          date = tds.length > 4
-              ? _normalizeDate(tds[4].text.trim())
-              : _normalizeDate(tds[2].text.trim());
-        }
-        final dateStr = date ?? '';
-
-        if (tds.length > 2) {
-          String tempAuthor = tds[2].text.trim();
-          if (tempAuthor != dateStr && !RegExp(r'\d{4}').hasMatch(tempAuthor)) {
-            // 3번째 칸은 작성자가 아니라 첨부파일 칸인 게시판이 많다.
-            // 거르지 않으면 "여러개의 파일 첨부"가 작성자로 들어간다.
-            if (!tempAuthor.contains('첨부')) author = tempAuthor;
-          }
-        }
-
-        int id = Object.hash(group, category, title, fullLink);
-        bool isNew = dateStr == DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-        notices.add(
-          Notice(
-            id: id,
-            category: category,
-            group: group,
-            title: title,
-            date: dateStr,
-            author: author,
-            link: fullLink,
-            isNew: isNew,
-          ),
-        );
-      } catch (e) {
-        // Isolate 내에서는 print보다는 로그 기록 권장되나 기존 로직 유지
-      }
-    }
-    return notices;
-  }
-
-  /// 신문방송사 기사 목록. 표가 아니라 `#section-list li` 구조이고,
-  /// 날짜가 "09.07 09:22"처럼 연도 없이 나온다.
-  static List<Notice> _parseNewsList(
-    dynamic doc,
-    String group,
-    String category,
-    String url,
-  ) {
-    final notices = <Notice>[];
-    final today = DateTime.now();
-    for (final li in doc.querySelectorAll('#section-list li')) {
-      final a = li.querySelector('a');
-      if (a == null) continue;
-      final titleEl = li.querySelector('.titles') ?? a;
-      final title = titleEl.text.trim().replaceAll(RegExp(r'\s+'), ' ');
-      if (title.isEmpty) continue;
-
-      final link = _resolveLinkStatic(url, a.attributes['href'] ?? '');
-      final author = li.querySelector('.info.name')?.text.trim() ?? '';
-      final dateStr =
-          _newsDate(li.querySelector('.info.dated')?.text.trim() ?? '', today);
-
-      notices.add(
-        Notice(
-          id: Object.hash(group, category, title, link),
-          category: category,
-          group: group,
-          title: title,
-          date: dateStr,
-          author: author.isEmpty ? '한국교원대신문' : author,
-          link: link,
-          isNew: dateStr == DateFormat('yyyy-MM-dd').format(today),
-        ),
-      );
-    }
-    return notices;
-  }
-
-  /// 기사 날짜. 연도가 없으면 올해로 보되, 그 결과가 미래면 작년 기사로 본다
-  /// (연초에 작년 12월 기사를 올해 12월로 읽어 목록 맨 위에 박히는 것을 막는다).
-  static String _newsDate(String raw, DateTime today) {
-    final full = _normalizeDate(raw);
-    if (full != null) return full;
-    final m = RegExp(r'(\d{1,2})[.-](\d{1,2})').firstMatch(raw);
-    if (m == null) return '';
-    final month = int.parse(m.group(1)!), day = int.parse(m.group(2)!);
-    if (month < 1 || month > 12 || day < 1 || day > 31) return '';
-    var d = DateTime(today.year, month, day);
-    if (d.isAfter(today.add(const Duration(days: 1)))) {
-      d = DateTime(today.year - 1, month, day);
-    }
-    return DateFormat('yyyy-MM-dd').format(d);
-  }
-
-  /// 게시판마다 다른 날짜 표기(2/4자리 연도, '-'/'.' 구분자)를 "yyyy-MM-dd"로
-  /// 정규화한다. 정규화해야 게시판이 달라도 문자열 비교로 안전하게 정렬·비교할 수 있다.
-  /// 날짜로 보이지 않으면 null — 조회수/작성자 같은 값을 날짜로 오인하지 않기 위함.
-  static String? _normalizeDate(String raw) {
-    final match = RegExp(r'(\d{2,4})[-.](\d{1,2})[-.](\d{1,2})').firstMatch(raw);
-    if (match == null) return null;
-    int year = int.parse(match.group(1)!);
-    if (year < 100) year += 2000;
-    final month = match.group(2)!.padLeft(2, '0');
-    final day = match.group(3)!.padLeft(2, '0');
-    return '$year-$month-$day';
-  }
-
-  static String _resolveLinkStatic(String baseUrl, String relative) {
-    if (relative.isEmpty) return baseUrl;
-    if (relative.startsWith('http')) return relative;
-    try {
-      var uri = Uri.parse(baseUrl);
-      var resolved = uri.resolve(relative);
-      return resolved.toString();
-    } catch (e) {
-      return baseUrl + (relative.startsWith('/') ? relative : '/$relative');
-    }
-  }
+  /// 게시판 목록 HTML 파싱(notice_parse.dart). 테스트·기존 호출부를 위해 남긴 이름.
+  static List<Notice> parseHtml(Map<String, dynamic> params) =>
+      parseNoticeHtml(params);
 
   // Isolate에서는 정적 메서드만 사용하므로 기존 인스턴스 메서드들은 삭제되었습니다.
 

@@ -82,10 +82,12 @@ class _NoticeScreenState extends State<NoticeScreen>
     // 그 갱신이 끝났을 때 화면이 최신 데이터를 반영하도록 구독.
     NoticeCache.revision.addListener(_onCacheUpdated);
     _mainTabController.addListener(_onMainTabChanged);
+    PreferencesService.favoriteBoards.addListener(_onFavoritesChanged);
   }
 
   @override
   void dispose() {
+    PreferencesService.favoriteBoards.removeListener(_onFavoritesChanged);
     NoticeCache.revision.removeListener(_onCacheUpdated);
     _mainTabController.removeListener(_onMainTabChanged);
     _mainTabController.dispose();
@@ -118,6 +120,12 @@ class _NoticeScreenState extends State<NoticeScreen>
       }
       _recomputeDerived();
     });
+    _load(); // 새로 보게 된 범위를 받는다
+  }
+
+  /// 학과를 ★로 고정하면 받는 범위가 달라진다([대학/대학원] 전체).
+  void _onFavoritesChanged() {
+    if (mounted) _load();
   }
 
   Future<void> _onCacheUpdated() async {
@@ -145,25 +153,65 @@ class _NoticeScreenState extends State<NoticeScreen>
     });
   }
 
+  /// 지금 화면이 학교에서 받을 게시판 — 보고 있는 범위만([noticeFetchScope]).
+  ///
+  /// 예전엔 화면을 열면 48개 게시판을 전부 받았다. 정보전산원이 "기기에서 직접
+  /// 요청할 때는 선택한 게시판만" 받아 달라고 해서(2026-10-02), 보고 있는
+  /// 탭·게시판만 받고 나머지는 그 탭·게시판을 열 때 받는다.
+  Set<String> get _fetchScope => noticeFetchScope(
+        mainTab: _currentMainTab,
+        subGroup: _selectedSubGroup,
+        category: _selectedCategory,
+        favorites: PreferencesService.favoriteBoards.value,
+      );
+
+  /// 받는 중에 탭·게시판을 또 바꿨는지. 끝나면 새 범위로 한 번 더 받는다.
+  bool _loadAgain = false;
+
+  /// 받아 둔 목록을 먼저 보여 주고, 보고 있는 범위에서 갱신할 때가 된
+  /// 게시판만 받는다(게시판마다 30분). [force]면 그 범위를 지금 바로 받는다.
   Future<void> _load({bool force = false}) async {
-    if (_loadInFlight) return;
+    if (_loadInFlight) {
+      _loadAgain = true;
+      return;
+    }
     _loadInFlight = true;
     setState(() => _loading = true);
     try {
-      final list = await _scraper.fetchAllNotices(forceRefresh: force);
+      final cached = await NoticeCache.load();
+      if (mounted && cached != null) {
+        setState(() {
+          _notices = cached;
+          _recomputeDerived();
+        });
+      }
+      await _scraper.refreshBoards(
+        _fetchScope,
+        gap: force ? Duration.zero : kNoticeAutoRefreshGap,
+      );
+      final list = await NoticeCache.load() ?? <Notice>[];
       final ts = await NoticeCache.lastUpdated();
       if (mounted) {
         setState(() {
           _notices = list;
-          _recomputeDerived();
           _lastUpdated = ts;
           _loading = false;
+          _recomputeDerived();
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _recomputeDerived();
+        });
+      }
     } finally {
       _loadInFlight = false;
+      if (_loadAgain && mounted) {
+        _loadAgain = false;
+        _load();
+      }
     }
   }
 
@@ -227,9 +275,11 @@ class _NoticeScreenState extends State<NoticeScreen>
       _failedBoard = _linkOnlyUrl(_selectedCategory) == null &&
           !_notices.any((n) => n.category == _selectedCategory);
     } else {
+      // 받으려고 한 게시판만 본다. 아직 열어 보지 않은 학과는 받은 적이
+      // 없을 뿐이지 실패한 게 아니다.
       final present = _notices.map((n) => n.category).toSet();
-      final scopedCategories = scope.intersection(_allCategories);
-      _failedBoard = scopedCategories.any((c) => !present.contains(c));
+      final attempted = _fetchScope.intersection(_allCategories);
+      _failedBoard = attempted.any((c) => !present.contains(c));
     }
   }
 
@@ -314,6 +364,7 @@ class _NoticeScreenState extends State<NoticeScreen>
               _buildSubGroupChips(color, isDark),
               _buildBoardChips(color),
               if (_failedBoard) _buildFailureBanner(isDark),
+              if (_scopeHint case final hint?) _buildScopeHint(hint, isDark),
               Expanded(child: _buildNoticeList(color, isDark)),
               _buildFooter(isDark),
             ],
@@ -342,15 +393,18 @@ class _NoticeScreenState extends State<NoticeScreen>
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: GestureDetector(
-              onTap: () => setState(() {
-                _selectedSubGroup = index == 0 ? null : label;
-                // 하위 탭을 바꿨는데 지금 고른 게시판이 그 범위 밖이면 비운다.
-                if (_selectedCategory != null &&
-                    !_currentTabCategories.contains(_selectedCategory)) {
-                  _selectedCategory = null;
-                }
-                _recomputeDerived();
-              }),
+              onTap: () {
+                setState(() {
+                  _selectedSubGroup = index == 0 ? null : label;
+                  // 하위 탭을 바꿨는데 지금 고른 게시판이 그 범위 밖이면 비운다.
+                  if (_selectedCategory != null &&
+                      !_currentTabCategories.contains(_selectedCategory)) {
+                    _selectedCategory = null;
+                  }
+                  _recomputeDerived();
+                });
+                _load(); // 새로 보게 된 범위를 받는다
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -409,6 +463,36 @@ class _NoticeScreenState extends State<NoticeScreen>
             icon: const Icon(Icons.launch, size: 18),
             label: const Text("바로 가기"),
             style: FilledButton.styleFrom(backgroundColor: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [대학/대학원]을 "전체"로 두면 고정한 학과만 받는다는 안내. 학과 27개를
+  /// 한꺼번에 받지 않게 바꾸면서, 왜 일부만 보이는지 알려 준다.
+  String? get _scopeHint {
+    if (_currentMainTab != kNoticeOnDemandTab ||
+        _selectedSubGroup != null ||
+        _selectedCategory != null) {
+      return null;
+    }
+    return _fetchScope.isEmpty
+        ? '대학이나 학과를 고르면 그 공지를 불러와요. 자주 보는 학과는 ★로 고정해 두세요.'
+        : '★로 고정한 학과만 새로 받아요. 다른 학과는 위에서 골라 주세요.';
+  }
+
+  Widget _buildScopeHint(String text, bool isDark) {
+    return Container(
+      width: double.infinity,
+      color: Colors.blue.withValues(alpha: isDark ? 0.15 : 0.08),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Colors.blue, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: const TextStyle(color: Colors.blue, fontSize: 12.5)),
           ),
         ],
       ),
@@ -517,10 +601,13 @@ class _NoticeScreenState extends State<NoticeScreen>
                   label: "전체",
                   selected: _selectedCategory == null,
                   color: color,
-                  onTap: () => setState(() {
-                    _selectedCategory = null;
-                    _recomputeDerived();
-                  }),
+                  onTap: () {
+                    setState(() {
+                      _selectedCategory = null;
+                      _recomputeDerived();
+                    });
+                    _load();
+                  },
                 );
               }
               final category = entries[index - 1];
@@ -528,10 +615,13 @@ class _NoticeScreenState extends State<NoticeScreen>
                 label: category,
                 selected: _selectedCategory == category,
                 color: color,
-                onTap: () => setState(() {
-                  _selectedCategory = category;
-                  _recomputeDerived();
-                }),
+                onTap: () {
+                  setState(() {
+                    _selectedCategory = category;
+                    _recomputeDerived();
+                  });
+                  _load(); // 고른 게시판을 받는다
+                },
                 isFavorite: favBoards.contains(category),
                 onStarTap: () => _toggleFavoriteBoard(category),
               );
@@ -594,7 +684,10 @@ class _NoticeScreenState extends State<NoticeScreen>
   }
 
   Widget _buildNoticeList(Color color, bool isDark) {
-    if (_loading && _notices.isEmpty) {
+    // 보고 있는 범위에 받아 둔 글이 없고 지금 받는 중이면 기다리게 한다.
+    // (처음 여는 학과는 그 자리에서 받으므로 "표시할 공지가 없습니다"가 먼저
+    //  뜨면 안 된다.)
+    if (_loading && _filtered.isEmpty && _searchQuery.trim().isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     final list = _filtered;
@@ -847,7 +940,9 @@ class KeywordSheetState extends State<KeywordSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              "등록한 키워드가 포함된 새 공지가 올라오면 알려드려요.",
+              // 찾는 범위를 적어 둔다 — 학과 공지는 ★로 고정해야 알림이 온다.
+              "등록한 키워드가 포함된 새 공지가 올라오면 알려드려요. "
+              "★로 고정한 게시판에서 찾고, 고정한 게 없으면 학교 대표 홈페이지 게시판에서 찾아요.",
               style: TextStyle(
                 fontSize: 12,
                 color: isDark ? Colors.white54 : Colors.black54,

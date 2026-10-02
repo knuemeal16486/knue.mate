@@ -51,4 +51,22 @@ void main() {
     expect(find.text('제1대학'), findsOneWidget);
     expect(find.text('대학소식'), findsNothing);
   });
+
+  // 학과·대학원 27개를 한꺼번에 받지 않게 바꿨다(정보전산원 요청, 2026-10-02).
+  testWidgets('[대학/대학원] 전체: 고정한 학과가 없으면 안내를 띄우고, 안 받은 학과를 실패로 치지 않는다', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    PreferencesService.favoriteBoards.value = [];
+    await tester.pumpWidget(const MaterialApp(home: NoticeScreen()));
+    await tester.pump(const Duration(seconds: 30));
+
+    await tester.tap(find.text('대학/대학원'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('대학이나 학과를 고르면'), findsOneWidget);
+    expect(find.text('일부 게시판을 불러오지 못했습니다'), findsNothing);
+
+    // 대학을 고르면 안내는 사라진다(그 대학의 학과를 받는다).
+    await tester.tap(find.text('제4대학'));
+    await tester.pump(const Duration(seconds: 30));
+    expect(find.textContaining('대학이나 학과를 고르면'), findsNothing);
+  });
 }

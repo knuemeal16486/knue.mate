@@ -42,8 +42,46 @@ void main() {
       );
     });
 
-    test('즐겨찾기 없이 키워드만 있으면 전체 — 받던 키워드 알림이 끊기지 않게', () {
-      expect(backgroundNoticeBoards(const [], ['장학']), isNull);
+    test('즐겨찾기 없이 키워드만 있으면 대표 홈페이지 13개 — 전체 48개가 아니다', () {
+      // 학교가 직접 요청은 고른 게시판만으로 줄여 달라고 했다(2026-10-02).
+      expect(backgroundNoticeBoards(const [], ['장학']), kMainHomepageBoards);
+    });
+  });
+
+  group('kMainHomepageBoards', () {
+    test('학교 대표 홈페이지(/www/) 게시판과 정확히 같다', () {
+      final www = {
+        for (final g in KnueScraper().boardGroups.values)
+          for (final b in g.entries)
+            if (b.value.contains('www.knue.ac.kr/www/')) b.key,
+      };
+      expect(kMainHomepageBoards, www);
+      expect(kMainHomepageBoards.length, 13);
+    });
+  });
+
+  group('noticeFetchScope — 공지 화면은 보고 있는 범위만 받는다', () {
+    Set<String> scope({String tab = '공지사항', String? sub, String? cat, List<String> favs = const []}) =>
+        noticeFetchScope(mainTab: tab, subGroup: sub, category: cat, favorites: favs);
+
+    test('게시판을 하나 고르면 그 게시판만', () {
+      expect(scope(tab: '대학/대학원', sub: '제3대학', cat: '수학교육과'), {'수학교육과'});
+    });
+
+    test('하위 탭을 고르면 그 안의 게시판만', () {
+      expect(scope(sub: '교류 프로그램'), {'학점교류', '교환학생'});
+      expect(scope(tab: '대학/대학원', sub: '제4대학'), {'음악교육과', '체육교육과', '미술교육과'});
+    });
+
+    test('[공지사항] 전체는 그 탭의 게시판 — 대표 홈페이지 13개를 모두 포함한다', () {
+      final s = scope();
+      expect(s.containsAll(kMainHomepageBoards), isTrue);
+      expect(s.contains('수학교육과'), isFalse);
+    });
+
+    test('[대학/대학원] 전체는 고정한 학과만 — 27개를 한꺼번에 받지 않는다', () {
+      expect(scope(tab: '대학/대학원'), isEmpty);
+      expect(scope(tab: '대학/대학원', favs: ['수학교육과', '학사공지']), {'수학교육과'});
     });
   });
 
