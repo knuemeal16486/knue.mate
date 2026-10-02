@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>KNUE Mate 공지 수집 파일</title>
+<style>
+  body { font: 16px/1.7 system-ui, sans-serif; max-width: 40em; margin: 3em auto; padding: 0 1.2em; color: #222; }
+  h1 { font-size: 1.3em; }
+  code { background: #f2f2f2; padding: .1em .35em; border-radius: 4px; }
+  @media (prefers-color-scheme: dark) { body { background: #151515; color: #ddd; } code { background: #2a2a2a; } }
+</style>
+</head>
+<body>
+<h1>KNUE Mate 공지 수집 파일</h1>
+<p>
+  한국교원대학교 학생이 만든 비공식 앱 <b>KNUE Mate</b>가 쓰는 파일입니다.
+  학교가 운영하는 페이지가 아닙니다.
+</p>
+<p>
+  앱을 쓰는 기기마다 학교 게시판을 직접 받으면 학교 서버에 부담이 되어,
+  수집기 한 곳이 정해진 간격으로 게시판을 받아 여기에 올리고 앱은 이 파일만 받습니다.
+  공지의 <b>제목·링크·날짜·작성 부서</b>만 담고 본문은 담지 않습니다.
+  글을 누르면 학교 홈페이지의 원문으로 이동합니다.
+</p>
+<ul>
+  <li><a href="feed/index.json"><code>feed/index.json</code></a> — 게시판별 마지막 수집 시각</li>
+  <li><code>feed/b/&lt;id&gt;.json</code> — 게시판 하나의 글 목록</li>
+</ul>
+<p>
+  수집기는 학교 서버에 <code>KNUE-Mate-Collector/1.0</code>으로 자신을 밝힙니다.
+  문의: <a href="mailto:knuemeal16486@gmail.com">knuemeal16486@gmail.com</a>
+</p>
+</body>
+</html>

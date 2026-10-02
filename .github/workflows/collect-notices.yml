@@ -1,0 +1,65 @@
+# 공지 중앙 수집 — 학교 게시판을 여기 한 곳에서 받아 GitHub Pages에 올린다.
+# 앱은 학교 서버 대신 이 파일을 받는다(lib/notice_collector.dart 참고).
+#
+# 학교 서버에 가는 양은 이 워크플로의 주기와 kCollectIntervalMinutes로만
+# 정해진다. 주기를 바꾸기 전에 CLAUDE.md "학교 서버 부담"을 읽는다.
+name: 공지 수집
+
+on:
+  schedule:
+    # 30분마다. 정각은 GitHub 예약 실행이 몰려 늦거나 빠지므로 7분·37분에 돈다(UTC).
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 간격을 무시하고 전부 다시 받는다
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 두 회차가 겹치면 학교에 같은 요청이 두 번 간다. 앞 회차가 끝날 때까지 기다린다.
+concurrency:
+  group: collect-notices
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.2
+          cache: true
+
+      - run: flutter pub get
+
+      - name: 수집
+        env:
+          FORCE: ${{ inputs.force && '--force' || '' }}
+        run: |
+          set -o pipefail
+          # 지난번 배포본 주소 = 이 저장소의 Pages 주소
+          PREV="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/feed"
+          mkdir -p site
+          cp tool/feed_site/index.html site/index.html
+          dart run tool/collect_notices.dart --out site/feed --prev "$PREV" $FORCE | tee collect.log
+          tail -n 1 collect.log >> "$GITHUB_STEP_SUMMARY"
+
+      # 수집이 실패(실을 글이 0건)하면 여기까지 오지 않는다 — 지난 배포본이 그대로 남는다.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v5
