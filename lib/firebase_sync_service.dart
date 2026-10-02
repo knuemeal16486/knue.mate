@@ -142,27 +142,40 @@ class FirebaseSyncService {
     }
   }
 
-  /// [식단 정보] 특정 날짜의 식단을 Firestore에 저장합니다.
-  static Future<void> saveMealToFirestore(
-    DateTime date,
+  /// [식단 정보] 한 주치를 한 번에 올린다(식단 API가 주 단위로 준다).
+  ///
+  /// 메뉴가 있는 날만 올린다 — 빈 값으로 덮어쓰면 나중에 올라온 메뉴를
+  /// 다른 기기가 "이미 있다"고 믿게 된다. 날마다 따로 쓰지 않고 batch 한 번으로
+  /// 보낸다(쓰기는 문서 수만큼 세지만 왕복은 한 번).
+  static Future<void> saveMealWeekToFirestore(
     MealSource source,
-    Map<String, dynamic> mealData,
+    Map<DateTime, Map<String, dynamic>> byDate,
   ) async {
     try {
       if (Firebase.apps.isEmpty) return;
-      final dateStr =
-          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-      final docId = "${dateStr}_${source.name}";
-
-      await _firestore.collection('daily_meals').doc(docId).set({
-        'date': dateStr,
-        'source': source.name,
-        'meals': mealData['meals'],
-        'lastUpdated': FieldValue.serverTimestamp(),
-        'cacheVersion': 2,
-      });
+      final batch = _firestore.batch();
+      var count = 0;
+      for (final e in byDate.entries) {
+        final meals = e.value['meals'];
+        if (meals is! Map || !meals.values.any((l) => l is List && l.isNotEmpty)) {
+          continue;
+        }
+        final d = e.key;
+        final dateStr =
+            "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
+        batch.set(_firestore.collection('daily_meals').doc("${dateStr}_${source.name}"), {
+          'date': dateStr,
+          'source': source.name,
+          'meals': meals,
+          'lastUpdated': FieldValue.serverTimestamp(),
+          'cacheVersion': 2,
+        });
+        count++;
+      }
+      if (count == 0) return;
+      await batch.commit().timeout(const Duration(seconds: 10));
     } catch (e) {
-      debugPrint('FirebaseSyncService: 식단 저장 실패: $e');
+      debugPrint('FirebaseSyncService: 주간 식단 저장 실패: $e');
     }
   }
 

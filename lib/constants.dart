@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as htmlParser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -15,9 +14,9 @@ import 'package:home_widget/home_widget.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
+import 'meal_api.dart';
 import 'offline_cache.dart';
 import 'schedule_model.dart';
-import 'school_http.dart';
 
 // [1] 전역 설정
 const String kBaseUrl = "https://knue-meal-api.onrender.com";
@@ -807,12 +806,48 @@ class MealCache {
     // 그게 또 갱신을 부르는 무한 루프가 된다.
     if (await JsonCache.save(_key(date, source), data)) revision.value++;
   }
+
+  /// 한 주치를 한꺼번에 저장한다. 하나라도 바뀌었으면 revision은 **한 번만**
+  /// 올린다 — 날마다 올리면 화면이 일곱 번 다시 로드한다.
+  static Future<void> saveWeek(
+    MealSource source,
+    Map<DateTime, Map<String, dynamic>> byDate,
+  ) async {
+    var changed = false;
+    for (final e in byDate.entries) {
+      if (await JsonCache.save(_key(e.key, source), e.value)) changed = true;
+    }
+    if (changed) revision.value++;
+  }
 }
 
-/// 같은 날짜·식당의 식단 페이지를 한 기기가 학교에서 다시 받는 최소 간격.
+/// 같은 주·식당의 식단을 한 기기가 학교에서 다시 받는 최소 간격.
 /// 너무 길면 늦게 올라온 메뉴가 그만큼 늦게 뜬다(다른 기기가 먼저 받아
-/// 공용 캐시에 올리면 그 전에 뜬다).
+/// 공용 캐시에 올리면 그 전에 뜬다). 학교는 "정보 없음"도 캐시하되 갱신
+/// 주기는 유지해 달라고 했다(2026-10-02) — 그래서 없애지 않고 1시간으로 둔다.
 const Duration kMealSchoolGap = Duration(hours: 1);
+
+/// 식단 API의 식당 값(meal_api.dart). a = 사도교육원식당, b = 교직원식당.
+String dietSiteSeOf(MealSource source) => source == MealSource.a ? 'one' : 'cafe';
+
+/// 지난 날짜의 식단은 더 바뀌지 않는다. 순수 함수 — 테스트 대상.
+bool isPastMealDate(DateTime date, DateTime now) =>
+    DateTime(date.year, date.month, date.day)
+        .isBefore(DateTime(now.year, now.month, now.day));
+
+/// 받아 둔 식단에 메뉴가 하나라도 있는지. 순수 함수 — 테스트 대상.
+bool mealHasMenu(Map<String, dynamic>? cached) {
+  final meals = cached?['meals'];
+  return meals is Map && meals.values.any((l) => l is List && l.isNotEmpty);
+}
+
+/// 받아 둔 식단을 다시 확인할 필요가 없는지. 순수 함수 — 테스트 대상.
+///
+/// 지난 날짜이고 **메뉴가 들어 있을 때만** 건너뛴다. 비어 있는 지난 날짜는
+/// 다시 확인한다 — 메뉴가 올라오기 전에 미리 열어 봐서 빈 값이 저장된 날이
+/// 지나고 나서도 계속 비어 보이면 안 된다(예전에도 다시 확인했다).
+bool mealCacheIsFinal(Map<String, dynamic>? cached, DateTime date, DateTime now) =>
+    isPastMealDate(date, now) && mealHasMenu(cached);
 
 Future<dynamic> fetchMealApi(
   DateTime date,
@@ -822,6 +857,8 @@ Future<dynamic> fetchMealApi(
   if (!forceRefresh) {
     final cached = await MealCache.load(date, source);
     if (cached != null) {
+      // 메뉴가 있는 지난 날짜는 받아 둔 것을 그대로 쓴다 — 다시 물어도 같은 답이다.
+      if (mealCacheIsFinal(cached, date, DateTime.now())) return cached;
       // 캐시를 즉시 돌려주고 갱신은 await 없이 뒤에서 — 화면이 안 기다린다.
       // throttle이 없으면 갱신→재로드→갱신으로 계속 네트워크를 두드린다.
       RefreshThrottle.deferred(
@@ -835,14 +872,6 @@ Future<dynamic> fetchMealApi(
 }
 
 Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
-  final monday = date.subtract(Duration(days: date.weekday - 1));
-  final dateStr =
-      "${monday.year}${monday.month.toString().padLeft(2, '0')}${monday.day.toString().padLeft(2, '0')}";
-
-  final url = source == MealSource.a
-      ? 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1959&siteSe=one&searchStdde=$dateStr'
-      : 'https://www.knue.ac.kr/www/selectDietInfoWebList.do?key=1960&siteSe=cafe&searchStdde=$dateStr';
-
   try {
     // 1. 파이어베이스에서 먼저 확인.
     //    로컬 캐시가 앞단에 생겨서 여기까지 오는 건 "처음 보는 날짜"뿐이다.
@@ -868,54 +897,45 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
       return cachedMeal;
     }
 
-    // 2. 직접 스크래핑 시도.
-    //    같은 날짜·식당은 기기당 [kMealSchoolGap]에 한 번만 학교에 간다.
+    // 2. 학교 식단 API(meal_api.dart). 한 번에 그 주 월~일 7일치가 온다.
+    //    같은 주·식당은 기기당 [kMealSchoolGap]에 한 번만 학교에 간다.
     //    메뉴가 없는 날(주말·방학)은 공용 캐시에 올리지 않아서, 이게 없으면
-    //    그런 날엔 열 때마다(위젯은 15분마다) 학교 페이지를 다시 받았다.
+    //    그런 날엔 열 때마다(위젯은 15분마다) 학교에 다시 물었다.
     //    처음 보는 날짜(기기 캐시 없음)는 기다리게 할 수 없으니 그대로 받는다.
+    final siteSe = dietSiteSeOf(source);
+    final monday = dietMondayOf(date);
     final local = await MealCache.load(date, source);
     final allowed = await PersistentThrottle.tryAcquire(
       'meal_school',
-      MealCache._key(date, source),
+      '${source.name}_${dietYmd(monday)}',
       kMealSchoolGap,
     );
     if (!allowed && local != null) return local;
 
-    final response = await http
-        .get(
-          Uri.parse(url),
-          headers: {
-            ...await SchoolHttp.headers(),
-            'Accept': 'text/html,*/*',
+    final week = await fetchDietWeek(siteSe, date);
+    if (week != null) {
+      // 3. 7일을 한꺼번에 저장한다. 예전엔 날짜마다 따로 캐시해서, 같은 주의
+      //    다른 날을 열 때마다 같은 페이지(약 215KB)를 또 받았다.
+      //    결과가 비어 있어도 저장한다 — "이 날은 급식이 없다"도 정답이다.
+      final byDate = <DateTime, Map<String, dynamic>>{
+        for (var i = 0; i < 7; i++)
+          monday.add(Duration(days: i)): {
+            'meals': week.mealsOn(monday.add(Duration(days: i))),
           },
-        )
-        .timeout(const Duration(seconds: 20)); // 스크래핑은 조금 더 여유를 줌 (20초)
+      };
+      await MealCache.saveWeek(source, byDate);
+      // 공용 Firestore에는 실제 메뉴가 있는 날만 올린다(빈 값으로 덮지 않게).
+      // 한 기기가 받은 한 주가 다른 기기들의 7일을 채운다.
+      FirebaseSyncService.saveMealWeekToFirestore(source, byDate); // await 없이
 
-    if (response.statusCode == 200) {
-      final html = utf8.decode(response.bodyBytes, allowMalformed: true);
-      // 교직원 식당(b)의 출처가 pot.knue.ac.kr(mon_list/tbl_4 구조)에서
-      // 학교 자체 페이지(key=1960&siteSe=cafe)로 바뀌었는데, 이 페이지는
-      // 사도교육원식당(a)과 똑같은 p-calendar-list 구조를 쓴다 — 그래서
-      // parseCafeHtml이 아무것도 못 찾고 항상 빈 값만 냈다(2026-09-16 확인).
-      final result = parseSadoHtml(html, date);
-
-      // 3. 크롤링 결과 저장 (사용자를 기다리게 하지 않음)
-      final meals = result['meals'] as Map<String, dynamic>;
-      bool hasData = meals.values.any((list) => (list as List).isNotEmpty);
-
-      // 공용 Firestore에는 실제 메뉴가 있을 때만 올린다(빈 값으로 덮어쓰지 않게).
-      if (hasData) {
-        FirebaseSyncService.saveMealToFirestore(date, source, result); // await 없이
-      }
-      // 로컬 캐시는 결과가 비었더라도 저장한다. "이 날은 급식이 없다"도 정답이고,
-      // 캐시하지 않으면 방학 내내 매 실행마다 7초짜리 스크래핑을 반복하게 된다.
-      MealCache.save(date, source, result);
-
+      final result = <String, dynamic>{'meals': week.mealsOn(date)};
       if (DateUtils.isSameDay(date, getWidgetTargetDate(source))) {
         _updateWidgetDataInternal(result, source, date);
       }
       return result;
     }
+    // 받지 못했으면 받아 둔 것이라도 보여 준다.
+    if (local != null) return local;
   } catch (e) {
     debugPrint('fetchMealApi error: $e');
   }
@@ -925,159 +945,6 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
 Map<String, dynamic> _emptyMeals() => {
   'meals': {'breakfast': <String>[], 'lunch': <String>[], 'dinner': <String>[]},
 };
-
-/// \uc0ac\ub3c4\uad50\uc721\uc6d0 \uc2dd\ub2f9 HTML \ud30c\uc11c
-@visibleForTesting
-Map<String, dynamic> parseSadoHtml(String html, DateTime date) {
-  final doc = htmlParser.parse(html);
-  final table = doc.querySelector('table.p-calendar-list');
-  if (table == null) return _emptyMeals();
-
-  // \ud5e4\ub354\uc5d0\uc11c \ub0a0\uc9dc \ub9e4\ub9e4: th[data-day=N] \u2192 \uc624\ub298\uc5d0 \uc77c\uce58\ud558\ub294 \uc778\ub371\uc2a4 \ucc3e\uae30
-  int? targetDay;
-  for (final th in table.querySelectorAll('thead th[data-day]')) {
-    final dayIdx = th.attributes['data-day'];
-    final spanText = th.querySelector('span')?.text.trim() ?? '';
-    final datePart = spanText.split('\n').first.trim(); // \"MM/DD\"
-    final parts = datePart.split('/');
-    if (parts.length == 2) {
-      final m = int.tryParse(parts[0]);
-      final d = int.tryParse(parts[1]);
-      if (m == date.month && d == date.day) {
-        targetDay = int.tryParse(dayIdx ?? '');
-        break;
-      }
-    }
-  }
-  if (targetDay == null) return _emptyMeals();
-
-  final rows = table.querySelectorAll('tbody tr');
-  final mealKeys = ['breakfast', 'lunch', 'dinner'];
-  final meals = <String, List<String>>{
-    'breakfast': [],
-    'lunch': [],
-    'dinner': [],
-  };
-
-  for (int i = 0; i < rows.length && i < mealKeys.length; i++) {
-    final td = rows[i].querySelector('td[data-day="$targetDay"]');
-    if (td == null) continue;
-    for (final li in td.querySelectorAll('ul.menu_list li')) {
-      final items = li.text
-          .split(RegExp(r'[\n\r]'))
-          .map((s) => s.trim().replaceAll('&amp;', '&'))
-          .where((s) => s.isNotEmpty && !_isCafeNoiseLine(s))
-          .toList();
-      meals[mealKeys[i]]!.addAll(items);
-    }
-  }
-  return {'meals': meals};
-}
-
-/// 끼니 이름 머리글. 표에서는 th에 들어가지만, 과거 마크업에서는 셀 본문에
-/// 섞여 들어온 적이 있어 방어적으로 걸러낸다.
-const _kCafeMealHeadings = {'조식', '중식', '석식', '아침', '점심', '저녁'};
-
-/// 메뉴가 아닌 줄(끼니 머리글, 대괄호 주석)인지 판정한다.
-///
-/// 이전에는 `startsWith('석')`으로 "석식"을, `startsWith('삼일절')`로 휴무
-/// 안내를 걸러냈다. 접두사 매칭이라 "석박지" 같은 실제 메뉴까지 함께 사라졌다.
-/// 부분 문자열 매칭도 안 되는데, 실제 메뉴에 "셀프계란후라이(미운영-비빔밥에
-/// 들어가있음)"처럼 안내 문구가 이름 안에 박혀 나오기 때문이다. 그래서 머리글은
-/// 정확히 일치할 때만 제외하고, 나머지는 대괄호 주석만 거른다 — 메뉴를 잘못
-/// 지우는 것보다 안내 한 줄이 섞이는 편이 낫다.
-bool _isCafeNoiseLine(String s) {
-  if (_kCafeMealHeadings.contains(s)) return true;
-  if (s.startsWith('[')) return true; // "[알레르기 정보 …]" 같은 주석
-  return false;
-}
-
-@visibleForTesting
-Map<String, dynamic> parseCafeHtml(String html, DateTime date) {
-  final doc = htmlParser.parse(html);
-
-  String dayId;
-  switch (date.weekday) {
-    case 1:
-      dayId = 'mon_list';
-      break;
-    case 2:
-      dayId = 'tue_list';
-      break;
-    case 3:
-      dayId = 'wed_list';
-      break;
-    case 4:
-      dayId = 'thu_list';
-      break;
-    case 5:
-      dayId = 'fri_list';
-      break;
-    case 6:
-      dayId = 'sat_list';
-      break;
-    case 7:
-      dayId = 'sun_list';
-      break;
-    default:
-      dayId = 'mon_list';
-  }
-
-  // pot.knue.ac.kr은 "이번 주" 한 주치만 싣는다. 요일 div만 보고 고르면
-  // 다른 주의 날짜를 물어도 이번 주 같은 요일 메뉴를 그대로 돌려준다.
-  // 그렇게 8/31에 저장된 "9/16 교직원 식당"이 실은 9/2 메뉴였고, 공용
-  // Firestore에 굳어 2주 내내 틀린 메뉴가 나갔다.
-  final now = DateTime.now();
-  final monday = DateTime(now.year, now.month, now.day)
-      .subtract(Duration(days: now.weekday - 1));
-  final target = DateTime(date.year, date.month, date.day);
-  if (target.isBefore(monday) ||
-      target.isAfter(monday.add(const Duration(days: 6)))) {
-    return _emptyMeals();
-  }
-
-  final contentDiv = doc.querySelector('#$dayId');
-  if (contentDiv == null) return _emptyMeals();
-
-  // 페이지는 "( 2026년 09월 16일 )"처럼 날짜를 직접 밝힌다. 그것과 다르면
-  // 틀린 주를 보고 있다는 뜻이니 아무것도 주지 않는다 — 틀린 메뉴보다는
-  // 비어 있는 편이 낫다.
-  final printed = RegExp(r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일')
-      .firstMatch(contentDiv.text);
-  if (printed != null &&
-      (int.parse(printed.group(1)!) != date.year ||
-          int.parse(printed.group(2)!) != date.month ||
-          int.parse(printed.group(3)!) != date.day)) {
-    return _emptyMeals();
-  }
-
-  final tables = contentDiv.querySelectorAll('table.tbl_4');
-  if (tables.isEmpty) return _emptyMeals();
-
-  final table = tables.first;
-  final rows = table.querySelectorAll('tbody tr');
-  final mealKeys = ['breakfast', 'lunch', 'dinner'];
-  final meals = <String, List<String>>{
-    'breakfast': [],
-    'lunch': [],
-    'dinner': [],
-  };
-
-  for (int i = 0; i < rows.length && i < mealKeys.length; i++) {
-    final tds = rows[i].querySelectorAll('td');
-    if (tds.isEmpty) continue;
-    final td = tds.first;
-    final text = td.text.trim();
-    if (text.isEmpty) continue;
-    final items = text
-        .split(RegExp(r'[\n\r]'))
-        .map((s) => s.trim().replaceAll('&amp;', '&'))
-        .where((s) => s.isNotEmpty && !_isCafeNoiseLine(s))
-        .toList();
-    meals[mealKeys[i]]!.addAll(items);
-  }
-  return {'meals': meals};
-}
 
 /// iOS 홈 위젯의 WidgetKit kind 문자열.
 ///
