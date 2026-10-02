@@ -14,6 +14,7 @@ import 'club_events_screen.dart';
 import 'constants.dart';
 import 'favorite_service.dart';
 import 'housing_screen.dart';
+import 'legal_tips_screen.dart';
 import 'notice_model.dart';
 import 'notice_screen.dart';
 import 'firebase_sync_service.dart';
@@ -1081,7 +1082,7 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       child: Row(
         children: [
-          // 네 개가 나란히 붙어 있어 같은 색이면 가장 단조로워 보이는 자리.
+          // 다섯 개가 나란히 붙어 있어 같은 색이면 가장 단조로워 보이는 자리.
           // 게시판과 같은 잉크 팔레트로 서로만 구분되게 한다.
           Expanded(
             child: _buildQuickActionItem(
@@ -1106,6 +1107,19 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const HousingScreen()),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.balance_rounded,
+              tint: KnueTokens.categoryColor('법률상식', isDark),
+              label: "법률상식",
+              caption: "계약·알바·생활",
+              isDark: isDark,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LegalTipsScreen()),
               ),
             ),
           ),
@@ -1165,13 +1179,20 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Icon(icon, size: 20, color: tint),
           ),
           const SizedBox(height: 7),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-              color: isDark ? const Color(0xFFE5E5EA) : const Color(0xFF1C1C1E),
+          // 다섯 칸이 되면서 좁은 폰에선 "공연·행사"가 칸보다 넓어질 수 있다.
+          // 캡션과 같은 이유로 접히지 않고 줄어들게 한다.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
+                color:
+                    isDark ? const Color(0xFFE5E5EA) : const Color(0xFF1C1C1E),
+              ),
             ),
           ),
           const SizedBox(height: 1),
