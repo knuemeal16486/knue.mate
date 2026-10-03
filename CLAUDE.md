@@ -203,6 +203,12 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 
 - `.github/workflows/collect-notices.yml`이 30분마다(매시 7·37분) 돌려
   GitHub Pages(`https://knuemeal16486.github.io/knue.mate/feed/`)에 올린다.
+  **타이머는 cron-job.org다**(사용자 계정): 30분마다 GitHub API로
+  `workflow_dispatch`를 부른다. GitHub 예약 실행은 켜 두었지만 실측 3~5시간에
+  한 번꼴로만 돌아서(2026-10-03, 27시간에 7번) 예비일 뿐이다. 토큰은 이 저장소
+  하나·Actions 권한만 가진 fine-grained 토큰이고 만료가 있다 — **만료되면 수집이
+  멈춘다**(cron-job.org가 실패 메일을 보낸다). 워크플로에 입력값(force 등)을
+  두지 않는다 — 토큰이 새도 정해진 간격 이상으로 학교를 두드리지 못하게.
   `index.json`(게시판별 마지막 수집 시각·지문) + `b/<id>.json`(제목·링크·날짜·
   부서만, 본문 없음). 전체 416KB.
 - **학교에 가는 양은 `kCollectIntervalMinutes`(lib/notice_collector.dart)로만
@@ -219,11 +225,10 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   않으면 기존 글이 전부 새 글 알림으로 뜬다.
 - 수집 파일이 묵어도 **모든 기기가 직접 긁게 하지 않는다**(학교 요청) —
   마지막 데이터 + 지연 안내(3시간 넘으면).
-- 공개 저장소는 **60일 동안 커밋이 없으면 예약 실행이 꺼진다.** GitHub이 꺼지기
-  전에 메일로 알려 주고, 꺼지면 Actions 탭에서 다시 켠다. **이걸 피하려고 빈
-  커밋·API 호출을 자동으로 돌리지 않는다** — 그 용도로 널리 쓰이던
-  `keepalive-workflow` 저장소가 약관 위반으로 GitHub에 차단됐다(2025-04).
-  개발이 아예 멈추는 때가 오면 수집기를 다른 곳(Cloudflare 등)으로 옮긴다.
+- 공개 저장소는 **60일 동안 커밋이 없으면 예약 실행이 꺼진다.** 꺼지는 건
+  예비인 schedule뿐이고 cron-job.org가 부르는 실행은 계속 돈다. **예약 실행을
+  살리려고 빈 커밋·재활성화 API를 자동으로 돌리지 않는다** — 그 용도로 널리
+  쓰이던 `keepalive-workflow` 저장소가 약관 위반으로 GitHub에 차단됐다(2025-04).
 - 학교는 **버전·일정·두 User-Agent**를 알려 주면 로그로 효과를 확인해 주기로
   했다. 수집기를 켠 사실과 앱 배포 일정을 회신한다. 간격이나 수집기 이름을
   바꾸면 다시 알린다.
