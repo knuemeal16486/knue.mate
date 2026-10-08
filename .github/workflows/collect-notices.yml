@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
 
@@ -60,5 +60,18 @@ jobs:
         with:
           path: site
 
+      # GitHub 쪽에서 방금 올린 결과물을 못 찾아 배포가 가끔 실패한다
+      # ("Fetching artifact metadata failed", "No artifacts named github-pages",
+      # 2026-10-08 두 번). 1분 기다렸다 한 번 더 올린다. 학교에 다시 요청하지는
+      # 않는다 — 이미 받은 결과물을 다시 올릴 뿐이다. 두 번째도 실패하면 이
+      # 회차는 실패로 남고 다음 회차가 메운다.
       - id: deploy
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+
+      - if: steps.deploy.outcome == 'failure'
+        run: sleep 60
+
+      - id: deploy_retry
+        if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v5
