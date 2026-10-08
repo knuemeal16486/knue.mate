@@ -23,6 +23,7 @@ import 'ui_utils.dart';
 import 'keyword_alert_service.dart';
 import 'club_event_alert_service.dart';
 import 'exit_promo_settings.dart';
+import 'notice_feed.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -172,6 +173,9 @@ void main() async {
         ExitPromoSettings.loadCached().catchError((e) {
           debugPrint("ExitPromoSettings warning: $e");
         }),
+        NoticeFeedSettings.loadCached().catchError((e) {
+          debugPrint("NoticeFeedSettings warning: $e");
+        }),
       ]).timeout(
         const Duration(seconds: 2),
         onTimeout: () {
@@ -182,9 +186,6 @@ void main() async {
     } catch (e) {
       debugPrint("로컬 데이터 로드 예외: $e");
     }
-
-    // 종료 팝업 최신값은 백그라운드에서 갱신
-    unawaited(ExitPromoSettings.refresh());
 
     // 2. Firebase 초기화 (타임아웃 보호)
     try {
@@ -197,6 +198,12 @@ void main() async {
     } catch (e) {
       debugPrint("Firebase 초기화 예외: $e");
     }
+
+    // 공용 설정(종료 팝업·공지 수집 파일) 최신값은 백그라운드에서 갱신.
+    // Firebase가 준비된 뒤에 불러야 한다 — 전엔 초기화 앞에서 불러서 늘
+    // 아무것도 안 하고 끝났다(Firebase.apps가 비어 있으면 바로 돌아간다).
+    unawaited(ExitPromoSettings.refresh());
+    unawaited(NoticeFeedSettings.refresh());
 
     // 3. 네이티브 플러그인 초기화 (ATT, AdMob, HomeWidget, Notification)
     try {

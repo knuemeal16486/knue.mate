@@ -5,12 +5,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'constants.dart';
 import 'keyword_alert_service.dart';
+import 'notice_feed.dart';
 import 'notice_model.dart';
 import 'notice_service.dart';
 import 'ui_utils.dart';
 
-/// 청람공지 화면. KnueScraper로 크롤링한 전체 게시판 공지를 게시판 그룹별로
-/// 모아 보여주고, 즐겨찾기 게시판/키워드 알림을 관리한다.
+/// 청람공지 화면. 중앙 수집 파일(NoticeFeed)로 받은 전체 게시판 공지를 게시판
+/// 그룹별로 모아 보여주고, 즐겨찾기 게시판/키워드 알림을 관리한다.
 class NoticeScreen extends StatefulWidget {
   const NoticeScreen({super.key});
   @override
@@ -71,6 +72,12 @@ class _NoticeScreenState extends State<NoticeScreen>
   // 눈에 띄게 버벅인 원인이라 입력이 바뀔 때만 계산하도록 바꿨다.
   List<Notice> _filtered = const [];
   bool _failedBoard = false;
+
+  /// 마지막 받기가 실패했는지(수집 파일에 닿지 못했다).
+  bool _syncFailed = false;
+
+  /// 보고 있는 게시판들의 가장 오래된 마지막 수집 시각(수집 파일 기준).
+  DateTime? _feedOldest;
   /// 제목 소문자 사본. 검색할 때마다 새로 만들지 않도록 미리 계산해 둔다.
   final Map<String, String> _lowerTitleCache = {};
 
@@ -78,8 +85,7 @@ class _NoticeScreenState extends State<NoticeScreen>
   void initState() {
     super.initState();
     _load();
-    // fetchAllNotices()는 캐시를 먼저 반환하고 백그라운드로 갱신한다(await 없이).
-    // 그 갱신이 끝났을 때 화면이 최신 데이터를 반영하도록 구독.
+    // 홈 화면·백그라운드 작업이 캐시를 새로 채우면 화면도 따라 바뀌도록 구독.
     NoticeCache.revision.addListener(_onCacheUpdated);
     _mainTabController.addListener(_onMainTabChanged);
     PreferencesService.favoriteBoards.addListener(_onFavoritesChanged);
@@ -153,11 +159,10 @@ class _NoticeScreenState extends State<NoticeScreen>
     });
   }
 
-  /// 지금 화면이 학교에서 받을 게시판 — 보고 있는 범위만([noticeFetchScope]).
-  ///
-  /// 예전엔 화면을 열면 48개 게시판을 전부 받았다. 정보전산원이 "기기에서 직접
-  /// 요청할 때는 선택한 게시판만" 받아 달라고 해서(2026-10-02), 보고 있는
-  /// 탭·게시판만 받고 나머지는 그 탭·게시판을 열 때 받는다.
+  /// 비상 직접 모드(NoticeFeedSettings.direct)일 때 학교에서 받을 게시판 —
+  /// 보고 있는 범위만([noticeFetchScope]). 정보전산원이 "기기에서 직접 요청할
+  /// 때는 선택한 게시판만" 받아 달라고 했다(2026-10-02). 평소(수집 파일)에는
+  /// 쓰지 않는다 — 수집 파일엔 전체 게시판이 들어 있다.
   Set<String> get _fetchScope => noticeFetchScope(
         mainTab: _currentMainTab,
         subGroup: _selectedSubGroup,
@@ -168,8 +173,8 @@ class _NoticeScreenState extends State<NoticeScreen>
   /// 받는 중에 탭·게시판을 또 바꿨는지. 끝나면 새 범위로 한 번 더 받는다.
   bool _loadAgain = false;
 
-  /// 받아 둔 목록을 먼저 보여 주고, 보고 있는 범위에서 갱신할 때가 된
-  /// 게시판만 받는다(게시판마다 30분). [force]면 그 범위를 지금 바로 받는다.
+  /// 받아 둔 목록을 먼저 보여 주고 수집 파일에서 바뀐 게시판을 받는다
+  /// (자동은 [kNoticeFeedAutoGap]마다). [force](당겨서 새로 고침)면 지금 받는다.
   Future<void> _load({bool force = false}) async {
     if (_loadInFlight) {
       _loadAgain = true;
@@ -185,10 +190,11 @@ class _NoticeScreenState extends State<NoticeScreen>
           _recomputeDerived();
         });
       }
-      await _scraper.refreshBoards(
-        _fetchScope,
-        gap: force ? Duration.zero : kNoticeAutoRefreshGap,
+      final ok = await NoticeFeed.refresh(
+        directScope: _fetchScope,
+        force: force,
       );
+      _syncFailed = !ok;
       final list = await NoticeCache.load() ?? <Notice>[];
       final ts = await NoticeCache.lastUpdated();
       if (mounted) {
@@ -265,12 +271,25 @@ class _NoticeScreenState extends State<NoticeScreen>
       }).toList();
     }
 
-    // 선택 게시판이 크롤링 결과 0건인지(=크롤링 실패 가능성) 판정.
-    // fetchAllNotices의 개별 게시판 catchError는 빈 리스트를 반환하므로,
-    // "카테고리가 전체 목록엔 있는데 결과가 0건"이면 실패로 간주한다.
+    final viewing =
+        _selectedCategory != null ? {_selectedCategory!} : scope;
+    final feed = feedScopeStatus(NoticeFeed.boards.value, viewing);
+    _feedOldest = feed.oldest;
+
     if (_loading) {
       _failedBoard = false;
+    } else if (!NoticeFeedSettings.direct) {
+      // 보고 있는 게시판인데 글이 하나도 없다: 수집기가 그 게시판을 아직 못
+      // 받았거나, 이 기기가 수집 파일에 닿지 못했다. 수집기가 받았는데 글이
+      // 없는 게시판(0건)은 실패가 아니다.
+      final present = _notices.map((n) => n.category).toSet();
+      _failedBoard = viewing.intersection(_allCategories).any(
+            (c) =>
+                !present.contains(c) &&
+                (_syncFailed || feed.missing.contains(c)),
+          );
     } else if (_selectedCategory != null) {
+      // 직접 모드: 받으려 한 게시판이 0건이면 실패로 본다.
       // LINK 게시판은 크롤링 대상이 아니라 0건이 정상이다.
       _failedBoard = _linkOnlyUrl(_selectedCategory) == null &&
           !_notices.any((n) => n.category == _selectedCategory);
@@ -364,6 +383,9 @@ class _NoticeScreenState extends State<NoticeScreen>
               _buildSubGroupChips(color, isDark),
               _buildBoardChips(color),
               if (_failedBoard) _buildFailureBanner(isDark),
+              if (!NoticeFeedSettings.direct &&
+                  isFeedStale(_feedOldest, DateTime.now()))
+                _buildStaleBanner(isDark),
               if (_scopeHint case final hint?) _buildScopeHint(hint, isDark),
               Expanded(child: _buildNoticeList(color, isDark)),
               _buildFooter(isDark),
@@ -469,10 +491,11 @@ class _NoticeScreenState extends State<NoticeScreen>
     );
   }
 
-  /// [대학/대학원]을 "전체"로 두면 고정한 학과만 받는다는 안내. 학과 27개를
-  /// 한꺼번에 받지 않게 바꾸면서, 왜 일부만 보이는지 알려 준다.
+  /// 비상 직접 모드에서 [대학/대학원]을 "전체"로 두면 고정한 학과만 받는다는
+  /// 안내. 평소(수집 파일)엔 전체 학과가 다 있어서 띄우지 않는다.
   String? get _scopeHint {
-    if (_currentMainTab != kNoticeOnDemandTab ||
+    if (!NoticeFeedSettings.direct ||
+        _currentMainTab != kNoticeOnDemandTab ||
         _selectedSubGroup != null ||
         _selectedCategory != null) {
       return null;
@@ -512,6 +535,35 @@ class _NoticeScreenState extends State<NoticeScreen>
             child: Text(
               "일부 게시판을 불러오지 못했습니다",
               style: TextStyle(color: Colors.orange, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 수집이 늦어지고 있다는 안내. 학교를 직접 받으러 가지 않고(학교 요청)
+  /// 받아 둔 목록이 언제 것인지만 알린다.
+  Widget _buildStaleBanner(bool isDark) {
+    return Container(
+      width: double.infinity,
+      color: Colors.blueGrey.withValues(alpha: isDark ? 0.2 : 0.1),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Icon(
+            Icons.schedule_rounded,
+            size: 18,
+            color: isDark ? Colors.white60 : Colors.blueGrey,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "공지 갱신이 늦어지고 있어요. ${_formatTimestamp(_feedOldest!)} 목록이에요.",
+              style: TextStyle(
+                fontSize: 12.5,
+                color: isDark ? Colors.white70 : Colors.blueGrey.shade700,
+              ),
             ),
           ),
         ],
@@ -821,9 +873,11 @@ class _NoticeScreenState extends State<NoticeScreen>
   }
 
   Widget _buildFooter(bool isDark) {
-    final text = _lastUpdated == null
+    // 수집 파일이면 보고 있는 게시판을 학교에서 마지막으로 확인한 시각.
+    final at = NoticeFeedSettings.direct ? _lastUpdated : _feedOldest;
+    final text = at == null
         ? "갱신 기록 없음"
-        : "마지막 갱신: ${_formatTimestamp(_lastUpdated!)}";
+        : "마지막 갱신: ${_formatTimestamp(at)}";
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -942,7 +996,8 @@ class KeywordSheetState extends State<KeywordSheet> {
             Text(
               // 찾는 범위를 적어 둔다 — 학과 공지는 ★로 고정해야 알림이 온다.
               "등록한 키워드가 포함된 새 공지가 올라오면 알려드려요. "
-              "★로 고정한 게시판에서 찾고, 고정한 게 없으면 학교 대표 홈페이지 게시판에서 찾아요.",
+              "★로 고정한 게시판에서 찾고, 고정한 게 없으면 "
+              "${NoticeFeedSettings.direct ? "학교 대표 홈페이지 게시판" : "모든 게시판"}에서 찾아요.",
               style: TextStyle(
                 fontSize: 12,
                 color: isDark ? Colors.white54 : Colors.black54,

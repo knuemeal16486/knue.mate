@@ -15,6 +15,7 @@ import 'constants.dart';
 import 'favorite_service.dart';
 import 'housing_screen.dart';
 import 'legal_tips_screen.dart';
+import 'notice_feed.dart';
 import 'notice_model.dart';
 import 'notice_screen.dart';
 import 'firebase_sync_service.dart';
@@ -374,11 +375,9 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      // 2. 최신 공지 스크래핑
-      final fetched = await _scraper.fetchAllNotices(
-        onlyCategories: favBoards,
-        forceRefresh: force,
-      );
+      // 2. 수집 파일에서 바뀐 게시판을 받아 캐시에 합친다
+      await NoticeFeed.refresh(directScope: favBoards, force: force);
+      final fetched = await NoticeCache.load() ?? const <Notice>[];
       final filtered = fetched
           .where((n) => favBoards.contains(n.category))
           .take(4)

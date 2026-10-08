@@ -2,17 +2,24 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 import 'constants.dart';
+import 'notice_feed.dart';
 import 'notice_model.dart';
 import 'notice_service.dart';
+import 'offline_cache.dart';
 
 const String kNoticeCheckTask = 'knue_notice_check_task';
 
 /// 백그라운드 새 공지 확인 간격. iOS는 AppDelegate.swift에도 같은 값이 있다.
 ///
-/// 예전엔 2시간마다 48개 게시판 전체를 받아, 기기 한 대가 학교 서버에 하루
-/// 최대 480건을 보냈다(2026-09-28 정보전산원 메일). 이제 알릴 게시판만
-/// 4시간마다 받는다 — 기본 4개면 하루 최대 24건.
-const Duration kNoticeCheckInterval = Duration(hours: 4);
+/// 학교가 아니라 중앙 수집 파일(GitHub Pages)을 보므로 학교 부담과 상관없다
+/// (목록 7KB + 바뀐 게시판만). 예전엔 학교를 직접 받느라 2시간 → 4시간으로
+/// 늘렸었다(2026-09-28 정보전산원 메일). 수집이 30분마다라 이보다 짧아도
+/// 알림이 빨라지지 않는다.
+const Duration kNoticeCheckInterval = Duration(hours: 1);
+
+/// 비상 직접 모드(NoticeFeedSettings.direct)일 때 학교를 직접 받는 최소 간격.
+/// 작업은 [kNoticeCheckInterval]마다 깨지만 학교에는 이 간격으로만 간다.
+const Duration kNoticeDirectCheckGap = Duration(hours: 4);
 
 /// scheduled 모드에서 다음 지정 시각까지 쌓아두는 공지 제목들.
 const String _kPendingTitlesKey = 'notice_pending_digest_titles';
@@ -23,6 +30,11 @@ const String _kLastDigestSentAtKey = 'notice_last_digest_sent_at';
 
 /// 최초 1회 시딩을 마쳤는지. [KeywordAlertService.checkAndNotify] 참고.
 const String _kSeededKey = 'notice_alert_seeded';
+
+/// 수집 파일로 바꾼 뒤 한 번 더 시딩했는지. 글 번호 계산이 바뀌어서
+/// (stableNoticeId) 예전에 적어 둔 notified_ids와 하나도 안 맞는다 — 그대로
+/// 두면 업데이트 직후 이미 본 글이 전부 새 글 알림으로 온다.
+const String _kFeedSeededKey = 'notice_alert_seeded_feed';
 
 /// 온디바이스 키워드 알림 (MoA notification_service.dart 로직 이식, Hive 제거)
 class KeywordAlertService {
@@ -93,12 +105,44 @@ class KeywordAlertService {
     final favBoards =
         prefs.getStringList(PreferencesService.keyFavBoards) ?? [];
 
-    // 알릴 게시판만 받는다(backgroundNoticeBoards 참고). 전체를 받으면
-    // 학교 서버에 기기당 40건씩 간다.
-    final notices = await KnueScraper().fetchAllNotices(
-      forceRefresh: true,
-      onlyCategories: backgroundNoticeBoards(favBoards, keywords),
-    );
+    await NoticeFeedSettings.loadCached();
+    final List<Notice> notices;
+    if (NoticeFeedSettings.direct) {
+      // 비상 직접 모드: 알릴 게시판만 학교에서 받는다(backgroundNoticeBoards).
+      if (!await PersistentThrottle.tryAcquire(
+        'notice_bg_direct',
+        'all',
+        kNoticeDirectCheckGap,
+      )) {
+        return;
+      }
+      notices = await KnueScraper().fetchAllNotices(
+        forceRefresh: true,
+        onlyCategories: backgroundNoticeBoards(favBoards, keywords),
+      );
+    } else {
+      await NoticeFeed.sync(force: true);
+      final scope = feedAlertBoards(favBoards, keywords);
+      final all = await NoticeCache.load() ?? const <Notice>[];
+      // 캐시엔 직접 받던 때의 글(옛 번호)이 섞여 있을 수 있다(그 게시판 파일을
+      // 아직 못 받았으면). 번호는 링크로 정해지므로 여기서 다시 계산해 맞춘다.
+      notices = [
+        for (final n in all)
+          if (scope == null || scope.contains(n.category)) withStableId(n),
+      ];
+      // 수집 파일 번호로는 처음이면 조용히 적어만 둔다.
+      if (!(prefs.getBool(_kFeedSeededKey) ?? false)) {
+        if (notices.isEmpty) return;
+        await prefs.setBool(_kFeedSeededKey, true);
+        await prefs.setBool(_kSeededKey, true);
+        await _rememberScanned(
+          prefs,
+          prefs.getStringList('notified_ids') ?? [],
+          notices,
+        );
+        return;
+      }
+    }
     if (notices.isEmpty) return;
     final notified = prefs.getStringList('notified_ids') ?? [];
 
@@ -226,7 +270,7 @@ class KeywordAlertService {
           kNoticeCheckTask,
           frequency: kNoticeCheckInterval,
           constraints: Constraints(networkType: NetworkType.connected),
-          // keep이면 이미 2시간으로 등록된 기기는 옛 간격을 그대로 쓴다.
+          // keep이면 이미 등록된 기기는 옛 간격(2·4시간)을 그대로 쓴다.
           // update는 간격만 바꾸고 예정된 실행 시각은 유지한다.
           existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
         );

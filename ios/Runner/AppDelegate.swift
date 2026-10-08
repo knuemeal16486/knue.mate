@@ -56,8 +56,8 @@ import AppTrackingTransparency
     WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "meal_widget_update_task", frequency: NSNumber(value: 15 * 60))
     WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "widget_update", frequency: NSNumber(value: 15 * 60))
     WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "knue_club_event_check_task", frequency: NSNumber(value: 2 * 60 * 60))
-    // 학교 서버 부담 때문에 4시간(lib/keyword_alert_service.dart의 kNoticeCheckInterval과 같게).
-    WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "knue_notice_check_task", frequency: NSNumber(value: 4 * 60 * 60))
+    // 1시간(lib/keyword_alert_service.dart의 kNoticeCheckInterval과 같게). 학교가 아니라 수집 파일을 본다.
+    WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "knue_notice_check_task", frequency: NSNumber(value: 60 * 60))
 
     // [추가 3] iOS 10 이상에서 알림 센터 대리자 설정 (필요시)
     if #available(iOS 10.0, *) {

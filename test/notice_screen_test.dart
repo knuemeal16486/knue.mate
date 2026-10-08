@@ -1,10 +1,22 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:knue_mate/constants.dart';
+import 'package:knue_mate/notice_collector.dart';
+import 'package:knue_mate/notice_feed.dart';
+import 'package:knue_mate/notice_model.dart';
 import 'package:knue_mate/notice_screen.dart';
 
 void main() {
+  setUp(() {
+    NoticeFeed.debugReset();
+    NoticeFeedSettings.debugSet();
+  });
+
   testWidgets('NoticeScreen 렌더링 스모크', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const MaterialApp(home: NoticeScreen()));
@@ -52,8 +64,55 @@ void main() {
     expect(find.text('대학소식'), findsNothing);
   });
 
-  // 학과·대학원 27개를 한꺼번에 받지 않게 바꿨다(정보전산원 요청, 2026-10-02).
-  testWidgets('[대학/대학원] 전체: 고정한 학과가 없으면 안내를 띄우고, 안 받은 학과를 실패로 치지 않는다', (tester) async {
+  // 수집 파일에는 전체 학과가 들어 있어 "고정한 학과만" 안내가 필요 없다.
+  testWidgets('[대학/대학원] 전체: 수집 파일로 받을 땐 범위 안내가 없다', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    PreferencesService.favoriteBoards.value = [];
+    await tester.pumpWidget(const MaterialApp(home: NoticeScreen()));
+    await tester.pump(const Duration(seconds: 30));
+
+    await tester.tap(find.text('대학/대학원'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('대학이나 학과를 고르면'), findsNothing);
+    expect(find.textContaining('고정한 학과만'), findsNothing);
+  });
+
+  testWidgets('수집이 3시간 넘게 늦으면 안내를 띄우고, 학교 서버로는 요청하지 않는다', (tester) async {
+    final at = DateTime.now().toUtc().subtract(const Duration(hours: 5));
+    final notice = Notice(
+      id: 1,
+      category: '학사공지',
+      group: 'MAIN',
+      title: '수강 정정 안내',
+      date: '2026-10-06',
+      author: '학사관리과',
+      link: 'https://www.knue.ac.kr/x',
+    );
+    SharedPreferences.setMockInitialValues({
+      'notice_feed_index': encodeFeedIndex(at, [
+        FeedBoardEntry(group: 'MAIN', category: '학사공지', file: 'b/1.json', fetchedAt: at, ok: true, count: 1, hash: 'h'),
+      ]),
+      'noticeCache': jsonEncode([notice.toJson()]),
+    });
+    final requested = <String>[];
+    await http.runWithClient(
+      () => tester.pumpWidget(const MaterialApp(home: NoticeScreen())),
+      () => MockClient((req) async {
+        requested.add(req.url.toString());
+        return http.Response('down', 503); // 수집 파일도 안 열린다
+      }),
+    );
+    await tester.pump(const Duration(seconds: 30));
+
+    expect(find.text('수강 정정 안내'), findsOneWidget);
+    expect(find.textContaining('공지 갱신이 늦어지고 있어요'), findsOneWidget);
+    expect(requested, isNotEmpty);
+    expect(requested.any((u) => u.contains('knue.ac.kr')), isFalse);
+  });
+
+  // 비상 직접 모드: 학과·대학원 27개를 한꺼번에 받지 않는다(정보전산원 요청, 2026-10-02).
+  testWidgets('[대학/대학원] 전체(직접 모드): 고정한 학과가 없으면 안내를 띄우고, 안 받은 학과를 실패로 치지 않는다', (tester) async {
+    NoticeFeedSettings.debugSet(direct: true);
     SharedPreferences.setMockInitialValues({});
     PreferencesService.favoriteBoards.value = [];
     await tester.pumpWidget(const MaterialApp(home: NoticeScreen()));
