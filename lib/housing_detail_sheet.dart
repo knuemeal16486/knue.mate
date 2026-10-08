@@ -35,6 +35,10 @@ class HousingDetailSheet extends StatefulWidget {
   /// 교내 건물이면 캠퍼스맵에 있던 건물 정보(설명·층별 호실).
   final BuildingData? campusInfo;
 
+  /// 자취방 건물인지(시세·연락처·제보·비교). 상가·흰 건물은 false —
+  /// 시세 제보를 받지 않는다([isHousingReportable]).
+  final bool rentable;
+
   const HousingDetailSheet({
     super.key,
     required this.building,
@@ -50,6 +54,7 @@ class HousingDetailSheet extends StatefulWidget {
     this.onShowOnMap,
     this.onEditBuilding,
     this.campusInfo,
+    this.rentable = true,
   });
 
   @override
@@ -492,6 +497,8 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
     // 다루고 기숙사비만 보여준다(지도에선 원룸 구역으로 칠해 둔 동이 있다).
     final dagam = isDagamName(_shownName);
     final b = dagam ? widget.building.copyWith(isCampus: true) : widget.building;
+    // 자취방 부분(시세·연락처·제보·비교·하단 연락 바)을 그릴지.
+    final housing = !b.isCampus && widget.rentable;
     final s = widget.summary;
     final known = widget.known;
 
@@ -522,7 +529,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                 child: SafeArea(
                   top: false,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 10, 20, b.isCampus ? 16 : 88),
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, housing ? 88 : 16),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,7 +654,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
 
                 // 정문·도서관·정류장까지 어림 거리는 뺐다(직선거리라 실제와 달랐다).
                 // 도보권은 지도의 등시선 버튼으로 이 건물 기준으로 본다.
-                if (!b.isCampus) ...[
+                if (housing) ...[
                   const SizedBox(height: 12),
 
                   // 발품수첩 & 비교함 액션 버튼
@@ -735,7 +742,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                 const SizedBox(height: 6),
 
                 // 포함 관리비 및 실거주 정보 블록
-                if (!b.isCampus) ...[
+                if (housing) ...[
 
                   // 기숙사 비교 카드
                   if (s.hasData && s.avgMonthlyTotal != null) ...[
@@ -815,7 +822,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                       ),
                     ),
                   ),
-                ] else if (!dagam) ...[
+                ] else if (b.isCampus && !dagam) ...[
                   // 캠퍼스 건물 안내
                   Container(
                     width: double.infinity,
@@ -853,7 +860,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
         ),
       ),
               // 하단 고정 전화/문자 퀵 액션 플로팅 바 (Glassmorphism Blur)
-              if (!b.isCampus)
+              if (housing)
                 Positioned(
                   left: 0,
                   right: 0,

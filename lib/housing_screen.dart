@@ -215,6 +215,12 @@ class _HousingScreenState extends State<HousingScreen>
   /// 바뀌면 [_rebuild]가 다시 만든다.
   Map<String, HousingSummary> _summaries = const {};
 
+  /// 지도에 칠한 색. [_shownColors]는 지금 보이는 그대로("내 조건 찾기"로 걸러져
+  /// 흰색이 된 건물은 빠진다) — 누를 수 있는지 가른다. [_baseColors]는 거르기
+  /// 전 색 — 시세 제보를 받는 건물인지 가른다(검색으로 연 건물도 같게).
+  Map<String, Color> _shownColors = const {};
+  Map<String, Color> _baseColors = const {};
+
   /// Firestore에서 받은 학생 제보 원본(건물 id별).
   Map<String, List<HousingReport>> _reports = const {};
 
@@ -760,6 +766,14 @@ class _HousingScreenState extends State<HousingScreen>
       matches: matches,
       filtering: byFilter || byFavorites,
     );
+    _shownColors = style.zoneColors;
+    _baseColors = (byFilter || byFavorites)
+        ? housingMapStyle(
+            effectiveBuildings,
+            summaries: _summaries,
+            overrides: _overrides,
+          ).zoneColors
+        : style.zoneColors;
 
     _buildings = layoutBuildings(
       effectiveBuildings,
@@ -1341,9 +1355,24 @@ class _HousingScreenState extends State<HousingScreen>
     );
   }
 
+  /// 지도에 뜨는 이름(관리자가 붙인 이름 > 지도 데이터 이름).
+  String? _mapName(BaseBuilding b) => (_overrides[b.id]?.isNamed ?? false)
+      ? _overrides[b.id]!.name
+      : b.officialName;
+
+  /// 시세 제보를 받는 건물인지(상세 창의 자취방 부분을 그릴지).
+  bool _isRentable(BaseBuilding b) => isHousingReportable(
+        b,
+        mapColor: _baseColors[b.id],
+        name: _mapName(b),
+        override: _overrides[b.id],
+        hasRent: _summaries.containsKey(b.id) ||
+            (_overrides[b.id]?.prices.isNotEmpty ?? false),
+      );
+
   void _onTapMap(Offset local) {
     final localWithoutOrigin = local - _origin;
-    final hit = hitTestBuilding(_buildings, localWithoutOrigin);
+    var hit = hitTestBuilding(_buildings, localWithoutOrigin);
 
     if (AdminAuthService.isAdmin.value) {
       if (_editTool == HousingEditTool.paint && hit != null) {
@@ -1372,6 +1401,14 @@ class _HousingScreenState extends State<HousingScreen>
         _promptAddBlockAt(worldPt);
         return;
       }
+    }
+
+    // 흰 건물과 철거 예정 건물(퇴계관)은 누르지 않는다(빈 곳을 누른 것과 같다). 개발자는 흰 건물에도
+    // 이름·색을 붙여야 하므로 그대로 둔다.
+    if (hit != null &&
+        !AdminAuthService.isAdmin.value &&
+        !isHousingTappable(hit, _shownColors[hit.id], name: _mapName(hit))) {
+      hit = null;
     }
 
     if (hit == null) {
@@ -2479,6 +2516,11 @@ class _HousingScreenState extends State<HousingScreen>
       }
     }
 
+    // 누를 수 없는 건물(철거 예정 퇴계관)은 검색으로도 열지 않는다. 원래 이름
+    // (청람천문대)으로 찾아도 같은 건물이라 지도에 뜨는 이름으로 거른다.
+    if (!AdminAuthService.isAdmin.value) {
+      results.removeWhere((r) => isHousingUntappableName(_mapName(r.building)));
+    }
     return results.take(8).toList();
   }
 
@@ -5442,6 +5484,7 @@ class _HousingScreenState extends State<HousingScreen>
           building: b,
           // 캠퍼스맵에 있던 교내 건물 정보(설명·층별 호실)를 이어 붙인다.
           campusInfo: b.isCampus ? _campusInfoById[b.id] : null,
+          rentable: _isRentable(b),
           summary: _summaries[b.id] ?? HousingSummary.empty,
           known: _resolvedKnown(b.id),
           edited: _overrides[b.id],

@@ -750,6 +750,9 @@ class _ReportManageTabState extends State<_ReportManageTab> {
   List<HousingReport> _reports = const [];
   Map<String, HousingBuildingOverride> _overrides = const {};
 
+  /// 지도 건물(에셋 + 개발자가 추가한 건물). 이름을 지도와 똑같이 찾으려고 둔다.
+  Map<String, BaseBuilding> _buildingsById = const {};
+
   @override
   void initState() {
     super.initState();
@@ -762,11 +765,18 @@ class _ReportManageTabState extends State<_ReportManageTab> {
       final results = await Future.wait([
         HousingService.fetchAllReportsRaw(),
         HousingService.fetchOverrides(),
+        CampusBase.load(),
+        HousingService.fetchCustomBuildings(),
       ]);
       if (!mounted) return;
+      final base = results[2] as CampusBase;
+      final custom = results[3] as List<BaseBuilding>;
       setState(() {
         _reports = results[0] as List<HousingReport>;
         _overrides = results[1] as Map<String, HousingBuildingOverride>;
+        _buildingsById = {
+          for (final b in withCustomBuildings(base.buildings, custom)) b.id: b,
+        };
         _loading = false;
       });
     } catch (e) {
@@ -774,12 +784,11 @@ class _ReportManageTabState extends State<_ReportManageTab> {
     }
   }
 
-  String _buildingLabel(HousingReport r) {
-    final override = _overrides[r.buildingId];
-    if (override != null) return override.name;
-    final guessed = r.oneRoomId == null ? null : kOneRoomNameById[r.oneRoomId];
-    return guessed?.name ?? r.buildingId;
-  }
+  String _buildingLabel(HousingReport r) => housingReportBuildingLabel(
+        r,
+        override: _overrides[r.buildingId],
+        building: _buildingsById[r.buildingId],
+      );
 
   Future<void> _confirmDelete(HousingReport r) async {
     final confirmed = await showDialog<bool>(
@@ -871,6 +880,13 @@ class _ReportManageTabState extends State<_ReportManageTab> {
                     ),
                   ],
                 ),
+                if (isHousingReportHidden(_overrides[r.buildingId])) ...[
+                  const SizedBox(height: 4),
+                  const Text(
+                    "지도에서 지운 건물에 달린 제보라 앱에 보이지 않아요",
+                    style: TextStyle(fontSize: 12, color: Colors.orange),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Text(
                   '보증금 ${r.deposit}만원 · 월세 ${r.monthlyRent}만원'

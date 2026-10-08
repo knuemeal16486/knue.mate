@@ -1708,6 +1708,94 @@ List<BaseBuilding> applyBuildingOverrides(
   return out;
 }
 
+/// 개발자 모드에서 상가를 칠하는 색(팔레트의 블루). 교원상가·CU·카페 등이
+/// 이 색이다(2026-10-08 기준 30동).
+const Color kHousingShopColor = Color(0xFF2196F3);
+
+/// 상가 색([kHousingShopColor])이어도 시세 제보를 받는 건물 — 1층은 상가,
+/// 위층은 원룸인 상가주택(사용자 지정, 2026-10-08). 지도에 뜨는 이름으로 맞춘다
+/// (띄어쓰기 무시).
+const Set<String> kHousingMixedUseNames = {'가온빌', '디저트 39', '원더빌'};
+
+/// 색이 칠해져 있어도 시세 제보를 받지 않는 주거 아닌 건물(사용자 지정,
+/// 2026-10-08). 지도에 뜨는 이름으로 맞춘다(띄어쓰기 무시).
+const Set<String> kHousingNonResidentialNames = {'월탄2리 경로당'};
+
+/// 손님 화면에서 누를 수 없는 건물 — 교내 건물이라도(사용자 지정). 지도에 뜨는
+/// 이름으로 맞춘다(띄어쓰기 무시).
+/// - 퇴계관: 철거를 앞둔 건물(2026-10-08). 지도 데이터 이름은 청람천문대이고
+///   개발자 모드에서 퇴계관으로 고쳐 두었다.
+const Set<String> kHousingUntappableNames = {'퇴계관'};
+
+/// [kHousingUntappableNames]에 든 이름인지. 지도 검색 결과에서도 뺀다.
+bool isHousingUntappableName(String? name) =>
+    _nameIn(name, kHousingUntappableNames);
+
+String _nameKey(String s) => s.replaceAll(RegExp(r'\s+'), '');
+bool _nameIn(String? name, Set<String> names) =>
+    name != null && names.any((n) => _nameKey(n) == _nameKey(name));
+
+/// 지도에서 색이 칠해진 건물인지. 흰색·무색은 칠하지 않은 것으로 본다.
+bool isColoredOnMap(Color? c) => c != null && c.toARGB32() != 0xFFFFFFFF;
+
+/// 손님 화면에서 누를 수 있는 건물인지. 순수 함수 — 테스트 대상.
+///
+/// 색이 칠해진 건물(아파트·빌라·원룸·상가)과 교내 건물만 누른다. 흰 건물은
+/// 정보가 없는 창고·주택이라 눌러도 빈 카드만 떴다. [mapColor]는
+/// [HousingMapStyle.zoneColors]의 색 — "내 조건 찾기"로 걸러져 흰색이 된 건물도
+/// 누를 수 없다. [kHousingUntappableNames]에 든 건물([name]은 지도에 뜨는 이름)도
+/// 누를 수 없다. 개발자 모드는 이 판정을 쓰지 않는다(흰 건물에도 이름·색을 붙여야 한다).
+bool isHousingTappable(BaseBuilding b, Color? mapColor, {String? name}) =>
+    !isHousingUntappableName(name) &&
+    (b.isCampus || isColoredOnMap(mapColor));
+
+/// 시세 제보를 받는 건물인지. 순수 함수 — 테스트 대상.
+///
+/// 색이 칠해진 **주거 건물**(아파트·빌라·원룸)만 받는다. 교내 건물, 주거 아닌
+/// 건물([kHousingNonResidentialNames]), 상가([kHousingShopColor]로 칠한 건물)는
+/// 뺀다. 상가 색이어도 상가주택([kHousingMixedUseNames])이나 이미 시세가 있는
+/// 건물([hasRent])은 받는다. [name]은 지도에 뜨는 이름.
+bool isHousingReportable(
+  BaseBuilding b, {
+  required Color? mapColor,
+  String? name,
+  HousingBuildingOverride? override,
+  bool hasRent = false,
+}) {
+  if (b.isCampus || !isColoredOnMap(mapColor)) return false;
+  if (_nameIn(name, kHousingNonResidentialNames)) return false;
+  final shop = override?.customColor?.toARGB32() == kHousingShopColor.toARGB32();
+  return !shop || hasRent || _nameIn(name, kHousingMixedUseNames);
+}
+
+/// 관리자 [제보 관리] 목록에 적을 건물 이름. 순수 함수 — 테스트 대상.
+///
+/// 지도와 같은 순서로 찾는다: 관리자가 붙인 이름 > 조사해 넣은 이름(지도 데이터)
+/// > 제보자가 고른 원룸 이름 > 주소. 예전엔 수정 문서가 있기만 하면 그 이름 칸을
+/// 그대로 써서, 모양·색만 고친 건물(이름 칸이 빈 문서)의 제보는 이름이 빈칸으로
+/// 나왔다(해오름빌 등).
+String housingReportBuildingLabel(
+  HousingReport r, {
+  HousingBuildingOverride? override,
+  BaseBuilding? building,
+}) {
+  if (override != null && override.isNamed) return override.name.trim();
+  final official = building?.officialName?.trim();
+  if (official != null && official.isNotEmpty) return official;
+  final guessed = r.oneRoomId == null ? null : kOneRoomNameById[r.oneRoomId];
+  if (guessed != null) return guessed.name;
+  final address = override?.address?.trim();
+  if (address != null && address.isNotEmpty) return "이름 미확인 ($address)";
+  if (building != null) return "이름 미확인 (${building.addressLabel})";
+  return "이름 미확인 건물";
+}
+
+/// 지도에서 지웠거나 다른 건물에 합친 건물에 달린 제보인지. 이런 제보는 앱
+/// 어디에도 안 보이므로 관리자가 옮기거나 지워야 한다. 순수 함수 — 테스트 대상.
+bool isHousingReportHidden(HousingBuildingOverride? override) =>
+    override != null &&
+    (override.isDeleted == true || (override.mergedWith?.isNotEmpty ?? false));
+
 /// 순수 함수 — 테스트 대상.
 ///
 /// 이름표 우선순위: 관리자 수정 > 학생 제보 > 조사해 넣은 이름.
