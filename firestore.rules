@@ -157,7 +157,11 @@ service cloud.firestore {
     match /bus_timetables/{doc=**} { allow read: if true; allow write: if studentWrite(); }
     match /bus_stops/{doc=**}      { allow read: if true; allow write: if studentWrite(); }
     match /realtime/{doc=**}       { allow read: if true; allow write: if studentWrite(); }
-    match /notices/{doc=**}        { allow read: if true; allow write: if studentWrite(); }
+
+    // 식단 화면 위에 모든 사용자에게 뜨는 공지 배너(관리자가 콘솔에서 쓴다).
+    // 공용 캐시가 아니다 — 앱은 읽기만 한다. 예전엔 학생도 쓸 수 있어서 누구나
+    // 모든 사용자 화면에 배너를 띄울 수 있었다(2026-10-08 막음).
+    match /notices/{doc=**}        { allow read: if true; allow write: if isAdmin(); }
 
     // 학사일정 학년도별 1년치(academic_calendar/{학년도}). 기기 한 대가 하루에
     // 한 번 학교에서 받아 모두가 나눠 쓴다 — 학교 서버 부담 때문(2026-09-28).

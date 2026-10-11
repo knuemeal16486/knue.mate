@@ -156,6 +156,21 @@ Firestore는 한도에 걸린 쓰기를 끝없이 재시도해서 저장 창이 
 넣지 않는다(예전엔 앱을 켤 때마다 건물 16건을 다시 써서 한도를 먹었다).
 버스 화면은 사용자마다 30초에 한 번 `realtime/bus_locations`를 쓴다.
 
+**하루 읽기 한도(무료 요금제 5만 건)**도 찬다 — 2026-10-08 오후에 실제로 차서
+식단 공용 캐시·버스·자취방이 한국 시각 16시까지 안 됐다. 9/20(1.6.1)부터
+하루 2만~7만 건이다(그 전엔 4천 건). 읽기 수는 Cloud Monitoring의
+`firestore.googleapis.com/document/read_count`로 본다(컬렉션별 구분은 안 된다).
+줄인 것:
+- 3D 지도(자취방·캠퍼스맵 지도 탭)가 열 때마다 관리자 수정 세 컬렉션(약 270건)을
+  통째로 받던 것 → 학생 기기는 판 번호(`app_settings/housing_data`의 `version`)
+  하나만 읽고, 바뀌었을 때·하루가 지났을 때만 서버에서 받는다
+  (`HousingService.loadAdminEdits`). 관리자 쓰기(`setOverride`·`clearOverride`·
+  위치 표시 저장/삭제)가 번호를 올린다. 관리자 기기는 실시간 리스너 그대로.
+  **관리자 수정 컬렉션에 쓰는 코드를 새로 만들면 `bumpAdminEditsVersion()`을 부른다.**
+- 하단 탭을 건너뛰면 사이 탭이 전부 만들어지던 것(홈→설정이 지도 탭을 지나며
+  270건) → 떨어진 탭은 바로 넘어간다(`RootNavigationScreen._onTabTapped`).
+- 1.6.3 이하는 업데이트 전까지 예전처럼 읽는다.
+
 관리자 인증: 비밀번호를 앱이 들고 있지 않다. `admin_grants/{uid}` 문서를 만들 때
 **보안 규칙이 서버에서** `app_config/admin`과 대조한다.
 

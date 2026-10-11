@@ -132,26 +132,49 @@ class HousingLandmarkService {
   static const String collection = 'housing_landmarks';
   static FirebaseFirestore get _db => FirebaseFirestore.instance;
 
-  /// 실시간으로 받는다. 먼저 찍은 것이 앞에 오게 id(시각) 순으로 정렬한다.
+  /// 실시간으로 받는다(관리자 기기). 학생 기기는 HousingService.loadAdminEdits로
+  /// 판 번호가 바뀌었을 때만 받는다.
   static Stream<List<HousingLandmark>> watch() =>
-      _db.collection(collection).snapshots().map((snap) {
-        final list = [
-          for (final doc in snap.docs)
-            if (HousingLandmark.fromMap(doc.id, doc.data()) case final l?) l,
-        ]..sort((a, b) => a.id.compareTo(b.id));
-        return list;
-      });
+      _db.collection(collection).snapshots().map((snap) => fromDocs(snap.docs));
+
+  /// 문서들을 위치 표시로. 먼저 찍은 것이 앞에 오게 id(시각) 순으로 정렬한다.
+  static List<HousingLandmark> fromDocs(
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) =>
+      [
+        for (final doc in docs)
+          if (HousingLandmark.fromMap(doc.id, doc.data()) case final l?) l,
+      ]..sort((a, b) => a.id.compareTo(b.id));
 
   /// 쓰기 한도에 걸리면 끝없이 기다리므로 제한 시간을 둔다(housing_service 참고).
-  static Future<void> save(HousingLandmark l) => _db
-      .collection(collection)
-      .doc(l.id)
-      .set(l.toFirestore())
-      .timeout(const Duration(seconds: 10));
+  /// 저장·삭제하면 판 번호를 올린다 — 학생 기기가 다시 받게.
+  static Future<void> save(HousingLandmark l) async {
+    await _db
+        .collection(collection)
+        .doc(l.id)
+        .set(l.toFirestore())
+        .timeout(const Duration(seconds: 10));
+    await _bumpVersion();
+  }
 
-  static Future<void> delete(String id) => _db
-      .collection(collection)
-      .doc(id)
-      .delete()
-      .timeout(const Duration(seconds: 10));
+  static Future<void> delete(String id) async {
+    await _db
+        .collection(collection)
+        .doc(id)
+        .delete()
+        .timeout(const Duration(seconds: 10));
+    await _bumpVersion();
+  }
+
+  /// HousingService.bumpAdminEditsVersion과 같은 문서(순환 import를 피해 여기 둔다).
+  static Future<void> _bumpVersion() async {
+    try {
+      await _db.collection('app_settings').doc('housing_data').set({
+        'version': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('HousingLandmarkService: 판 번호 올리기 실패: $e');
+    }
+  }
 }

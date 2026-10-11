@@ -543,6 +543,7 @@ class _HousingScreenState extends State<HousingScreen>
 
   @override
   void dispose() {
+    AdminAuthService.isAdmin.removeListener(_onAdminChanged);
     _overrideSub?.cancel();
     _customSub?.cancel();
     _landmarkSub?.cancel();
@@ -828,6 +829,49 @@ class _HousingScreenState extends State<HousingScreen>
   }
 
   void _watchAdminEdits() {
+    // 학생 기기는 판 번호가 바뀌었을 때만 서버에서 받는다(읽기 한도 —
+    // HousingService.loadAdminEdits). 관리자는 고친 게 바로 보이게 실시간으로.
+    if (!AdminAuthService.isAdmin.value) {
+      _loadAdminEditsOnce();
+      AdminAuthService.isAdmin.addListener(_onAdminChanged);
+      return;
+    }
+    _startLiveAdminEdits();
+  }
+
+  /// 지도를 연 채로 관리자 로그인을 하면 그때부터 실시간으로 받는다.
+  void _onAdminChanged() {
+    if (!mounted || !AdminAuthService.isAdmin.value) return;
+    AdminAuthService.isAdmin.removeListener(_onAdminChanged);
+    if (_overrideSub == null) _startLiveAdminEdits();
+  }
+
+  Future<void> _loadAdminEditsOnce() async {
+    HousingAdminEdits? edits;
+    try {
+      edits = await HousingService.loadAdminEdits();
+    } catch (e) {
+      debugPrint('loadAdminEdits error: $e');
+    }
+    _markFirst(_firstOverrides);
+    _markFirst(_firstCustom);
+    if (edits == null || !mounted) return;
+    final e = edits;
+    kPlacedLandmarkPositions.value = campusLandmarkOverrides(e.landmarks);
+    setState(() {
+      _overrides = e.overrides;
+      _base = CampusBase(
+        buildings: withCustomBuildings(_assetBase.buildings, e.custom),
+        roads: _assetBase.roads,
+        terrain: _assetBase.terrain,
+        landuse: _assetBase.landuse,
+      );
+      _landmarks = e.landmarks;
+      _rebuild();
+    });
+  }
+
+  void _startLiveAdminEdits() {
     try {
       _listenAdminEdits();
     } catch (e) {

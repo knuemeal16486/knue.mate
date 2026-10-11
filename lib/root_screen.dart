@@ -212,6 +212,18 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
     if (index == _currentIndex) return;
     HapticFeedback.selectionClick();
     final leaving = _currentIndex;
+    // 떨어진 탭으로 갈 때는 미끄러지지 않고 바로 넘어간다. 미끄러지면 사이에
+    // 있는 탭이 전부 화면을 스쳐 가며 만들어진다 — 홈에서 설정으로 가기만 해도
+    // 버스 탭이 버스 API를 부르고 지도 탭이 Firestore 읽기 약 270건을 썼다
+    // (하루 읽기 한도가 찬 원인 중 하나, 2026-10-08).
+    if ((index - leaving).abs() > 1) {
+      setState(() {
+        _previousIndexAnimating = null;
+        _currentIndex = index;
+      });
+      _pageController.jumpToPage(index);
+      return;
+    }
     setState(() {
       _previousIndexAnimating = leaving;
       _currentIndex = index;

@@ -6,6 +6,7 @@ import 'package:flutter/painting.dart' show Color, Offset;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'housing_iso.dart' show BaseBuilding, BuildingUse, kCampusAddress;
+import 'housing_landmark.dart';
 import 'housing_model.dart';
 import 'offline_cache.dart';
 
@@ -973,6 +974,32 @@ class HousingSummary {
   }
 }
 
+/// 관리자 수정(건물 수정·추가 건물·위치 표시) 한 벌.
+typedef HousingAdminEdits = ({
+  Map<String, HousingBuildingOverride> overrides,
+  List<BaseBuilding> custom,
+  List<HousingLandmark> landmarks,
+});
+
+/// 관리자 수정을 기기에 남은 Firestore 캐시로 읽어도 되는지. 순수 함수 — 테스트 대상.
+///
+/// 판 번호([remoteVersion], `app_settings/housing_data`)가 지난번에 서버에서
+/// 받을 때의 번호([syncedVersion])와 같으면 된다. 판 번호를 못 읽었으면
+/// (오프라인·읽기 한도) 캐시를 쓴다. 다만 [maxAge]가 지났으면 한 번은 서버에서
+/// 받는다 — 판 번호를 올리지 않는 옛 버전 관리자 앱으로 고친 것도 하루 안에는
+/// 퍼지게.
+bool canUseCachedHousingEdits({
+  required int? remoteVersion,
+  required int? syncedVersion,
+  required DateTime? syncedAt,
+  required DateTime now,
+  Duration maxAge = const Duration(hours: 24),
+}) {
+  if (syncedVersion == null || syncedAt == null) return false;
+  if (syncedAt.isAfter(now) || now.difference(syncedAt) > maxAge) return false;
+  return remoteVersion == null || remoteVersion == syncedVersion;
+}
+
 /// 자취방 제보 저장·조회.
 class HousingService {
   static const String _collection = 'housing_reports';
@@ -1172,6 +1199,7 @@ class HousingService {
         .doc(override.buildingId)
         .set(override.toFirestore())
         .timeout(adminWriteTimeout);
+    await bumpAdminEditsVersion();
   }
 
   /// 이 기기에서 보낸 쓰기가 모두 서버에 닿을 때까지 기다린다. 오프라인이면
@@ -1188,6 +1216,101 @@ class HousingService {
         .doc(buildingId)
         .delete()
         .timeout(adminWriteTimeout);
+    await bumpAdminEditsVersion();
+  }
+
+  // ── 관리자 수정 받기 ──────────────────────────────────────────
+  //
+  // 예전엔 학생 기기도 지도를 열 때마다 세 컬렉션(건물 수정 227건·추가 건물
+  // 30건·위치 표시)을 실시간 리스너로 통째로 받았다. 지도 한 번에 읽기 약
+  // 270건이고, 하단 탭을 건너뛸 때 지도 탭이 스쳐 지나가기만 해도 받았다.
+  // 그래서 무료 요금제 하루 읽기 한도(5만 건)가 찼다(2026-10-08, 식단 공용
+  // 캐시·버스·자취방이 오후 내내 안 됐다).
+  //
+  // 이제 관리자가 고칠 때마다 판 번호(`app_settings/housing_data`)를 올리고,
+  // 학생 기기는 지도를 열 때 그 문서 하나만 읽는다. 번호가 그대로면 기기에
+  // 남은 Firestore 캐시에서 읽어 서버 읽기가 0건이다. 관리자 기기는 고친 것이
+  // 바로 보여야 해서 예전처럼 실시간으로 받는다([watchOverrides] 등).
+
+  static const String _editsVersionKey = 'housing_edits_version';
+  static const String _editsSyncedAtKey = 'housing_edits_synced_at';
+
+  static DocumentReference<Map<String, dynamic>> get _editsVersionRef =>
+      _db.collection('app_settings').doc('housing_data');
+
+  /// 관리자 수정이 바뀌었다고 알린다(판 번호 +1). 실패해도 수정 자체는
+  /// 저장됐으니 넘어간다 — 학생 기기는 하루 안에 서버에서 다시 받는다.
+  static Future<void> bumpAdminEditsVersion() async {
+    try {
+      await _editsVersionRef.set({
+        'version': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(adminWriteTimeout);
+    } catch (e) {
+      debugPrint('HousingService: 판 번호 올리기 실패: $e');
+    }
+  }
+
+  /// 관리자 수정 한 벌을 받는다(학생 기기). 판 번호가 그대로면 기기 캐시에서,
+  /// 바뀌었으면 서버에서. 서버에서 못 받으면 남은 캐시라도 쓴다. 아무것도
+  /// 없으면 null(에셋 지도만 그린다).
+  static Future<HousingAdminEdits?> loadAdminEdits() async {
+    final prefs = await SharedPreferences.getInstance();
+    int? remote;
+    try {
+      final v = await _editsVersionRef
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 5));
+      remote = (v.data()?['version'] as num?)?.toInt() ?? 0;
+    } catch (e) {
+      debugPrint('HousingService: 판 번호 읽기 실패: $e');
+    }
+    final syncedMs = prefs.getInt(_editsSyncedAtKey);
+    final useCache = canUseCachedHousingEdits(
+      remoteVersion: remote,
+      syncedVersion: prefs.getInt(_editsVersionKey),
+      syncedAt: syncedMs == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(syncedMs),
+      now: DateTime.now(),
+    );
+    if (useCache) {
+      final cached = await _readAdminEdits(Source.cache);
+      if (cached != null) return cached;
+    }
+    final fresh = await _readAdminEdits(Source.server);
+    if (fresh != null) {
+      // 판 번호를 못 읽었으면 -1로 적어 다음에 다시 맞춰 본다.
+      await prefs.setInt(_editsVersionKey, remote ?? -1);
+      await prefs.setInt(
+        _editsSyncedAtKey,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      return fresh;
+    }
+    return useCache ? null : _readAdminEdits(Source.cache);
+  }
+
+  static Future<HousingAdminEdits?> _readAdminEdits(Source source) async {
+    try {
+      final options = GetOptions(source: source);
+      final snaps = await Future.wait([
+        _db.collection(_overrideCollection).get(options),
+        _db.collection(_customBuildingsCollection).get(options),
+        _db.collection(HousingLandmarkService.collection).get(options),
+      ]).timeout(const Duration(seconds: 10));
+      // 캐시가 비었으면(처음 설치·앱 데이터 삭제) 못 읽은 것으로 본다.
+      // 건물 수정은 비어 있을 리 없다.
+      if (source == Source.cache && snaps[0].docs.isEmpty) return null;
+      return (
+        overrides: _overridesFrom(snaps[0].docs),
+        custom: _customBuildingsFrom(snaps[1].docs),
+        landmarks: HousingLandmarkService.fromDocs(snaps[2].docs),
+      );
+    } catch (e) {
+      debugPrint('HousingService: 관리자 수정 읽기 실패($source): $e');
+      return null;
+    }
   }
 
   static const String _customBuildingsCollection = 'housing_custom_buildings';
