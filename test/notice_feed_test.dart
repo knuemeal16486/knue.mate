@@ -243,6 +243,13 @@ void main() {
       expect((await NoticeCache.load())!.single.title, '수강 정정');
     });
 
+    test('실패한 뒤 5분 안의 자동 확인은 건너뛰되 결과는 실패 그대로 — 실패 안내가 사라지지 않는다', () async {
+      expect(await syncWith(const {}, force: false), isFalse);
+      log.clear();
+      expect(await syncWith(const {}, force: false), isFalse);
+      expect(log, isEmpty);
+    });
+
     test('게시판 파일 하나가 실패하면 그 게시판은 다음에 다시 받는다', () async {
       final index = encodeFeedIndex(DateTime.utc(2026, 10, 7, 3), [a, b]);
       expect(

@@ -210,11 +210,17 @@ class NoticeFeed {
   static bool _indexLoaded = false;
   static Future<bool>? _inFlight;
 
+  /// 마지막으로 실제로 받으러 갔을 때 성공했는지. 받을 때가 아니라 건너뛴
+  /// 확인은 이 값을 돌려준다 — 안 그러면 실패한 지 5분 안에 탭만 넘겨도
+  /// "성공"이 되어 실패 안내가 사라진다.
+  static bool _lastOk = true;
+
   /// 테스트마다 기기 저장소가 바뀌므로 메모리 상태를 비운다.
   @visibleForTesting
   static void debugReset() {
     _indexLoaded = false;
     _inFlight = null;
+    _lastOk = true;
     boards.value = const [];
   }
 
@@ -230,7 +236,8 @@ class NoticeFeed {
     } catch (_) {}
   }
 
-  /// 공지를 새로 받는다. 받기에 성공했거나 받을 때가 아니었으면 true.
+  /// 공지를 새로 받는다. 받기에 성공했으면 true, 받을 때가 아니었으면 지난번
+  /// 결과.
   ///
   /// 평소엔 수집 파일에서 받는다. 비상 직접 모드면 [directScope] 게시판만
   /// 학교에서 받는다(예전 방식, 게시판마다 30분 간격). [force]는 당겨서 새로
@@ -267,7 +274,7 @@ class NoticeFeed {
       'index',
       force ? Duration.zero : kNoticeFeedAutoGap,
     )) {
-      return true;
+      return _lastOk;
     }
     final base = NoticeFeedSettings.base;
     try {
@@ -339,10 +346,10 @@ class NoticeFeed {
       await prefs.setString(_hashesKey, jsonEncode(hashes));
       await prefs.setString(_indexKey, body);
       boards.value = index.boards;
-      return fresh.length == todo.length;
+      return _lastOk = fresh.length == todo.length;
     } catch (e) {
       debugPrint('공지 수집 파일 받기 실패: $e');
-      return false;
+      return _lastOk = false;
     }
   }
 

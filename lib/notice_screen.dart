@@ -87,6 +87,8 @@ class _NoticeScreenState extends State<NoticeScreen>
     _load();
     // 홈 화면·백그라운드 작업이 캐시를 새로 채우면 화면도 따라 바뀌도록 구독.
     NoticeCache.revision.addListener(_onCacheUpdated);
+    // 홈 화면·백그라운드가 받은 수집 목록(마지막 수집 시각)도 바로 반영한다.
+    NoticeFeed.boards.addListener(_onFeedBoardsChanged);
     _mainTabController.addListener(_onMainTabChanged);
     PreferencesService.favoriteBoards.addListener(_onFavoritesChanged);
   }
@@ -95,6 +97,7 @@ class _NoticeScreenState extends State<NoticeScreen>
   void dispose() {
     PreferencesService.favoriteBoards.removeListener(_onFavoritesChanged);
     NoticeCache.revision.removeListener(_onCacheUpdated);
+    NoticeFeed.boards.removeListener(_onFeedBoardsChanged);
     _mainTabController.removeListener(_onMainTabChanged);
     _mainTabController.dispose();
     _searchDebounce?.cancel();
@@ -132,6 +135,10 @@ class _NoticeScreenState extends State<NoticeScreen>
   /// 학과를 ★로 고정하면 받는 범위가 달라진다([대학/대학원] 전체).
   void _onFavoritesChanged() {
     if (mounted) _load();
+  }
+
+  void _onFeedBoardsChanged() {
+    if (mounted) setState(_recomputeDerived);
   }
 
   Future<void> _onCacheUpdated() async {
