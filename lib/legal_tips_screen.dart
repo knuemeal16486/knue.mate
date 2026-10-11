@@ -6,31 +6,17 @@ import 'constants.dart';
 import 'legal_tips.dart';
 import 'ui_utils.dart';
 
-/// 주제마다 잉크색 하나. 탭·카드 그림 바탕·상세 창의 강조에 같이 쓴다.
-Color _topicInk(LegalTopic topic, bool isDark) => KnueTokens.inkAt(
-      switch (topic) {
-        LegalTopic.housing => 1, // teal
-        LegalTopic.tutoring => 6, // indigo
-        LegalTopic.partTime => 2, // clay
-        LegalTopic.life => 3, // plum
-      },
-      isDark,
-    );
+// 모양은 앱의 다른 목록 화면(교직원 연락처·청람공지)에 맞춘다(2026-10-08):
+// 강조색은 주제마다 다른 잉크색이 아니라 **앱 테마색** 하나, 검색창은 둥글기
+// 12, 주제 전환은 교직원 연락처와 같은 분할 탭, 카드는 옅은 테두리에 둥글기 14.
+// 예전엔 주제마다 청록·남색·흙색·자주로 칠하고 그림자 진한 카드를 따로 써서
+// 이 화면만 다른 앱처럼 보였다.
 
-/// 주제 탭의 그림. 이모지는 기기마다 모양이 다르고 화면이 요란해져서
-/// 선으로 된 아이콘만 쓴다.
-IconData _topicIcon(LegalTopic topic) => switch (topic) {
-      LegalTopic.housing => Icons.home_outlined,
-      LegalTopic.tutoring => Icons.school_outlined,
-      LegalTopic.partTime => Icons.storefront_outlined,
-      LegalTopic.life => Icons.backpack_outlined,
-    };
+Color _softText(bool isDark) => KnueTokens.caption(isDark);
 
-Color _softText(bool isDark) =>
-    isDark ? Colors.white60 : const Color(0xFF6B6B70);
-
-Color _strongText(bool isDark) =>
-    isDark ? const Color(0xFFF2F2F7) : const Color(0xFF2C2C2E);
+/// 목록 카드·연락처 카드 테두리(다른 화면의 카드와 같은 값).
+Color _cardBorder(bool isDark) =>
+    isDark ? Colors.white12 : const Color(0xFFE5E7EB);
 
 Future<void> _openUri(Uri uri) async {
   try {
@@ -71,7 +57,7 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _LegalTipSheet(tip: tip, topic: _topic),
+      builder: (_) => _LegalTipSheet(tip: tip, color: themeColor.value),
     );
   }
 
@@ -81,7 +67,7 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
       valueListenable: themeColor,
       builder: (context, color, child) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        final ink = _topicInk(_topic, isDark);
+        final ink = color;
         // 묶음 칩은 검색어와 상관없이 그 주제의 묶음을 전부 보여 준다.
         final groups =
             groupLegalTips(filterLegalTips(kLegalTips, topic: _topic))
@@ -108,24 +94,23 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
           body: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: TextField(
                   onChanged: (v) => setState(() => _query = v),
                   decoration: InputDecoration(
                     hintText: "궁금한 걸 검색해 보세요",
-                    hintStyle: TextStyle(color: _softText(isDark)),
-                    prefixIcon: Icon(Icons.search, color: _softText(isDark)),
+                    prefixIcon: const Icon(Icons.search),
                     filled: true,
                     fillColor: Theme.of(context).cardColor,
                     contentPadding: const EdgeInsets.symmetric(vertical: 0),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
                   ),
                 ),
               ),
-              _buildTopicTabs(isDark),
+              _buildTopicTabs(color, isDark),
               _buildGroupChips(groups, ink, isDark),
               Expanded(
                 child: ListView(
@@ -160,54 +145,57 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
     );
   }
 
-  /// 주제 전환. 테두리나 칸막이 없이, 고른 칸만 그 주제 색으로 옅게 물든다.
-  Widget _buildTopicTabs(bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+  /// 주제 전환. 교직원 연락처의 전체/행정/과 사무실 전환과 같은 분할 탭이다.
+  Widget _buildTopicTabs(Color color, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFEFEFF4),
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Row(
         children: LegalTopic.values.map((topic) {
           final active = topic == _topic;
-          final ink = _topicInk(topic, isDark);
           return Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => _selectTopic(topic),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 3),
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
                 decoration: BoxDecoration(
                   color: active
-                      ? ink.withValues(alpha: isDark ? 0.24 : 0.12)
+                      ? (isDark ? const Color(0xFF3A3A3C) : Colors.white)
                       : Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: active
+                      ? [
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: isDark ? 0.3 : 0.06),
+                            blurRadius: 6,
+                            offset: const Offset(0, 1),
+                          ),
+                        ]
+                      : null,
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _topicIcon(topic),
-                      size: 22,
-                      color: active ? ink : _softText(isDark),
-                    ),
-                    const SizedBox(height: 4),
-                    // "학원강사(과외)"가 좁은 폰에서 칸을 넘지 않게 줄인다.
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        topic.label,
-                        maxLines: 1,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          letterSpacing: -0.2,
-                          fontWeight:
-                              active ? FontWeight.w700 : FontWeight.w500,
-                          color: active ? ink : _softText(isDark),
-                        ),
+                // "학원강사(과외)"가 좁은 폰에서 칸을 넘지 않게 줄인다.
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      topic.label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                        color: active
+                            ? color
+                            : (isDark ? Colors.white54 : Colors.black54),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -225,26 +213,25 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
         padding: const EdgeInsets.only(right: 6),
         child: GestureDetector(
           onTap: () => setState(() => _group = group),
+          // 청람공지의 하위 탭(학사안내·교류 프로그램…) 칩과 같은 모양.
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: active
-                  ? ink.withValues(alpha: isDark ? 0.30 : 0.14)
-                  : (isDark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : Colors.black.withValues(alpha: 0.04)),
-              borderRadius: BorderRadius.circular(16),
+                  ? ink.withValues(alpha: isDark ? 0.28 : 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               label,
               style: TextStyle(
                 fontSize: 12.5,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: active ? FontWeight.bold : FontWeight.w500,
                 color: active
-                    ? (isDark ? Colors.white : ink)
-                    : _softText(isDark),
+                    ? ink
+                    : (isDark ? Colors.white54 : Colors.black54),
               ),
             ),
           ),
@@ -253,10 +240,10 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
     }
 
     return SizedBox(
-      height: 40,
+      height: 38,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 0, 10, 8),
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
         children: [
           chip('전체', null),
           for (final g in groups) chip(g, g),
@@ -292,9 +279,7 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
           for (final entry in elsewhere.entries)
             TextButton(
               onPressed: () => _selectTopic(entry.key),
-              style: TextButton.styleFrom(
-                foregroundColor: _topicInk(entry.key, isDark),
-              ),
+              style: TextButton.styleFrom(foregroundColor: ink),
               child: Text(
                 "${entry.key.label}에서 ${entry.value}건 보기",
               ),
@@ -321,18 +306,21 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
 
   /// 목록 카드: 제목 + 한 줄 요약. 누르면 상세 창이 올라온다.
   Widget _buildTipCard(LegalTip t, bool isDark) {
-    final radius = BorderRadius.circular(18);
-    return KnueCard(
-      isDark: isDark,
-      radius: 18,
+    final radius = BorderRadius.circular(14);
+    return Container(
       margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: radius,
+        border: Border.all(color: _cardBorder(isDark)),
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: radius,
           onTap: () => _showTip(t),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 15, 10, 15),
+            padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
             child: Row(
               children: [
                 Expanded(
@@ -341,12 +329,10 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
                     children: [
                       Text(
                         keepKoreanWords(t.title),
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 15,
-                          height: 1.3,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.3,
-                          color: _strongText(isDark),
+                          height: 1.35,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -386,11 +372,14 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildGroupHeader("혼자 풀기 어려울 땐 여기에 물어봐요", isDark),
-        KnueCard(
-          isDark: isDark,
-          radius: 18,
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _cardBorder(isDark)),
+          ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(14),
             child: Material(
               color: Colors.transparent,
               child: Column(
@@ -401,10 +390,9 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
                           const EdgeInsets.symmetric(horizontal: 16),
                       title: Text(
                         c.name,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          color: _strongText(isDark),
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       subtitle: Text(
@@ -465,9 +453,11 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
 /// 항목 하나의 본문. 아래에서 올라오고, 끌어서 키우거나 닫는다.
 class _LegalTipSheet extends StatelessWidget {
   final LegalTip tip;
-  final LegalTopic topic;
 
-  const _LegalTipSheet({required this.tip, required this.topic});
+  /// 강조색(앱 테마색).
+  final Color color;
+
+  const _LegalTipSheet({required this.tip, required this.color});
 
   Future<void> _copy(BuildContext context, String text) async {
     // 시트 위에서는 SnackBar가 가려지므로 오버레이 토스트를 쓴다.
@@ -479,7 +469,7 @@ class _LegalTipSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ink = _topicInk(topic, isDark);
+    final ink = color;
     return DraggableScrollableSheet(
       initialChildSize: 0.74,
       minChildSize: 0.45,
@@ -490,7 +480,7 @@ class _LegalTipSheet extends StatelessWidget {
           key: const Key('legal-tip-sheet'),
           decoration: BoxDecoration(
             color: KnueTokens.surface(isDark),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: ListView(
             controller: controller,
@@ -532,12 +522,10 @@ class _LegalTipSheet extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 keepKoreanWords(tip.title),
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 21,
                   height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.5,
-                  color: _strongText(isDark),
+                  fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 6),
