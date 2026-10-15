@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'admin_auth_service.dart';
+import 'app_update.dart';
 import 'club_event_model.dart';
 import 'club_event_service.dart';
 import 'exit_promo_settings.dart';
@@ -170,6 +171,11 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
     // 네트워크와 겹쳐서 잠깐 뒤에 받는다.
     _exitAdTimer = Timer(const Duration(seconds: 8), _preloadExitAd);
 
+    // 새 버전이 나왔으면 업데이트를 강제한다(app_update.dart).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AppUpdateGate.check(context, force: true);
+    });
+
     // 앱이 꺼져 있다가 홈 위젯을 눌러 열린 경우, 그 판단은 이 화면이
     // 만들어지기 전에 끝나 있다. 남겨 둔 탭이 있으면 첫 프레임 뒤에 옮긴다.
     final pending = pendingWidgetTab;
@@ -208,6 +214,8 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
       _checkMealReminder();
       // 받아 둔 광고가 그사이 오래됐으면 새로 받는다.
       _preloadExitAd();
+      // 켜 둔 채로 며칠 지났을 수 있다(한 시간에 한 번만 확인한다).
+      AppUpdateGate.check(context);
     }
   }
 
