@@ -34,31 +34,30 @@ void main() {
     });
   });
 
+  // 2026-10-15부터 종료 팝업의 기본은 애드몹 광고다(행사 광고 문의가 없었다).
+  // 관리자 스위치가 false를 써야만 꺼진다.
   group('parseFillWithAdmob', () {
     test('true면 켠다', () {
       expect(parseFillWithAdmob({'fillWithAdmob': true}), isTrue);
     });
 
-    test('false면 끈다', () {
+    test('false면 끈다 — 끄는 방법은 이것 하나', () {
       expect(parseFillWithAdmob({'fillWithAdmob': false}), isFalse);
     });
 
-    test('문서가 없으면 꺼진 것으로 본다', () {
-      expect(parseFillWithAdmob(null), isFalse);
+    test('문서가 없으면 켜진 것으로 본다(기본값)', () {
+      expect(parseFillWithAdmob(null), isTrue);
     });
 
-    test('필드가 없으면 꺼진 것으로 본다', () {
-      expect(parseFillWithAdmob({}), isFalse);
-      expect(parseFillWithAdmob({'updatedAt': 123}), isFalse);
+    test('필드가 없으면 켜진 것으로 본다', () {
+      expect(parseFillWithAdmob({}), isTrue);
+      expect(parseFillWithAdmob({'updatedAt': 123}), isTrue);
     });
 
-    test('타입이 엉뚱하면 꺼진 것으로 본다', () {
-      // 콘솔에서 손으로 문자열 "true"를 넣는 실수가 흔하다. 그걸 켬으로
-      // 읽어버리면 학생 화면에 광고가 의도치 않게 켜진다 — 켜는 쪽은
-      // 언제나 명시적이어야 한다.
-      expect(parseFillWithAdmob({'fillWithAdmob': 'true'}), isFalse);
-      expect(parseFillWithAdmob({'fillWithAdmob': 1}), isFalse);
-      expect(parseFillWithAdmob({'fillWithAdmob': null}), isFalse);
+    test('타입이 엉뚱하면 기본값(켜짐) — 문자열 "false"로는 안 꺼진다', () {
+      expect(parseFillWithAdmob({'fillWithAdmob': 'false'}), isTrue);
+      expect(parseFillWithAdmob({'fillWithAdmob': 0}), isTrue);
+      expect(parseFillWithAdmob({'fillWithAdmob': null}), isTrue);
     });
   });
 }

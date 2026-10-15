@@ -597,6 +597,68 @@ class KnueNativeAdCard extends StatelessWidget {
 /// 노 필, 로드 실패) 기존 기본 안내 카드로 조용히 물러난다 — 광고 하나
 /// 때문에 화면에 빈 공간이나 깨진 모습이 남으면 안 된다.
 ///
+/// 종료 팝업(홈에서 뒤로가기)에 띄울 애드몹 네이티브 광고를 미리 받아 둔다.
+///
+/// 뒤로가기를 누른 뒤에 받기 시작하면 팝업이 "행사 없음" 안내로 떴다가 광고가
+/// 오면 커지며 바뀌었다. 앱이 켜지고 조금 뒤에 하나 받아 두고, 팝업에서 쓰면
+/// 다음 것을 받는다. 받은 지 [maxAge]가 지난 광고는 버리고 새로 받는다
+/// (애드몹 권장: 1시간 넘은 네이티브 광고는 보여주지 않는다).
+class ExitAdPreloader {
+  ExitAdPreloader._();
+
+  static const Duration maxAge = Duration(minutes: 55);
+
+  static NativeAd? _ready;
+  static DateTime? _readyAt;
+  static bool _loading = false;
+
+  /// 받아 둔 광고가 없거나 오래됐으면 하나 받는다. 받는 중이면 아무것도 안 한다.
+  static void preload() {
+    final at = _readyAt;
+    if (_ready != null && at != null && DateTime.now().difference(at) < maxAge) {
+      return;
+    }
+    _ready?.dispose();
+    _ready = null;
+    _readyAt = null;
+    if (_loading) return;
+    final adUnitId = AdService.nativeAdUnitId;
+    if (adUnitId == null) return; // 웹·데스크톱 등 미지원 플랫폼
+    _loading = true;
+    NativeAd(
+      adUnitId: adUnitId,
+      factoryId: AdService.nativeAdFactoryId(false),
+      request: const AdRequest(),
+      listener: NativeAdListener(
+        onAdLoaded: (ad) {
+          _loading = false;
+          _ready = ad as NativeAd;
+          _readyAt = DateTime.now();
+        },
+        onAdFailedToLoad: (ad, error) {
+          _loading = false;
+          debugPrint('ExitAdPreloader: 광고 미리 받기 실패: $error');
+          ad.dispose();
+        },
+      ),
+    ).load();
+  }
+
+  /// 받아 둔 광고를 꺼내 간다(꺼낸 쪽이 버린다). 없거나 오래됐으면 null.
+  static NativeAd? take() {
+    final ad = _ready;
+    final at = _readyAt;
+    _ready = null;
+    _readyAt = null;
+    if (ad == null || at == null) return null;
+    if (DateTime.now().difference(at) >= maxAge) {
+      ad.dispose();
+      return null;
+    }
+    return ad;
+  }
+}
+
 /// 처음부터 기본 안내 카드를 그려두고, AdMob이 로드에 성공했을 때만 그
 /// 자리를 native 광고로 바꿔치기한다. 로딩 중 빈 화면이 잠깐 보이는 것보다
 /// 이쪽이 덜 어색하다.
@@ -611,6 +673,10 @@ class KnueNativeAdCard extends StatelessWidget {
 class KnueAdmobNativeAd extends StatefulWidget {
   final bool isCompact;
 
+  /// 미리 받아 둔 광고([ExitAdPreloader]). 주면 새로 받지 않고 바로 그린다.
+  /// 이 위젯이 없어질 때 같이 버린다.
+  final NativeAd? preloaded;
+
   /// 광고를 못 띄웠을 때 대신 그릴 것. 안 주면 기본 안내 카드를 그린다.
   /// 종료 팝업은 원래 있던 "아직 등록된 행사가 없어요"로 돌아가야 해서
   /// 여기에 그 안내를 넘긴다.
@@ -620,6 +686,7 @@ class KnueAdmobNativeAd extends StatefulWidget {
     super.key,
     required this.isCompact,
     this.fallbackBuilder,
+    this.preloaded,
   });
 
   @override
@@ -641,7 +708,12 @@ class _KnueAdmobNativeAdState extends State<KnueAdmobNativeAd>
   @override
   void initState() {
     super.initState();
-    _loadAd();
+    final ready = widget.preloaded;
+    if (ready != null) {
+      _ad = ready;
+    } else {
+      _loadAd();
+    }
   }
 
   void _loadAd() {

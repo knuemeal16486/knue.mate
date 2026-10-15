@@ -124,6 +124,9 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
   /// 멈추므로(iOS/Android 공통) 별도로 막을 필요가 없다.
   Timer? _mealReminderTimer;
 
+  /// 종료 팝업 광고를 미리 받아 두는 타이머(앱이 켜지고 잠깐 뒤).
+  Timer? _exitAdTimer;
+
   /// 탭 전환 애니메이션(400ms) 도중에는 방금 떠난 탭도 화면에 걸쳐 보인다.
   /// TickerMode(enabled: i == _currentIndex)만 쓰면 탭을 누른 그 순간
   /// _currentIndex가 바로 바뀌어서, 아직 슬라이드 중인 이전 탭의 애니메이션이
@@ -163,6 +166,10 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
 
     WidgetsBinding.instance.addObserver(this);
 
+    // 종료 팝업 광고를 미리 받아 둔다. 켜지자마자 받으면 첫 화면을 그리는
+    // 네트워크와 겹쳐서 잠깐 뒤에 받는다.
+    _exitAdTimer = Timer(const Duration(seconds: 8), _preloadExitAd);
+
     // 앱이 꺼져 있다가 홈 위젯을 눌러 열린 경우, 그 판단은 이 화면이
     // 만들어지기 전에 끝나 있다. 남겨 둔 탭이 있으면 첫 프레임 뒤에 옮긴다.
     final pending = pendingWidgetTab;
@@ -187,6 +194,7 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
     PreferencesService.tabOrder.removeListener(_onTabOrderChanged);
     WidgetsBinding.instance.removeObserver(this);
     _mealReminderTimer?.cancel();
+    _exitAdTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
@@ -196,7 +204,16 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
     // 백그라운드에 있다가 막 돌아왔을 때 — 다음 1분 주기까지 기다리지 않고
     // 바로 확인한다. 마침 종료 10분 구간에 딱 돌아왔는데 59초를 더 기다리게
     // 하고 싶지 않다.
-    if (state == AppLifecycleState.resumed) _checkMealReminder();
+    if (state == AppLifecycleState.resumed) {
+      _checkMealReminder();
+      // 받아 둔 광고가 그사이 오래됐으면 새로 받는다.
+      _preloadExitAd();
+    }
+  }
+
+  /// 관리자가 종료 팝업 광고를 꺼 두지 않았으면 광고를 하나 받아 둔다.
+  void _preloadExitAd() {
+    if (ExitPromoSettings.fillWithAdmob.value) ExitAdPreloader.preload();
   }
 
   void _checkMealReminder() {
@@ -242,9 +259,10 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
 
   // ── 뒤로가기 ──────────────────────────────────────────────────────────
   //
-  // 홈에서 뒤로가기를 누르면 그대로 앱이 꺼졌다. 그 한 번을 빌려 동아리·학과
-  // 행사를 알리고, 광고주(행사 주최 측)를 모집하는 문구를 보여준다 — 이
-  // 팝업은 오직 그 용도로만 쓴다(다른 스폰서·애드몹 광고는 안 섞는다).
+  // 홈에서 뒤로가기를 누르면 그대로 앱이 꺼졌다. 그 한 번을 빌려 팝업을 띄운다.
+  // 진행 중인 동아리·학과 행사가 있으면 행사를, 없으면 애드몹 광고를 보여준다
+  // (2026-10-15부터 기본 — 행사 광고 문의가 한 건도 없었다). 광고가 나올 때는
+  // 광고와 종료 안내만 둔 가벼운 팝업이다. 다른 스폰서 광고는 섞지 않는다.
   // 매번 뜨긴 하지만 "한 번 더 누르면 종료"를 팝업 안에 같이 적어 두므로,
   // 종료 자체를 막지는 않는다. 종료는 두 갈래로 들어온다:
   //   · 팝업이 떠 있을 때의 뒤로가기 → 팝업 쪽 PopScope가 받는다([_showExitPromo]).
@@ -308,6 +326,15 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
     final now = DateTime.now();
     final event = await _currentOngoingEvent(now);
     if (!mounted) return;
+
+    // 행사가 없으면 광고. 받아 둔 광고가 있으면 바로 쓰고, 없으면 팝업 안에서
+    // 받는다(그동안 "행사 없음" 안내가 보인다).
+    final showAd = exitPromoSlot(
+          hasEvent: event != null,
+          fillWithAdmob: ExitPromoSettings.fillWithAdmob.value,
+        ) ==
+        ExitPromoSlot.admobAd;
+    final preloadedAd = showAd ? ExitAdPreloader.take() : null;
 
     final color = Theme.of(context).primaryColor;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -406,26 +433,18 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
                         style: TextStyle(fontSize: 13, color: sub),
                       ),
                     ] else ...[
-                      // 행사 자리가 비었다. 관리자가 켜 뒀으면 그 자리를
+                      // 행사 자리가 비었다. 관리자가 끄지 않았으면 그 자리를
                       // 애드몹 광고가 채운다([ExitPromoSettings]).
-                      ValueListenableBuilder<bool>(
-                        valueListenable: ExitPromoSettings.fillWithAdmob,
-                        builder: (_, fill, _) {
-                          final slot = exitPromoSlot(
-                            hasEvent: false,
-                            fillWithAdmob: fill,
-                          );
-                          if (slot != ExitPromoSlot.admobAd) {
-                            return _exitPromoEmptyNotice(sub);
-                          }
-                          return KnueAdmobNativeAd(
-                            isCompact: false,
-                            // 광고를 못 받아오면 원래 안내로 돌아간다 —
-                            // 팝업에 빈 구멍이 남으면 안 된다.
-                            fallbackBuilder: (_) => _exitPromoEmptyNotice(sub),
-                          );
-                        },
-                      ),
+                      if (showAd)
+                        KnueAdmobNativeAd(
+                          isCompact: false,
+                          preloaded: preloadedAd,
+                          // 광고를 못 받아오면 원래 안내로 돌아간다 —
+                          // 팝업에 빈 구멍이 남으면 안 된다.
+                          fallbackBuilder: (_) => _exitPromoEmptyNotice(sub),
+                        )
+                      else
+                        _exitPromoEmptyNotice(sub),
                       _exitPromoAdminToggle(dialogContext, color, sub),
                     ],
                     const SizedBox(height: 16),
@@ -442,31 +461,40 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    ExitPromoSponsorBox(
-                      phone: _sponsorPhone,
-                      priceText: _sponsorPriceText,
-                      accent: color,
-                      onTap: () => _messageSponsorContact(context),
-                    ),
+                    // 광고가 나올 때는 가볍게 — 광고와 종료 안내만 둔다.
+                    if (!showAd) ...[
+                      const SizedBox(height: 14),
+                      ExitPromoSponsorBox(
+                        phone: _sponsorPhone,
+                        priceText: _sponsorPriceText,
+                        accent: color,
+                        onTap: () => _messageSponsorContact(context),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                "KNUE Mate가 오늘의 캠퍼스 소식을 전해드려요",
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: sub.withValues(alpha: 0.7),
+              if (showAd)
+                const SizedBox(height: 18)
+              else ...[
+                const SizedBox(height: 16),
+                Text(
+                  "KNUE Mate가 오늘의 캠퍼스 소식을 전해드려요",
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: sub.withValues(alpha: 0.7),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 18),
+                const SizedBox(height: 18),
+              ],
             ],
           ),
           ),
         ),
       ),
     );
+    // 팝업만 닫고 앱을 계속 쓰면 다음 뒤로가기를 위해 새 광고를 받아 둔다.
+    if (mounted) _preloadExitAd();
   }
 
   /// 행사도 광고도 없을 때의 원래 안내. 광고 로드가 실패했을 때도 이걸로

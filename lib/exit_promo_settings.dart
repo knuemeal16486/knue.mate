@@ -30,12 +30,13 @@ ExitPromoSlot exitPromoSlot({
 
 /// Firestore 문서에서 스위치 값을 읽는다. 순수 함수(테스트 대상).
 ///
-/// 문서가 없거나, 필드가 비었거나, 타입이 엉뚱하면 **꺼진 것으로 본다.**
-/// 광고를 켜는 쪽이 언제나 명시적이어야 한다 — 읽다가 잘못된 값을 만났을 때
-/// 학생 화면에 광고가 저절로 켜지는 일은 없어야 한다.
+/// 문서가 없거나, 필드가 비었거나, 타입이 엉뚱하면 **켜진 것으로 본다.**
+/// 2026-10-15부터 종료 팝업의 기본은 애드몹 광고다(사용자 결정 — 행사 광고
+/// 문의가 한 건도 없었다). 끄는 쪽만 명시적이어야 한다: 관리자 스위치가
+/// `fillWithAdmob: false`를 써야 꺼진다.
 bool parseFillWithAdmob(Map<String, dynamic>? data) {
   final value = data?['fillWithAdmob'];
-  return value is bool ? value : false;
+  return value is bool ? value : true;
 }
 
 /// 종료 팝업의 빈자리를 애드몹 광고로 채울지에 대한 **공용** 설정.
@@ -48,7 +49,7 @@ class ExitPromoSettings {
   static const _doc = 'exit_promo';
   static const _prefsKey = 'exit_promo_fill_admob';
 
-  static final ValueNotifier<bool> fillWithAdmob = ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> fillWithAdmob = ValueNotifier<bool>(true);
 
   static DocumentReference<Map<String, dynamic>> get _ref =>
       FirebaseFirestore.instance.collection(_collection).doc(_doc);
@@ -60,7 +61,7 @@ class ExitPromoSettings {
   static Future<void> loadCached() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      fillWithAdmob.value = prefs.getBool(_prefsKey) ?? false;
+      fillWithAdmob.value = prefs.getBool(_prefsKey) ?? true;
     } catch (e) {
       debugPrint('ExitPromoSettings: 캐시 읽기 실패: $e');
     }
