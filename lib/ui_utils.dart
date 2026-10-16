@@ -170,6 +170,50 @@ class AppleAppBarFlexibleSpace extends StatelessWidget {
 // 실시간 라이브 dot, 산책로)에만 쓴다. 그 외의 유채색 하드코딩은 금지 —
 // 기능마다 다른 원색을 깔면 무지개 슈퍼앱 인상이 되므로 여기로 수렴시킨다.
 // ═══════════════════════════════════════════════════════════════════════════
+/// 헤더 그라디언트를 위로 늘린 상자에 다시 맞춘다. 순수 함수 — 테스트 대상.
+///
+/// iPhone은 맨 위에서 더 당기면 화면이 튕기며 헤더가 아래로 밀리고, 그 위
+/// 빈틈에 배경색(흰색)이 보였다. 그 빈틈을 헤더 뒤에 깐 상자로 채우는데,
+/// 헤더 그라디언트는 대각선이라 단색으로 채우면 이음매가 보인다. 화면 좌표로
+/// 헤더와 **같은 그라디언트**가 되게 시작·끝 정렬값을 옮긴다.
+///
+/// [overscroll]: 당겨서 헤더가 밀려 내려간 거리. [headerHeight]: 헤더 높이.
+/// [boxHeight]: 뒤에 깐 상자 높이(화면 맨 위부터).
+Alignment stretchedHeaderAlignment(
+  Alignment a, {
+  required double overscroll,
+  required double headerHeight,
+  required double boxHeight,
+}) {
+  if (boxHeight <= 0) return a;
+  // 헤더 안의 정렬값 a.y(-1..1)를 화면 y로, 다시 상자 안의 정렬값으로.
+  final y = overscroll + (a.y + 1) / 2 * headerHeight;
+  return Alignment(a.x, 2 * y / boxHeight - 1);
+}
+
+/// [gradient]를 [stretchedHeaderAlignment]로 옮긴 사본. 선형이 아니면 그대로.
+Gradient stretchedHeaderGradient(
+  Gradient gradient, {
+  required double overscroll,
+  required double headerHeight,
+  required double boxHeight,
+}) {
+  if (gradient is! LinearGradient) return gradient;
+  Alignment move(AlignmentGeometry g) => stretchedHeaderAlignment(
+        g.resolve(TextDirection.ltr),
+        overscroll: overscroll,
+        headerHeight: headerHeight,
+        boxHeight: boxHeight,
+      );
+  return LinearGradient(
+    begin: move(gradient.begin),
+    end: move(gradient.end),
+    colors: gradient.colors,
+    stops: gradient.stops,
+    tileMode: gradient.tileMode,
+  );
+}
+
 class KnueTokens {
   KnueTokens._();
 

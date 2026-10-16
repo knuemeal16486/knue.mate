@@ -42,6 +42,16 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _scraper = KnueScraper();
 
+  // 맨 위에서 더 당겼을 때(iPhone 바운스) 헤더 위 빈틈을 헤더 색으로 채운다.
+  final ScrollController _scroll = ScrollController();
+  final ValueNotifier<double> _overscroll = ValueNotifier<double>(0);
+  final GlobalKey _heroKey = GlobalKey();
+
+  void _onScroll() {
+    final o = -_scroll.offset;
+    _overscroll.value = o > 0 ? o : 0;
+  }
+
   // 식단 상태
   bool _mealLoading = true;
   bool _mealError = false;
@@ -102,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _currentMealSource = defaultSourceNotifier.value;
     _refreshAll();
+    _scroll.addListener(_onScroll);
 
     // 리스너 연결.
     // 각 카드는 캐시를 먼저 그리고 네트워크 갱신은 뒤에서 돈다. 갱신이 끝나면
@@ -118,6 +129,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    _overscroll.dispose();
     defaultSourceNotifier.removeListener(_onSourceChanged);
     NoticeCache.revision.removeListener(_onNoticeCacheUpdated);
     PreferencesService.favoriteBoards.removeListener(_onNoticeCacheUpdated);
@@ -494,11 +508,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Scaffold(
           backgroundColor: KnueTokens.bg(isDark),
-          body: RefreshIndicator(
+          body: Stack(
+            children: [
+              // 당긴 만큼 헤더 색이 위로 이어진다(아래에서 헤더가 덮는다).
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: _buildOverscrollBackdrop(color, isDark),
+              ),
+              RefreshIndicator(
             onRefresh: _pullToRefresh,
             color: color,
             edgeOffset: 120,
             child: SingleChildScrollView(
+              controller: _scroll,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
               child: Column(
@@ -583,6 +607,34 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 헤더 뒤에 까는 상자. 당기지 않았으면 높이 0(그리지 않는다). 헤더 아래쪽
+  /// 둥근 모서리가 이 상자를 드러내지 않게 헤더 절반까지만 깐다.
+  Widget _buildOverscrollBackdrop(Color color, bool isDark) {
+    return ValueListenableBuilder<double>(
+      valueListenable: _overscroll,
+      builder: (context, o, _) {
+        if (o <= 0) return const SizedBox.shrink();
+        final headerHeight = _heroKey.currentContext?.size?.height ?? 200;
+        final boxHeight = o + headerHeight / 2;
+        return SizedBox(
+          height: boxHeight,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: stretchedHeaderGradient(
+                KnueWeatherAtmosphere.headerGradient(color, isDark, _weather),
+                overscroll: o,
+                headerHeight: headerHeight,
+                boxHeight: boxHeight,
+              ),
+            ),
+          ),
         );
       },
     );
@@ -594,6 +646,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeroHeader(Color color, bool isDark) {
     return Container(
+      key: _heroKey,
       width: double.infinity,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
