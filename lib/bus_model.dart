@@ -706,3 +706,11 @@ class BusStop {
     };
   }
 }
+
+/// 시간표 목록에서 광고를 끼울 자리(목록 행 번호).
+///
+/// 방금 지나간 버스와 다음 버스 사이, 즉 다음 버스 카드 바로 위다. 지나간
+/// 버스가 없으면 맨 위, 오늘 버스가 모두 지났으면([nextBusIndex] == -1) 맨 끝.
+/// 순수 함수 — 테스트 대상.
+int busTimetableAdSlot(int nextBusIndex, int count) =>
+    nextBusIndex < 0 || nextBusIndex > count ? count : nextBusIndex;
