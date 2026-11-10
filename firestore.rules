@@ -153,7 +153,12 @@ service cloud.firestore {
     // 한 기기가 받아온 걸 나눠 쓰는 용도라 앱이면 쓸 수 있다.
     // 지워지면 다시 채워지는 값들이라 손실 위험이 낮다.
     match /daily_meals/{doc=**}    { allow read: if true; allow write: if studentWrite(); }
-    match /knue_buildings/{doc=**} { allow read: if true; allow write: if studentWrite(); }
+    // 건물 층별 호실. 번들 에셋(assets/buildings/knue_buildings.json)을 기기가
+    // 올리고 도로 읽던 순환이라 쓸 이유가 없다. 1.6.1 이하는 **앱을 켤 때마다
+    // 16건**을 다시 써서 하루 쓰기 한도(2만 건)의 대부분을 먹었다(2026-09-30).
+    // 규칙이 거부한 쓰기는 쓰기 건수로 잡히지 않고, 구버전은 권한 오류를
+    // 재시도하지 않는다. 앱에서는 올리는 코드를 뺐다.
+    match /knue_buildings/{doc=**} { allow read: if true; allow write: if false; }
     match /bus_timetables/{doc=**} { allow read: if true; allow write: if studentWrite(); }
     match /bus_stops/{doc=**}      { allow read: if true; allow write: if studentWrite(); }
     match /realtime/{doc=**}       { allow read: if true; allow write: if studentWrite(); }

@@ -17,7 +17,6 @@ import 'package:workmanager/workmanager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
-import 'firebase_sync_service.dart';
 import 'root_screen.dart';
 import 'ui_utils.dart';
 import 'keyword_alert_service.dart';
@@ -207,7 +206,6 @@ void main() async {
 
     // 3. 네이티브 플러그인 초기화 (ATT, AdMob, HomeWidget, Notification)
     try {
-      _initializeBackgroundTasks();
       if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
         await Future.wait([
           _initializeHomeWidget().timeout(
@@ -390,17 +388,6 @@ Future<void> _setupFirebaseMessaging() async {
     }
   } catch (e) {
     debugPrint("Firebase messaging setup error: $e");
-  }
-}
-
-void _initializeBackgroundTasks() {
-  try {
-    // 백그라운드 건물 데이터 업로드 (에러 발생 시 무시)
-    FirebaseSyncService.uploadBuildingsToFirestore().catchError((e) {
-      debugPrint("uploadBuildingsToFirestore background error: $e");
-    });
-  } catch (e) {
-    debugPrint("Background tasks init error: $e");
   }
 }
 
