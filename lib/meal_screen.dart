@@ -501,6 +501,11 @@ class _TodayMealPageState extends State<TodayMealPage>
                   );
                 },
               ),
+              // 날짜(헤더)와 식단 카드 사이 — 스크롤하지 않아도 보이는 자리.
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
+              ),
               const SizedBox(height: 16),
               _MealTabs(
                 selected: _selected,
@@ -542,11 +547,6 @@ class _TodayMealPageState extends State<TodayMealPage>
                     date: _date,
                   ),
                 ),
-              const SizedBox(height: 16),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
-              ),
               const SizedBox(height: 32),
             ],
           ),
@@ -1200,7 +1200,13 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            // 날짜(달력)와 식단 카드 사이.
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
+            ),
+            const SizedBox(height: 16),
             _MealTabs(
               selected: _selectedType,
               source: _source,
@@ -1230,11 +1236,6 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
                 isToday: DateUtils.isSameDay(_selectedDate, DateTime.now()),
                 date: _selectedDate,
               ),
-            const SizedBox(height: 16),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
-            ),
             const SizedBox(height: 32),
           ],
         ),

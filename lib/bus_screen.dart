@@ -1730,13 +1730,17 @@ class _BusAppScreenState extends State<BusAppScreen>
             controller: _scrollController,
             padding: const EdgeInsets.all(20),
             itemCount: timeList.isEmpty ? 0 : timeList.length + 1,
-            itemBuilder: (context, index) {
-              if (index == timeList.length) {
+            itemBuilder: (context, row) {
+              // 광고는 방금 지나간 버스와 다음 버스 사이에 끼운다 — 자동 스크롤이
+              // 그 근처를 보여 주므로 열자마자 보인다.
+              final adSlot = busTimetableAdSlot(nextBusIndex, timeList.length);
+              if (row == adSlot) {
                 return const Padding(
-                  padding: EdgeInsets.only(top: 8, bottom: 24),
+                  padding: EdgeInsets.only(bottom: 12),
                   child: KnueNativeAdCard(isCompact: true, placement: 'bus'),
                 );
               }
+              final index = row < adSlot ? row : row - 1;
               final time = timeList[index];
               final subInfo = subInfoList[index];
               int busMinutes = 0;
