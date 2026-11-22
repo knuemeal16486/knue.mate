@@ -292,8 +292,11 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   콘솔에서 정리해도 된다.
 - **Firebase Storage가 활성화돼 있지 않다.** 행사 포스터·제휴 이미지 업로드가
   전부 실패한다. Blaze 요금제가 필요할 수 있다.
-- iOS 식단 위젯: Xcode에서 `ios/MealWidget/`을 Widget Extension 타깃으로
-  등록해야 한다.
+- iOS 식단 위젯: `MealWidget` 타깃은 등록했다(2026-11-23, 번들 id
+  `com.knue.knuemate.MealWidget`, 기본 구성 `Flutter/Generated.xcconfig`라 버전·빌드
+  번호가 앱과 같다). 이때 Runner에도 `Runner.entitlements`(App Group·푸시)를 처음
+  연결했다. 남은 건 Apple Developer에 App Group `group.knue.meal`을 등록해 두 App
+  ID에 붙이고, Codemagic이 위젯용 프로비저닝 프로파일도 받게 하는 것.
 
 **알려진 한계**
 - 체육관/제2체육관 경계는 두 이름표의 중간에 생겨 실제 칸막이 자리와 다르다
