@@ -1901,7 +1901,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            "투명도가 높을수록 위젯 배경이 투명해집니다.",
+                            "투명도가 높을수록 위젯 배경이 투명해집니다. 테마·투명도는 식단·버스·공지 위젯에 모두 적용돼요.",
                             style: TextStyle(
                               fontSize: 12,
                               color: isDark

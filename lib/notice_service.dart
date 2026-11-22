@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cp949_codec/cp949_codec.dart';
 import 'package:flutter/foundation.dart';
 import 'academic_calendar.dart';
+import 'home_widgets.dart' show pushNoticeWidget;
 import 'notice_boards.dart';
 import 'notice_model.dart';
 import 'notice_parse.dart';
@@ -416,7 +418,12 @@ class NoticeCache {
     final changed = prefs.getString(_key) != encoded;
     await prefs.setString(_key, encoded);
     await prefs.setInt('${_key}_ts', DateTime.now().millisecondsSinceEpoch);
-    if (changed) revision.value++;
+    if (changed) {
+      revision.value++;
+      // 기다린다 — 백그라운드 작업은 저장 직후 끝날 수 있고, Android 공지
+      // 위젯은 이 값으로만 갱신된다.
+      await pushNoticeWidget();
+    }
   }
 
   static Future<List<Notice>?> load() async {

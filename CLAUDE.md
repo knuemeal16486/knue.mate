@@ -280,6 +280,28 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   했다. 수집기를 켠 사실과 앱 배포 일정을 회신한다. 간격이나 수집기 이름을
   바꾸면 다시 알린다.
 
+## 홈 위젯 (식단·버스·공지)
+
+- 식단: 앱·백그라운드가 넣은 값(`widget_title`·`widget_time`·`widget_menu`)을 그린다.
+- 버스: 앱이 켜질 때 시간표 JSON(`bus_timetable_json`, `busWidgetTimetableJson`)을
+  넣고, 위젯이 **스스로** 다음 차를 고른다. 학교에서 나가는 차만(513·514·518
+  교원문화관 출발, 913 교원대 경유 평동행·미호행). iOS는 출발 시각마다 타임라인
+  엔트리, Android는 `AlarmManager`(정확 알람 아님, 다음 출발이나 5분 뒤).
+- 공지: 즐겨찾기 게시판마다 최신 글 1개(`noticeWidgetRows`). 앱이 공지 캐시를 바꿀
+  때(`NoticeCache.save`)·즐겨찾기를 바꿀 때 `notice_rows_json`을 넣는다. **iOS
+  위젯은 수집 파일(GitHub Pages)을 직접 받는다**(1시간, 지문이 바뀐 게시판만) —
+  비상 직접 모드(`notice_feed_direct`)면 받지 않는다. Android는 받지 않는다.
+- **위젯은 학교 서버·Firestore에 요청하지 않는다.** 받는 곳은 `notice_feed_base`뿐.
+- 규칙이 세 곳에 있다: Dart(`lib/home_widgets.dart`, 테스트 있음)·Swift
+  (`ios/MealWidget/`)·Kotlin(`BusWidgetProvider.kt`·`NoticeWidgetProvider.kt`).
+  다음 차 규칙(같은 분은 지난 차)·링크 허용(https + knue.ac.kr 계열)을 바꾸면 셋 다.
+  키 이름·kind·Manifest는 `test/native_id_consistency_test.dart`가 확인한다.
+- 테마·투명도(`themeMode`·`transparency`)는 식단 위젯 설정 하나로 세 위젯에 같이.
+- iOS 위젯은 모두 `MealWidget` 확장 하나(`MealWidgetBundle`)에 들어 있다 — 새 파일은
+  MealWidget 타깃 Sources에도 넣는다.
+- Android 위젯 확인: 에뮬레이터 `HomeWidgetPreferences.xml`을 `run-as`로 덮고
+  `adb install -r`이면 다시 그린다.
+
 ## 남은 일
 
 **사용자 입력이 필요**
@@ -295,8 +317,9 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 - iOS 식단 위젯: `MealWidget` 타깃은 등록했다(2026-11-23, 번들 id
   `com.knue.knuemate.MealWidget`, 기본 구성 `Flutter/Generated.xcconfig`라 버전·빌드
   번호가 앱과 같다). 이때 Runner에도 `Runner.entitlements`(App Group·푸시)를 처음
-  연결했다. 남은 건 Apple Developer에 App Group `group.knue.meal`을 등록해 두 App
-  ID에 붙이고, Codemagic이 위젯용 프로비저닝 프로파일도 받게 하는 것.
+  연결했다. Apple Developer의 App Group `group.knue.meal`과 두 App ID도 끝냈다
+  (개발 프로파일에 그룹·푸시가 들어간 것 확인). 남은 건 Codemagic이 위젯용 배포
+  프로비저닝 프로파일도 받게 하는 것.
 
 **알려진 한계**
 - 체육관/제2체육관 경계는 두 이름표의 중간에 생겨 실제 칸막이 자리와 다르다
