@@ -288,7 +288,9 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   교원문화관 출발, 913 교원대 경유 평동행·미호행). iOS는 출발 시각마다 타임라인
   엔트리, Android는 `AlarmManager`(정확 알람 아님, 다음 출발이나 5분 뒤).
 - 공지: 즐겨찾기 게시판마다 최신 글 1개를 먼저, 남는 자리는 그 게시판들의 다음 글을
-  최신순으로(`noticeWidgetRows`, 최대 8줄 — 위젯 높이만큼 보인다). 앱이 공지 캐시를 바꿀
+  최신순으로(`noticeWidgetRows`, 최대 10줄 — 위젯 높이만큼 보이고 줄 사이를 벌려
+  아래까지 채운다). 게시판 이름 색은 즐겨찾기 순서대로 8색(`noticeBoardColorIndex`,
+  색 목록은 Swift·Kotlin에 따로 있어 일관성 테스트가 맞춰 본다). 앱이 공지 캐시를 바꿀
   때(`NoticeCache.save`)·즐겨찾기를 바꿀 때 `notice_rows_json`을 넣는다. **iOS
   위젯은 수집 파일(GitHub Pages)을 직접 받는다**(1시간, 지문이 바뀐 게시판만) —
   비상 직접 모드(`notice_feed_direct`)면 받지 않는다. Android는 받지 않는다.

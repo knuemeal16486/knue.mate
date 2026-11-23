@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 공지 위젯. 배경은 식단 위젯과 같은 방식(ImageView에 색·투명도).
-     줄 8개는 고정이고 NoticeWidgetProvider가 위젯 높이에 맞는 만큼만 보이게 한다.
+     줄 10개(kNoticeWidgetMaxRows)는 고정이고 NoticeWidgetProvider가 위젯 높이에
+     맞는 만큼만 보이게 한다. 보이는 줄은 layout_weight로 높이를 나눠 아래까지 찬다.
      적힌 글은 위젯 고르는 화면의 미리보기용이다. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/notice_root"
@@ -45,9 +46,9 @@
         <LinearLayout
             android:id="@+id/notice_row_0"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -79,9 +80,9 @@
         <LinearLayout
             android:id="@+id/notice_row_1"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -113,9 +114,9 @@
         <LinearLayout
             android:id="@+id/notice_row_2"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -147,9 +148,9 @@
         <LinearLayout
             android:id="@+id/notice_row_3"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -181,12 +182,11 @@
         <LinearLayout
             android:id="@+id/notice_row_4"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
             android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone">
+            android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/notice_title_4"
@@ -216,12 +216,11 @@
         <LinearLayout
             android:id="@+id/notice_row_5"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
             android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone">
+            android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/notice_title_5"
@@ -251,12 +250,11 @@
         <LinearLayout
             android:id="@+id/notice_row_6"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
             android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone">
+            android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/notice_title_6"
@@ -286,12 +284,11 @@
         <LinearLayout
             android:id="@+id/notice_row_7"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
             android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone">
+            android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/notice_title_7"
@@ -307,6 +304,74 @@
 
             <TextView
                 android:id="@+id/notice_date_7"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="6dp"
+                android:text=""
+                android:textSize="11sp"
+                android:textColor="#999999"
+                android:fontFeatureSettings="tnum"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/notice_row_8"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/notice_title_8"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text=""
+                android:textSize="13sp"
+                android:textColor="#000000"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/notice_date_8"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="6dp"
+                android:text=""
+                android:textSize="11sp"
+                android:textColor="#999999"
+                android:fontFeatureSettings="tnum"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/notice_row_9"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="21dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/notice_title_9"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text=""
+                android:textSize="13sp"
+                android:textColor="#000000"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/notice_date_9"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"

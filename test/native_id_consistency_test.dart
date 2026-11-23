@@ -286,5 +286,30 @@ void main() {
       expect(read('$ktDir/NoticeWidgetProvider.kt'),
           contains('"$kWidgetNoticeRowsKey"'));
     });
+
+    // 게시판 색은 Swift·Kotlin에 따로 적혀 있다 — 같은 게시판이 두 기기에서
+    // 다른 색이면 안 되므로 (라이트, 다크) 쌍 목록이 같아야 한다.
+    test('공지 위젯 게시판 색이 iOS·Android에서 같다', () {
+      List<String> pairs(String src, RegExp re) =>
+          re.allMatches(src).map((m) => '${m[1]}/${m[2]}'.toUpperCase()).toList();
+      final swift = pairs(read('$iosDir/NoticeWidget.swift'),
+          RegExp(r'\(0x([0-9A-Fa-f]{6}), 0x([0-9A-Fa-f]{6})\)'));
+      final kotlin = pairs(read('$ktDir/NoticeWidgetProvider.kt'),
+          RegExp(r'0x([0-9A-Fa-f]{6}) to 0x([0-9A-Fa-f]{6})'));
+      expect(swift.length, kNoticeBoardColorCount);
+      expect(kotlin, swift);
+      expect(swift.toSet().length, swift.length, reason: '색이 겹친다');
+    });
+
+    test('공지 위젯 최대 줄 수가 Dart·iOS·Android에서 같다', () {
+      expect(read('$iosDir/NoticeWidget.swift'),
+          contains('let kNoticeWidgetMaxRows = $kNoticeWidgetMaxRows'));
+      final layout =
+          read('android/app/src/main/res/layout/notice_widget_layout.xml');
+      expect(RegExp(r'@\+id/notice_row_\d+').allMatches(layout).length,
+          kNoticeWidgetMaxRows);
+      expect(read('$ktDir/NoticeWidgetProvider.kt'),
+          contains('"$kWidgetNoticeBoardsKey"'));
+    });
   });
 }

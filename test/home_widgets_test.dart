@@ -139,6 +139,26 @@ void main() {
     });
   });
 
+  test('noticeWidgetRows 기본 최대 10줄', () {
+    final many = [
+      for (var i = 0; i < 15; i++) _n('학사공지', '2026-11-${10 + i}', 't$i'),
+    ];
+    expect(noticeWidgetRows(many, const ['학사공지']).length, 10);
+  });
+
+  test('noticeBoardColorIndex: 대상 게시판 순서대로, 없으면 이름으로 고정', () {
+    const boards = ['학사공지', '장학금', '대학소식'];
+    expect(noticeBoardColorIndex('학사공지', boards), 0);
+    expect(noticeBoardColorIndex('대학소식', boards), 2);
+    // 색 개수(8)를 넘으면 돌아간다.
+    final nine = [for (var i = 0; i < 9; i++) 'b$i'];
+    expect(noticeBoardColorIndex('b8', nine), 0);
+    // 대상에 없는 게시판: UTF-16 코드 합 % 8 — Swift·Kotlin과 같은 값.
+    // '기숙사' 코드 합 143,605 → 5
+    expect(noticeBoardColorIndex('기숙사', boards), 5);
+    expect(kNoticeBoardColorCount, 8);
+  });
+
   test('widgetLinkAllowed', () {
     expect(widgetLinkAllowed('https://www.knue.ac.kr/www/x'), isTrue);
     expect(widgetLinkAllowed('https://lib.knue.ac.kr/a'), isTrue);

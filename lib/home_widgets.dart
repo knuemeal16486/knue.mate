@@ -130,6 +130,22 @@ class NoticeWidgetRow {
   Map<String, String> toJson() => {'b': board, 't': title, 'd': date, 'l': link};
 }
 
+/// 위젯에 넣는 공지 최대 줄 수. 위젯은 높이에 맞는 만큼만 보여 준다.
+/// Swift kNoticeWidgetMaxRows·Kotlin ROW_IDS 개수와 같게.
+const kNoticeWidgetMaxRows = 10;
+
+/// 공지 위젯 게시판 이름 색 개수. Swift·Kotlin의 색 목록 길이와 같게.
+const kNoticeBoardColorCount = 8;
+
+/// 게시판 이름 색 번호. 대상 게시판([boards], 즐겨찾기 순서)이면 그 순서대로라
+/// 8개까지 서로 다른 색이다. 대상에 없으면 이름의 UTF-16 코드 합으로 고정한다.
+/// Swift noticeBoardColorIndex·Kotlin boardColorIndex와 같은 규칙.
+int noticeBoardColorIndex(String board, List<String> boards) {
+  final i = boards.indexOf(board);
+  if (i >= 0) return i % kNoticeBoardColorCount;
+  return board.codeUnits.fold<int>(0, (a, c) => a + c) % kNoticeBoardColorCount;
+}
+
 /// 게시판마다 최신 글 1개를 먼저 둔다. 게시판끼리는 그 글 날짜가 늦은 것부터
 /// (같으면 [boards] 순서). 최대 [max]개이고, 즐겨찾기가 적어 자리가 남으면
 /// 대상 게시판의 나머지 글을 최신순으로 채운다(같으면 [boards] 순서·캐시 순서).
@@ -137,7 +153,7 @@ class NoticeWidgetRow {
 List<NoticeWidgetRow> noticeWidgetRows(
   List<Notice> cache,
   List<String> boards, {
-  int max = 8,
+  int max = kNoticeWidgetMaxRows,
 }) {
   final seen = <String>{};
   final posts = <Notice>[];

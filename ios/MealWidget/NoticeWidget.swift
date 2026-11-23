@@ -71,7 +71,36 @@ func noticeLinkAllowed(_ link: String) -> Bool {
     return host == "knue.ac.kr" || host.hasSuffix(".knue.ac.kr")
 }
 
-let kNoticeWidgetMaxRows = 8
+let kNoticeWidgetMaxRows = 10
+
+/// 게시판 이름 색 (라이트, 다크). Android NoticeWidgetProvider.BOARD_COLORS와
+/// 같은 순서·값이어야 한다(test/native_id_consistency_test.dart가 확인).
+let kNoticeBoardColors: [(light: UInt32, dark: UInt32)] = [
+    (0x1A73E8, 0x8AB4F8), // 파랑
+    (0x188038, 0x81C995), // 초록
+    (0xE8710A, 0xFCAD70), // 주황
+    (0x9334E6, 0xC58AF9), // 보라
+    (0xD93025, 0xF28B82), // 빨강
+    (0x00897B, 0x4DB6AC), // 청록
+    (0xC2185B, 0xF48FB1), // 분홍
+    (0x8D6E63, 0xBCAAA4), // 갈색
+]
+
+/// Dart noticeBoardColorIndex와 같은 규칙: 대상 게시판 순서, 없으면 UTF-16 코드 합.
+func noticeBoardColorIndex(_ board: String, boards: [String]) -> Int {
+    if let i = boards.firstIndex(of: board) { return i % kNoticeBoardColors.count }
+    return board.utf16.reduce(0) { $0 + Int($1) } % kNoticeBoardColors.count
+}
+
+func noticeBoardColor(_ board: String, boards: [String], isDark: Bool) -> Color {
+    let pair = kNoticeBoardColors[noticeBoardColorIndex(board, boards: boards)]
+    let hex = isDark ? pair.dark : pair.light
+    return Color(
+        red: Double((hex >> 16) & 0xFF) / 255,
+        green: Double((hex >> 8) & 0xFF) / 255,
+        blue: Double(hex & 0xFF) / 255
+    )
+}
 
 /// Dart noticeWidgetRows와 같은 규칙. 게시판마다 최신 1개를 먼저(날짜 늦은
 /// 게시판부터, 같으면 boards 순서), 남는 자리는 나머지 글을 최신순으로.
@@ -103,6 +132,8 @@ struct NoticeEntry: TimelineEntry {
     /// 대상 게시판 중 가장 오래된 마지막 수집 시각.
     let collectedAt: Date?
     let theme: WidgetThemeSettings
+    /// 대상 게시판(즐겨찾기 순서) — 게시판 색을 고른다.
+    var boards: [String] = []
 }
 
 private func parseFeedDate(_ s: String?) -> Date? {
@@ -263,7 +294,8 @@ private enum NoticeLoader {
             date: Date(),
             rows: pickNoticeRows(all, boards: boards, max: kNoticeWidgetMaxRows),
             collectedAt: oldest,
-            theme: theme
+            theme: theme,
+            boards: boards
         )
     }
 }
@@ -274,9 +306,11 @@ struct NoticeWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
 
     private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme) }
-    private var maxRows: Int { family == .systemLarge ? 8 : 4 }
-    /// 줄 간격은 고정 — 글이 적어도 위에 모여 있게(Spacer로 벌리지 않는다).
-    private var rowSpacing: CGFloat { family == .systemLarge ? 16 : 9 }
+    /// 한 줄(13pt) 높이와 줄 사이 최소 간격. 들어가는 만큼 줄을 넣고 남는 높이는
+    /// 줄 사이에 고르게 나눠 아래까지 채운다. 글이 모자라면 위에 모은다.
+    private static let rowHeight: CGFloat = 17
+    private static let minGap: CGFloat = 5
+    private static let looseGap: CGFloat = 9
 
     /// 앱 공지 화면과 같은 기준: 마지막 수집이 3시간 넘으면 늦어짐.
     private var isStale: Bool {
@@ -313,12 +347,10 @@ struct NoticeWidgetEntryView: View {
                         .foregroundColor(palette.body)
                     Spacer(minLength: 0)
                 } else {
-                    VStack(alignment: .leading, spacing: rowSpacing) {
-                        ForEach(Array(rows.prefix(maxRows).enumerated()), id: \.offset) { _, row in
-                            rowView(row)
-                        }
+                    GeometryReader { geo in
+                        rowsView(rows, height: geo.size.height)
+                            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
                     }
-                    Spacer(minLength: 0)
                 }
             } else {
                 Text("앱을 한 번 열면\n공지를 불러옵니다.")
@@ -333,10 +365,38 @@ struct NoticeWidgetEntryView: View {
         .widgetURL(URL(string: "knuemate://notice?homeWidget"))
     }
 
+    /// 높이 [height]에 들어가는 줄 수.
+    static func rowCapacity(height: CGFloat) -> Int {
+        max(1, min(kNoticeWidgetMaxRows, Int((height + minGap) / (rowHeight + minGap))))
+    }
+
+    @ViewBuilder
+    private func rowsView(_ rows: [NoticeRow], height: CGFloat) -> some View {
+        let cap = Self.rowCapacity(height: height)
+        let shown = Array(rows.prefix(cap))
+        if shown.count >= cap {
+            // 꽉 찼다 — 줄 사이를 고르게 벌려 마지막 줄이 아래에 닿게.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(shown.enumerated()), id: \.offset) { i, row in
+                    if i > 0 { Spacer(minLength: Self.minGap) }
+                    rowView(row).frame(height: Self.rowHeight)
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: Self.looseGap) {
+                ForEach(Array(shown.enumerated()), id: \.offset) { _, row in
+                    rowView(row).frame(height: Self.rowHeight)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
     @ViewBuilder
     private func rowView(_ row: NoticeRow) -> some View {
+        let boardColor = noticeBoardColor(row.b, boards: entry.boards, isDark: palette.isDark)
         let content = HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text("\(Text("[\(row.b)] ").foregroundColor(palette.accent).fontWeight(.semibold))\(Text(row.t).foregroundColor(palette.title))")
+            Text("\(Text("[\(row.b)] ").foregroundColor(boardColor).fontWeight(.semibold))\(Text(row.t).foregroundColor(palette.title))")
                 .font(.system(size: 13))
                 .lineLimit(1)
             Spacer(minLength: 0)

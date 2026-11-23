@@ -36,20 +36,63 @@ class NoticeWidgetProvider : HomeWidgetProvider() {
         // 레이아웃(notice_widget_layout.xml) 치수(dp, 글꼴 배율 1 기준).
         private const val PADDING_DP = 14f * 2
         private const val HEADER_DP = 18f
-        private const val ROW_DP = 25f  // 13sp 한 줄 + 위아래 4dp
+        // 한 줄에 필요한 최소 높이(13sp 한 줄 + 여유). 보이는 줄은 레이아웃의
+        // layout_weight로 남는 높이를 나눠 가져 아래까지 찬다.
+        private const val ROW_DP = 22f
 
+        // Dart kNoticeWidgetMaxRows(10)와 같은 개수.
         private val ROW_IDS = intArrayOf(
             R.id.notice_row_0, R.id.notice_row_1, R.id.notice_row_2, R.id.notice_row_3,
             R.id.notice_row_4, R.id.notice_row_5, R.id.notice_row_6, R.id.notice_row_7,
+            R.id.notice_row_8, R.id.notice_row_9,
         )
         private val TITLE_IDS = intArrayOf(
             R.id.notice_title_0, R.id.notice_title_1, R.id.notice_title_2, R.id.notice_title_3,
             R.id.notice_title_4, R.id.notice_title_5, R.id.notice_title_6, R.id.notice_title_7,
+            R.id.notice_title_8, R.id.notice_title_9,
         )
         private val DATE_IDS = intArrayOf(
             R.id.notice_date_0, R.id.notice_date_1, R.id.notice_date_2, R.id.notice_date_3,
             R.id.notice_date_4, R.id.notice_date_5, R.id.notice_date_6, R.id.notice_date_7,
+            R.id.notice_date_8, R.id.notice_date_9,
         )
+
+        /**
+         * 게시판 이름 색 (라이트, 다크). iOS NoticeWidget.swift의 kNoticeBoardColors와
+         * 같은 순서·값이어야 한다(test/native_id_consistency_test.dart가 확인).
+         */
+        private val BOARD_COLORS = arrayOf(
+            0x1A73E8 to 0x8AB4F8, // 파랑
+            0x188038 to 0x81C995, // 초록
+            0xE8710A to 0xFCAD70, // 주황
+            0x9334E6 to 0xC58AF9, // 보라
+            0xD93025 to 0xF28B82, // 빨강
+            0x00897B to 0x4DB6AC, // 청록
+            0xC2185B to 0xF48FB1, // 분홍
+            0x8D6E63 to 0xBCAAA4, // 갈색
+        )
+
+        /** Dart noticeBoardColorIndex와 같은 규칙: 대상 게시판 순서, 없으면 UTF-16 코드 합. */
+        fun boardColorIndex(board: String, boards: List<String>): Int {
+            val i = boards.indexOf(board)
+            if (i >= 0) return i % BOARD_COLORS.size
+            return board.sumOf { it.code } % BOARD_COLORS.size
+        }
+
+        fun boardColor(board: String, boards: List<String>, isDark: Boolean): Int {
+            val (light, dark) = BOARD_COLORS[boardColorIndex(board, boards)]
+            return (if (isDark) dark else light) or 0xFF000000.toInt()
+        }
+
+        fun parseBoards(json: String?): List<String> {
+            if (json.isNullOrEmpty()) return emptyList()
+            return try {
+                val arr = JSONArray(json)
+                (0 until arr.length()).map { arr.getString(it) }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
 
         data class Row(val board: String, val title: String, val date: String, val link: String)
 
@@ -81,10 +124,10 @@ class NoticeWidgetProvider : HomeWidgetProvider() {
             return if (p.size == 3) "${p[1]}/${p[2]}" else d
         }
 
-        /** 위젯 높이에 들어가는 줄 수(1~8). */
+        /** 위젯 높이에 들어가는 줄 수(1~10). */
         fun rowCapacity(heightDp: Float, fontScale: Float): Int {
             val room = heightDp - PADDING_DP - HEADER_DP * fontScale
-            return (room / (ROW_DP * fontScale)).toInt().coerceIn(1, 8)
+            return (room / (ROW_DP * fontScale)).toInt().coerceIn(1, ROW_IDS.size)
         }
     }
 
@@ -105,6 +148,7 @@ class NoticeWidgetProvider : HomeWidgetProvider() {
         widgetData: SharedPreferences,
     ) {
         val rows = parseRows(widgetData.getString("notice_rows_json", null))
+        val boards = parseBoards(widgetData.getString("notice_boards_json", null))
         val colors = WidgetColors.read(context, widgetData)
         val fontScale = context.resources.configuration.fontScale
 
@@ -143,7 +187,10 @@ class NoticeWidgetProvider : HomeWidgetProvider() {
                         views.setViewVisibility(ROW_IDS[i], View.VISIBLE)
                         val head = "[${row.board}] "
                         val text = SpannableStringBuilder(head + row.title).apply {
-                            setSpan(ForegroundColorSpan(colors.accent), 0, head.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                            setSpan(
+                                ForegroundColorSpan(boardColor(row.board, boards, colors.isDark)),
+                                0, head.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
                             setSpan(StyleSpan(Typeface.BOLD), 0, head.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         }
                         views.setTextViewText(TITLE_IDS[i], text)
