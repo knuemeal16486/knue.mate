@@ -21,7 +21,7 @@ import es.antonborri.home_widget.HomeWidgetProvider
 import org.json.JSONArray
 
 /**
- * 공지 위젯 — 즐겨찾기 게시판마다 최신 글 하나씩.
+ * 공지 위젯 — 즐겨찾기 게시판마다 최신 글, 남는 자리는 다음 글(최대 8줄).
  *
  * Android는 위젯이 직접 받지 않는다. 앱과 1시간 백그라운드 공지 작업이 공지
  * 캐시를 바꿀 때 lib/home_widgets.dart의 pushNoticeWidget이 고른 줄을

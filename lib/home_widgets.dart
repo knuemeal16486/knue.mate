@@ -130,32 +130,46 @@ class NoticeWidgetRow {
   Map<String, String> toJson() => {'b': board, 't': title, 'd': date, 'l': link};
 }
 
-/// 게시판마다 최신 글 1개. 게시판끼리는 그 글 날짜가 늦은 것부터(같으면
-/// [boards] 순서), 최대 [max]개. 캐시에 없는 게시판은 건너뛴다.
+/// 게시판마다 최신 글 1개를 먼저 둔다. 게시판끼리는 그 글 날짜가 늦은 것부터
+/// (같으면 [boards] 순서). 최대 [max]개이고, 즐겨찾기가 적어 자리가 남으면
+/// 대상 게시판의 나머지 글을 최신순으로 채운다(같으면 [boards] 순서·캐시 순서).
+/// 같은 링크는 한 번만. 캐시에 없는 게시판은 건너뛴다.
 List<NoticeWidgetRow> noticeWidgetRows(
   List<Notice> cache,
   List<String> boards, {
   int max = 8,
 }) {
-  final latest = <String, Notice>{};
+  final seen = <String>{};
+  final posts = <Notice>[];
   for (final n in cache) {
     if (!boards.contains(n.category)) continue;
-    final cur = latest[n.category];
-    if (cur == null || n.date.compareTo(cur.date) > 0) latest[n.category] = n;
+    if (!seen.add('${n.category}|${n.link}|${n.title}')) continue;
+    posts.add(n);
   }
-  final ordered = boards.where(latest.containsKey).toList();
-  // List.sort는 안정 정렬이 아니므로 순서를 직접 비교한다.
-  ordered.sort((a, b) {
-    final c = latest[b]!.date.compareTo(latest[a]!.date);
-    return c != 0 ? c : boards.indexOf(a).compareTo(boards.indexOf(b));
-  });
-  return ordered
+  // 날짜 내림차순 → boards 순서 → 캐시 순서. List.sort는 안정 정렬이 아니라
+  // 원래 위치를 직접 비교한다.
+  final idx = List.generate(posts.length, (i) => i)
+    ..sort((i, j) {
+      final a = posts[i], b = posts[j];
+      final c = b.date.compareTo(a.date);
+      if (c != 0) return c;
+      final bo =
+          boards.indexOf(a.category).compareTo(boards.indexOf(b.category));
+      return bo != 0 ? bo : i.compareTo(j);
+    });
+  final firsts = <Notice>[];
+  final rest = <Notice>[];
+  final used = <String>{};
+  for (final n in idx.map((i) => posts[i])) {
+    (used.add(n.category) ? firsts : rest).add(n);
+  }
+  return [...firsts, ...rest]
       .take(max)
-      .map((b) => NoticeWidgetRow(
-            board: b,
-            title: latest[b]!.title,
-            date: latest[b]!.date,
-            link: latest[b]!.link,
+      .map((n) => NoticeWidgetRow(
+            board: n.category,
+            title: n.title,
+            date: n.date,
+            link: n.link,
           ))
       .toList();
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 import WidgetKit
 
-// KNUE Mate 공지 위젯 (iOS) — 즐겨찾기 게시판마다 최신 글 하나씩.
+// KNUE Mate 공지 위젯 (iOS) — 즐겨찾기 게시판마다 최신 글, 남는 자리는 다음 글.
 //
 // 앱이 위젯 저장소에 넣는 값 (lib/home_widgets.dart의 pushNoticeWidget):
 //
@@ -14,7 +14,8 @@ import WidgetKit
 // (index.json을 보고 지문(hash)이 바뀐 게시판 파일만). 학교 서버·Firestore에는
 // 절대 요청하지 않는다 — 받는 곳은 notice_feed_base(https)뿐이다.
 // 고르는 규칙은 Dart noticeWidgetRows와 같다: 게시판마다 날짜가 가장 늦은 글
-// 1개, 게시판끼리는 그 날짜가 늦은 것부터(같으면 대상 게시판 순서).
+// 1개를 먼저(게시판끼리는 그 날짜가 늦은 것부터, 같으면 대상 게시판 순서),
+// 자리가 남으면 나머지 글을 최신순으로 채운다.
 
 struct NoticeRow: Codable, Equatable {
     let b: String
@@ -25,7 +26,7 @@ struct NoticeRow: Codable, Equatable {
 
 /// 위젯이 받은 결과. App Group 폴더의 notice_widget_cache.json.
 private struct NoticeWidgetCache: Codable {
-    /// 수집 파일(b/<id>.json)마다 마지막으로 받은 지문·최신 글.
+    /// 수집 파일(b/<id>.json)마다 마지막으로 받은 지문·최신 글들.
     var files: [String: CachedBoardFile] = [:]
 }
 
@@ -33,7 +34,12 @@ private struct CachedBoardFile: Codable {
     let category: String
     let hash: String
     let fetchedAt: String?
+    /// 예전 캐시(최신 글 1개). 새 캐시는 top을 쓴다.
     let latest: NoticeRow?
+    /// 날짜가 늦은 글부터 최대 kNoticeWidgetMaxRows개.
+    let top: [NoticeRow]?
+
+    var rows: [NoticeRow] { top ?? latest.map { [$0] } ?? [] }
 }
 
 private struct FeedIndex: Decodable {
@@ -65,14 +71,29 @@ func noticeLinkAllowed(_ link: String) -> Bool {
     return host == "knue.ac.kr" || host.hasSuffix(".knue.ac.kr")
 }
 
-/// Dart noticeWidgetRows와 같은 정렬.
-func orderNoticeRows(_ latest: [String: NoticeRow], boards: [String], max: Int) -> [NoticeRow] {
-    let ordered = boards.filter { latest[$0] != nil }
-    let sorted = ordered.enumerated().sorted { a, b in
-        let da = latest[a.element]!.d, db = latest[b.element]!.d
-        return da != db ? da > db : a.offset < b.offset
+let kNoticeWidgetMaxRows = 8
+
+/// Dart noticeWidgetRows와 같은 규칙. 게시판마다 최신 1개를 먼저(날짜 늦은
+/// 게시판부터, 같으면 boards 순서), 남는 자리는 나머지 글을 최신순으로.
+/// 같은 글(게시판·링크·제목)은 한 번만.
+func pickNoticeRows(_ all: [NoticeRow], boards: [String], max: Int) -> [NoticeRow] {
+    var seen = Set<String>()
+    var posts: [NoticeRow] = []
+    for r in all where boards.contains(r.b) {
+        if seen.insert(r.b + "|" + r.l + "|" + r.t).inserted { posts.append(r) }
     }
-    return sorted.prefix(max).map { latest[$0.element]! }
+    let sorted = posts.enumerated().sorted { x, y in
+        let a = x.element, b = y.element
+        if a.d != b.d { return a.d > b.d }
+        let ia = boards.firstIndex(of: a.b) ?? 0, ib = boards.firstIndex(of: b.b) ?? 0
+        return ia != ib ? ia < ib : x.offset < y.offset
+    }.map { $0.element }
+    var used = Set<String>()
+    var firsts: [NoticeRow] = [], rest: [NoticeRow] = []
+    for r in sorted {
+        if used.insert(r.b).inserted { firsts.append(r) } else { rest.append(r) }
+    }
+    return Array((firsts + rest).prefix(max))
 }
 
 struct NoticeEntry: TimelineEntry {
@@ -191,7 +212,8 @@ private enum NoticeLoader {
                 if let c = cache.files[b.file], c.hash == hash, !hash.isEmpty {
                     // 내용은 그대로 — 수집 시각만 새로.
                     cache.files[b.file] = CachedBoardFile(
-                        category: b.category, hash: hash, fetchedAt: b.fetchedAt, latest: c.latest)
+                        category: b.category, hash: hash, fetchedAt: b.fetchedAt,
+                        latest: c.latest, top: c.top)
                     continue
                 }
                 guard let url = URL(string: base + "/" + b.file) else { continue }
@@ -200,13 +222,15 @@ private enum NoticeLoader {
                     defer { group.leave() }
                     guard error == nil, let data = data,
                           let file = try? JSONDecoder().decode(FeedBoardFile.self, from: data) else { return }
-                    // 날짜 내림차순이지만 믿지 않고 가장 늦은 날짜를 고른다(같으면 앞의 것).
-                    var best: FeedItem?
-                    for item in file.items where best == nil || item.d > best!.d { best = item }
-                    let row = best.map { NoticeRow(b: b.category, t: $0.t, d: $0.d, l: $0.l) }
+                    // 날짜 내림차순이지만 믿지 않고 다시 정렬한다(같으면 앞의 것).
+                    let top = file.items.enumerated()
+                        .sorted { $0.element.d != $1.element.d ? $0.element.d > $1.element.d : $0.offset < $1.offset }
+                        .prefix(kNoticeWidgetMaxRows)
+                        .map { NoticeRow(b: b.category, t: $0.element.t, d: $0.element.d, l: $0.element.l) }
                     resultLock.lock()
                     cache.files[b.file] = CachedBoardFile(
-                        category: b.category, hash: hash, fetchedAt: b.fetchedAt, latest: row)
+                        category: b.category, hash: hash, fetchedAt: b.fetchedAt,
+                        latest: nil, top: top)
                     resultLock.unlock()
                 }.resume()
             }
@@ -217,7 +241,7 @@ private enum NoticeLoader {
         }.resume()
     }
 
-    /// 위젯이 받은 것과 앱이 넣은 것을 합쳐 게시판마다 더 늦은 글을 쓴다.
+    /// 위젯이 받은 것과 앱이 넣은 것을 합쳐 고른다(같은 글은 한 번만).
     static func entry(fetched: NoticeWidgetCache?) -> NoticeEntry {
         let defaults = sharedDefaults()
         let theme = WidgetThemeSettings.read(defaults)
@@ -225,17 +249,11 @@ private enum NoticeLoader {
         let fromApp = appRows(defaults)
         let cache = fetched ?? loadCache()
 
-        var latest: [String: NoticeRow] = [:]
-        func offer(_ row: NoticeRow) {
-            guard boards.contains(row.b) else { return }
-            if let cur = latest[row.b], cur.d >= row.d { return }
-            latest[row.b] = row
-        }
-        fromApp?.forEach(offer)
+        var all: [NoticeRow] = fromApp ?? []
         var oldest: Date?
         for file in (cache?.files ?? [:]).values {
             guard boards.contains(file.category) else { continue }
-            if let row = file.latest { offer(row) }
+            all += file.rows
             if let at = parseFeedDate(file.fetchedAt), oldest == nil || at < oldest! { oldest = at }
         }
         if fromApp == nil && cache == nil {
@@ -243,7 +261,7 @@ private enum NoticeLoader {
         }
         return NoticeEntry(
             date: Date(),
-            rows: orderNoticeRows(latest, boards: boards, max: 8),
+            rows: pickNoticeRows(all, boards: boards, max: kNoticeWidgetMaxRows),
             collectedAt: oldest,
             theme: theme
         )
@@ -257,6 +275,8 @@ struct NoticeWidgetEntryView: View {
 
     private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme) }
     private var maxRows: Int { family == .systemLarge ? 8 : 4 }
+    /// 줄 간격은 고정 — 글이 적어도 위에 모여 있게(Spacer로 벌리지 않는다).
+    private var rowSpacing: CGFloat { family == .systemLarge ? 16 : 9 }
 
     /// 앱 공지 화면과 같은 기준: 마지막 수집이 3시간 넘으면 늦어짐.
     private var isStale: Bool {
@@ -293,12 +313,12 @@ struct NoticeWidgetEntryView: View {
                         .foregroundColor(palette.body)
                     Spacer(minLength: 0)
                 } else {
-                    VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: rowSpacing) {
                         ForEach(Array(rows.prefix(maxRows).enumerated()), id: \.offset) { _, row in
                             rowView(row)
-                            Spacer(minLength: 0)
                         }
                     }
+                    Spacer(minLength: 0)
                 }
             } else {
                 Text("앱을 한 번 열면\n공지를 불러옵니다.")
