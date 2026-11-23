@@ -10,31 +10,24 @@ import WidgetKit
 //   widget_title  String  식당 이름   (예: "기숙사 식당")
 //   widget_time   String  때          (예: "오늘 점심")
 //   widget_menu   String  메뉴 본문   (줄바꿈 포함)
-//   themeMode     Int     ThemeMode.index (0 system / 1 light / 2 dark)
-//   transparency  String  0.0~1.0 (double을 문자열로 저장한다)
+//   themeMode·transparency는 WidgetShared.swift
 //
 // ⚠️ home_widget은 키 앞에 접두사를 붙이지 않는다. Flutter에서 저장한 키를
 // 그대로 읽는다.
-
-private let appGroupId = "group.knue.meal"
 
 struct MealEntry: TimelineEntry {
     let date: Date
     let title: String
     let time: String
     let menu: String
-    /// Flutter의 ThemeMode.index. 0 = system, 1 = light, 2 = dark.
-    let themeModeIndex: Int
-    /// 배경 투명도 0.0(불투명) ~ 1.0(완전 투명).
-    let transparency: Double
+    let theme: WidgetThemeSettings
 
     static let placeholder = MealEntry(
         date: Date(),
         title: "기숙사 식당",
         time: "오늘 점심",
         menu: "메뉴 정보를\n불러오는 중입니다...",
-        themeModeIndex: 0,
-        transparency: 0.0
+        theme: WidgetThemeSettings()
     )
 }
 
@@ -57,92 +50,82 @@ struct MealProvider: TimelineProvider {
     }
 
     private func readEntry() -> MealEntry {
-        guard let defaults = UserDefaults(suiteName: appGroupId) else {
+        guard let defaults = sharedDefaults() else {
             return MealEntry.placeholder
         }
         let title = defaults.string(forKey: "widget_title") ?? "KNUE Mate"
         let time = defaults.string(forKey: "widget_time") ?? ""
         let menu = defaults.string(forKey: "widget_menu") ?? "앱을 한 번 열면\n식단을 불러옵니다."
-        // Flutter가 int로 저장하므로 integer로 읽는다. 값이 없으면 0(system).
-        let themeModeIndex = defaults.object(forKey: "themeMode") as? Int ?? 0
-        // transparency는 문자열로 저장된다("0.0" 등).
-        let transparency = Double(defaults.string(forKey: "transparency") ?? "") ?? 0.0
 
         return MealEntry(
             date: Date(),
             title: title,
             time: time,
             menu: menu,
-            themeModeIndex: themeModeIndex,
-            transparency: max(0, min(1, transparency))
+            theme: WidgetThemeSettings.read(defaults)
         )
     }
+}
+
+/// 한 줄에 하나씩 [maxLines]개가 넘으면 " · "로 이어 쓴다 — 넘친 메뉴가
+/// 말없이 잘리지 않게. 메뉴 안에서는 줄이 바뀌지 않게 글자 사이에 U+2060
+/// (WORD JOINER)을, 낱말 사이에 NBSP를 넣는다. Android MealWidgetProvider.fitMenu와
+/// 같은 방식이다.
+func fitMealMenu(_ menu: String, maxLines: Int) -> String {
+    let lines = menu.split(separator: "\n")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+    if lines.count <= maxLines { return lines.joined(separator: "\n") }
+    return lines.map { line -> String in
+        var item = line
+        if item.hasPrefix("·") { item.removeFirst() }
+        item = item.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: " ", with: "\u{00A0}")
+        return item.map { String($0) }.joined(separator: "\u{2060}")
+    }.joined(separator: "\u{00A0}· ")
+}
+
+/// 메뉴 칸 높이(pt)에 들어가는 줄 수. 13pt 한 줄은 줄 간격까지 약 19pt.
+/// small 위젯 높이가 기기마다 141~170pt라 크기 종류(family)로는 못 정하고,
+/// 실제 칸 높이(GeometryReader)로 정한다.
+func mealMenuCapacity(menuHeight: CGFloat) -> Int {
+    max(1, Int(menuHeight / 19))
 }
 
 struct MealWidgetEntryView: View {
     var entry: MealEntry
     @Environment(\.colorScheme) private var systemColorScheme
 
-    /// 앱 설정의 위젯 테마를 우선하고, "시스템"이면 기기 설정을 따른다.
-    private var isDark: Bool {
-        switch entry.themeModeIndex {
-        case 1: return false
-        case 2: return true
-        default: return systemColorScheme == .dark
-        }
-    }
-
-    private var backgroundColor: Color {
-        let base = isDark ? Color(red: 0.12, green: 0.12, blue: 0.12) : Color.white
-        return base.opacity(1.0 - entry.transparency)
-    }
-
-    private var titleColor: Color { isDark ? .white : .black }
-    private var menuColor: Color {
-        isDark ? Color.white.opacity(0.8) : Color(red: 0.2, green: 0.2, blue: 0.2)
-    }
-    // 안드로이드 위젯과 같은 강조색.
-    private var accentColor: Color { Color(red: 0.26, green: 0.52, blue: 0.96) }
+    private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            // 끼니를 식당 이름 위에 둔다 — 한 줄에 나란히 두면 small에서
+            // 이름이 "기숙…"처럼 잘린다(Android 2×2에서 실제로 났다).
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.time)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(palette.accent)
+                    .lineLimit(1)
                 Text(entry.title)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(titleColor)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Text(entry.time)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(accentColor)
+                    .foregroundColor(palette.title)
                     .lineLimit(1)
             }
 
-            Text(entry.menu)
-                .font(.system(size: 13))
-                .foregroundColor(menuColor)
-                .lineSpacing(3)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            GeometryReader { geo in
+                Text(fitMealMenu(entry.menu, maxLines: mealMenuCapacity(menuHeight: geo.size.height)))
+                    .font(.system(size: 13))
+                    .foregroundColor(palette.body)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
         }
-        .padding(16)
-        .widgetBackground(backgroundColor)
+        .padding(14)
+        .widgetBackground(palette.background)
         // 위젯을 누르면 앱이 이 URL로 열린다. Flutter 쪽(main.dart)이
         // home_widget의 클릭 스트림에서 이 host("meal")를 보고 식단 탭으로
         // 이동한다. 스킴은 Runner Info.plist의 CFBundleURLSchemes와 같아야 한다.
-        .widgetURL(URL(string: "knuemate://meal"))
-    }
-}
-
-// iOS 17부터 위젯 배경은 containerBackground로 줘야 한다. 16 이하에서는
-// 그 API가 없어 예전 방식(ZStack 배경)을 쓴다 — 둘 다 지원하려면 분기가 필요.
-extension View {
-    @ViewBuilder
-    func widgetBackground(_ color: Color) -> some View {
-        if #available(iOS 17.0, *) {
-            containerBackground(color, for: .widget)
-        } else {
-            background(color)
-        }
+        .widgetURL(URL(string: "knuemate://meal?homeWidget"))
     }
 }
 
@@ -165,5 +148,7 @@ struct MealWidget: Widget {
 struct MealWidgetBundle: WidgetBundle {
     var body: some Widget {
         MealWidget()
+        BusWidget()
+        NoticeWidget()
     }
 }

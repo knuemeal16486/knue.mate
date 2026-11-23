@@ -24,6 +24,8 @@ import 'keyword_alert_service.dart';
 import 'club_event_alert_service.dart';
 import 'exit_promo_settings.dart';
 import 'notice_feed.dart';
+import 'home_widgets.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -411,22 +413,19 @@ void _initializeBackgroundTasks() {
 /// 그래서 여기 담아 두고, 첫 화면이 준비되면 그때 꺼내 쓴다.
 AppTab? pendingWidgetTab;
 
-/// 위젯 URI(knuemate://meal 등)를 보고 갈 탭을 정한다.
-/// 모르는 주소면 null — 그냥 평소 시작 탭으로 연다.
-AppTab? widgetTabForUri(Uri? uri) {
-  if (uri == null) return null;
-  if (uri.scheme != 'knuemate') return null;
-  switch (uri.host) {
-    case 'meal':
-      return AppTab.meal;
-    case 'bus':
-      return AppTab.bus;
-    default:
-      return null;
-  }
-}
-
 void _handleWidgetUri(Uri? uri) {
+  // iOS 공지 위젯 줄: 탭을 옮기지 않고 그 글만 브라우저로 연다.
+  final link = noticeLinkFromWidgetUri(uri);
+  if (link != null) {
+    unawaited(
+      launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication)
+          .catchError((Object e) {
+        debugPrint('위젯 공지 링크 열기 실패: $e');
+        return false;
+      }),
+    );
+    return;
+  }
   final tab = widgetTabForUri(uri);
   if (tab == null) return;
   // 이미 떠 있는 앱이면 바로 옮기고, 아직이면 첫 화면이 가져가게 남겨 둔다.
@@ -439,6 +438,8 @@ Future<void> _initializeHomeWidget() async {
   try {
     debugPrint("HomeWidget 초기화 시도...");
     await HomeWidget.setAppGroupId('group.knue.meal');
+    unawaited(pushBusWidgetTimetable());
+    unawaited(pushNoticeWidget());
     // 앱이 꺼져 있다가 위젯 탭으로 열린 경우.
     _handleWidgetUri(await HomeWidget.initiallyLaunchedFromHomeWidget());
     // 앱이 백그라운드에 있다가 위젯 탭으로 돌아온 경우.

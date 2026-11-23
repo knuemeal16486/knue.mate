@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:knue_mate/ad_service.dart';
+import 'package:knue_mate/home_widgets.dart';
 import 'package:knue_mate/club_event_alert_service.dart'
     show kClubEventCheckTask;
 import 'package:knue_mate/keyword_alert_service.dart' show kNoticeCheckTask;
@@ -225,6 +226,90 @@ void main() {
             'Android의 factoryId 문자열이 lib/ad_service.dart의 '
             'nativeAdFactoryId()와 어긋났습니다.',
       );
+    });
+  });
+
+  group('공지·버스 위젯 식별자·키 일관성', () {
+    String read(String p) => File(p).readAsStringSync();
+    const iosDir = 'ios/MealWidget';
+
+    test('iOS 버스 위젯 kind·키가 Dart와 같고 번들에 들어 있다', () {
+      final bus = read('$iosDir/BusWidget.swift');
+      expect(bus, contains('kind: String = "$kIosBusWidgetKind"'));
+      expect(bus, contains('"$kWidgetBusTimetableKey"'));
+      expect(read('$iosDir/MealWidget.swift'), contains('BusWidget()'));
+    });
+
+    test('iOS 공지 위젯 kind·키가 Dart와 같고 번들에 들어 있다', () {
+      final notice = read('$iosDir/NoticeWidget.swift');
+      expect(notice, contains('kind: String = "$kIosNoticeWidgetKind"'));
+      for (final key in [
+        kWidgetNoticeRowsKey,
+        kWidgetNoticeBoardsKey,
+        kWidgetNoticeFeedBaseKey,
+        kWidgetNoticeDirectKey,
+      ]) {
+        expect(notice, contains('"$key"'), reason: key);
+      }
+      // 수집 파일 주소는 https일 때만 받는다(학교·아무 주소로 가지 않게).
+      expect(notice, contains('hasPrefix("https://")'));
+      expect(read('$iosDir/MealWidget.swift'), contains('NoticeWidget()'));
+    });
+
+    // home_widget 0.8.1(iOS)은 쿼리에 homeWidget이 있는 URL만 Dart로 넘긴다
+    // (HomeWidgetPlugin.isWidgetUrl). 없으면 위젯을 눌러도 탭 이동·공지 열기가
+    // 조용히 안 된다.
+    test('iOS 위젯 URL에는 모두 homeWidget 쿼리가 있다', () {
+      for (final f in Directory(iosDir).listSync().whereType<File>()) {
+        if (!f.path.endsWith('.swift')) continue;
+        final urls = RegExp(r'"(knuemate://[^"]*)"')
+            .allMatches(f.readAsStringSync())
+            .map((m) => m.group(1)!);
+        for (final u in urls) {
+          expect(u, contains('homeWidget'), reason: '${f.path}: $u');
+        }
+      }
+    });
+
+    const ktDir = 'android/app/src/main/kotlin/com/knue/knuemate';
+
+    test('Android 버스 위젯이 Manifest에 있고 키가 Dart와 같다', () {
+      expect(androidManifest, contains('android:name=".BusWidgetProvider"'));
+      expect(kAndroidBusWidget, 'com.knue.knuemate.BusWidgetProvider');
+      expect(read('$ktDir/BusWidgetProvider.kt'),
+          contains('"$kWidgetBusTimetableKey"'));
+    });
+
+    test('Android 공지 위젯이 Manifest에 있고 키가 Dart와 같다', () {
+      expect(androidManifest, contains('android:name=".NoticeWidgetProvider"'));
+      expect(kAndroidNoticeWidget, 'com.knue.knuemate.NoticeWidgetProvider');
+      expect(read('$ktDir/NoticeWidgetProvider.kt'),
+          contains('"$kWidgetNoticeRowsKey"'));
+    });
+
+    // 게시판 색은 Swift·Kotlin에 따로 적혀 있다 — 같은 게시판이 두 기기에서
+    // 다른 색이면 안 되므로 (라이트, 다크) 쌍 목록이 같아야 한다.
+    test('공지 위젯 게시판 색이 iOS·Android에서 같다', () {
+      List<String> pairs(String src, RegExp re) =>
+          re.allMatches(src).map((m) => '${m[1]}/${m[2]}'.toUpperCase()).toList();
+      final swift = pairs(read('$iosDir/NoticeWidget.swift'),
+          RegExp(r'\(0x([0-9A-Fa-f]{6}), 0x([0-9A-Fa-f]{6})\)'));
+      final kotlin = pairs(read('$ktDir/NoticeWidgetProvider.kt'),
+          RegExp(r'0x([0-9A-Fa-f]{6}) to 0x([0-9A-Fa-f]{6})'));
+      expect(swift.length, kNoticeBoardColorCount);
+      expect(kotlin, swift);
+      expect(swift.toSet().length, swift.length, reason: '색이 겹친다');
+    });
+
+    test('공지 위젯 최대 줄 수가 Dart·iOS·Android에서 같다', () {
+      expect(read('$iosDir/NoticeWidget.swift'),
+          contains('let kNoticeWidgetMaxRows = $kNoticeWidgetMaxRows'));
+      final layout =
+          read('android/app/src/main/res/layout/notice_widget_layout.xml');
+      expect(RegExp(r'@\+id/notice_row_\d+').allMatches(layout).length,
+          kNoticeWidgetMaxRows);
+      expect(read('$ktDir/NoticeWidgetProvider.kt'),
+          contains('"$kWidgetNoticeBoardsKey"'));
     });
   });
 }

@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'home_widgets.dart' show pushNoticeWidget;
 import 'notice_collector.dart';
 import 'notice_model.dart';
 import 'notice_service.dart';
@@ -171,7 +172,11 @@ class NoticeFeedSettings {
           .doc('notice_feed')
           .get();
       final data = snap.data();
+      final wasDirect = direct;
+      final wasBase = base;
       _apply(data);
+      // 위젯도 직접 모드·주소를 알아야 한다(iOS 위젯은 직접 모드면 받지 않는다).
+      if (wasDirect != direct || wasBase != base) unawaited(pushNoticeWidget());
       _loaded = true;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(

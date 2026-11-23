@@ -14,6 +14,7 @@ import 'package:home_widget/home_widget.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
+import 'home_widgets.dart' show pushNoticeWidget, redrawBusNoticeWidgets;
 import 'meal_api.dart';
 import 'offline_cache.dart';
 import 'schedule_model.dart';
@@ -1022,6 +1023,8 @@ Future<void> _updateWidgetDataInternal(
       qualifiedAndroidName: 'com.knue.knuemate.MealWidgetProvider',
       iOSName: kIosMealWidgetKind,
     );
+    // 테마·투명도는 모든 위젯이 같이 쓴다.
+    unawaited(redrawBusNoticeWidgets());
 
     debugPrint("위젯 업데이트 완료: $sourceName / $timeText");
   } catch (e) {
@@ -1263,6 +1266,7 @@ class PreferencesService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(keyFavBoards, boards);
     favoriteBoards.value = List.from(boards);
+    unawaited(pushNoticeWidget());
   }
 
   static Future<void> saveNoticeAlarm(bool on) async {
