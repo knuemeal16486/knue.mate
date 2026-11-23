@@ -7,6 +7,53 @@ import 'housing_iso.dart';
 import 'housing_model.dart';
 import 'housing_service.dart';
 
+/// 관리자 목록 화면에서 건물을 저장할 때 쓸 값. 순수 함수 — 테스트 대상.
+///
+/// [HousingService.setOverride]는 문서를 **통째로 덮어쓴다**. 이 화면에 칸이
+/// 있는 값은 입력 그대로 쓰고(비우면 지운다), 칸이 없는 값 — 외곽선·병합·
+/// 삭제·이름표 숨김·창문·가게·시세·지도 높이 — 은 [saved]에서 옮긴다.
+/// 예전엔 안 옮겨서, 여기서 이름 하나만 고쳐도 그 값들이 다 지워졌다.
+HousingBuildingOverride adminListEditedOverride({
+  required String buildingId,
+  required HousingBuildingOverride? saved,
+  required String name,
+  required HousingZone zone,
+  required String builtYear,
+  required String note,
+  required String address,
+  required String landlordName,
+  required String landlordPhone,
+  required String landlordPhone2,
+  required String floors,
+  required String unitCount,
+  required String? customColorHex,
+}) {
+  String? text(String v) => v.trim().isEmpty ? null : v.trim();
+  return HousingBuildingOverride(
+    buildingId: buildingId,
+    name: name.trim(),
+    zone: zone,
+    builtYear: int.tryParse(builtYear.trim()),
+    note: text(note),
+    address: text(address),
+    landlordName: text(landlordName),
+    landlordPhone: text(landlordPhone),
+    landlordPhone2: text(landlordPhone2),
+    floors: int.tryParse(floors.trim()),
+    unitCount: int.tryParse(unitCount.trim()),
+    customColorHex: customColorHex,
+    // 이 화면에 칸이 없는 값.
+    mapFloors: saved?.mapFloors,
+    customRing: saved?.customRing,
+    isDeleted: saved?.isDeleted,
+    mergedWith: saved?.mergedWith,
+    hideLabel: saved?.hideLabel,
+    showWindows: saved?.showWindows,
+    shops: saved?.shops ?? const [],
+    prices: saved?.prices ?? const [],
+  );
+}
+
 /// 자취방 건물·제보 관리자 화면.
 ///
 /// 건물 이름·구역은 학생 제보 다수결로 정해지고, 시세·특징은 학생이 남긴
@@ -364,6 +411,7 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
   late final TextEditingController _addressController;
   late final TextEditingController _landlordNameController;
   late final TextEditingController _landlordPhoneController;
+  late final TextEditingController _landlordPhone2Controller;
   late final TextEditingController _floorsController;
   late final TextEditingController _unitsController;
   late HousingZone _zone;
@@ -399,6 +447,8 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
     _landlordNameController = TextEditingController(text: s?.landlordName ?? '');
     _landlordPhoneController =
         TextEditingController(text: s?.landlordPhone ?? '');
+    _landlordPhone2Controller =
+        TextEditingController(text: s?.landlordPhone2 ?? '');
     _floorsController = TextEditingController(text: s?.floors?.toString() ?? '');
     _unitsController = TextEditingController(text: s?.unitCount?.toString() ?? '');
     _zone = c?.zone ?? HousingZone.values.first;
@@ -412,6 +462,7 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
     _addressController.dispose();
     _landlordNameController.dispose();
     _landlordPhoneController.dispose();
+    _landlordPhone2Controller.dispose();
     _floorsController.dispose();
     _unitsController.dispose();
     super.dispose();
@@ -426,17 +477,19 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
     setState(() => _saving = true);
     try {
       await HousingService.setOverride(
-        HousingBuildingOverride(
+        adminListEditedOverride(
           buildingId: widget.building.id,
+          saved: widget.saved,
           name: name,
           zone: _zone,
-          builtYear: int.tryParse(_yearController.text.trim()),
-          note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
+          builtYear: _yearController.text,
+          note: _noteController.text,
           address: _addressController.text,
           landlordName: _landlordNameController.text,
           landlordPhone: _landlordPhoneController.text,
-          floors: int.tryParse(_floorsController.text.trim()),
-          unitCount: int.tryParse(_unitsController.text.trim()),
+          landlordPhone2: _landlordPhone2Controller.text,
+          floors: _floorsController.text,
+          unitCount: _unitsController.text,
           customColorHex: _customColorHex,
         ),
       );
@@ -479,7 +532,8 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            "관리자만 봅니다. 학생 화면에는 나오지 않습니다.",
+            "전화번호는 학생 화면에 '확인된 번호'로 나오고, 학생 연락처 제보는 "
+            "받지 않습니다. 이름/호칭은 관리자만 봅니다.",
             style: TextStyle(
               fontSize: 11.5,
               color: isDark ? Colors.white54 : Colors.black54,
@@ -499,6 +553,15 @@ class _BuildingEditPageState extends State<_BuildingEditPage> {
             keyboardType: TextInputType.phone,
             decoration: const InputDecoration(
               labelText: "전화번호 (선택)",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _landlordPhone2Controller,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: "2번째 전화번호 (선택)",
               border: OutlineInputBorder(),
             ),
           ),

@@ -6,19 +6,24 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'offline_cache.dart';
+import 'bus_route_snapshot.dart';
+import 'nearby_stop.dart';
 
 class BusService {
   // API 키를 .env에서 안전하게 가져오기
   static String get _serviceKey {
     // 1) 빌드 타임 주입(권장): --dart-define=BUS_API_KEY=...
     const definedKey = String.fromEnvironment('BUS_API_KEY');
-    final key = definedKey.isNotEmpty ? definedKey : dotenv.env['BUS_API_KEY'];
+    final key = definedKey.isNotEmpty ? definedKey : (dotenv.isInitialized ? dotenv.env['BUS_API_KEY'] : null);
     if (key == null || key.isEmpty) {
       debugPrint("⚠️ BUS_API_KEY가 .env 파일에 설정되지 않았습니다.");
       return "";
     }
     return key;
   }
+
+  /// 버스위치·정류소·도착정보 서비스가 함께 쓰는 키([NearbyStopService]).
+  static String get apiKey => _serviceKey;
 
   /// 노선 정류장 목록(BusRouteInfoInqireService)용 키.
   ///
@@ -31,7 +36,7 @@ class BusService {
     const definedKey = String.fromEnvironment('BUS_ROUTE_API_KEY');
     final key = definedKey.isNotEmpty
         ? definedKey
-        : dotenv.env['BUS_ROUTE_API_KEY'];
+        : (dotenv.isInitialized ? dotenv.env['BUS_ROUTE_API_KEY'] : null);
     if (key != null && key.isNotEmpty) return key;
     return _serviceKey;
   }
@@ -44,26 +49,9 @@ class BusService {
   /// 노선을 가리키고 있었다 — 500→40-1(순환), 503→407, 509→416, 511→417,
   /// 747→872. 즉 앱이 "511번"이라고 띄우던 위치가 실제로는 417번 버스였다.
   /// 아래 값은 그때 API 응답으로 하나씩 확인해 바로잡은 것이다.
-  static const List<BusRouteConfig> _kRoutes = [
-    // 1. 교원대 직행/순환
-    BusRouteConfig(routeNumber: 513, routeId: "CJB270008000", isDirect: true),
-    BusRouteConfig(routeNumber: 514, routeId: "CJB270008300", isDirect: true),
-    BusRouteConfig(routeNumber: 518, routeId: "CJB270024700", isDirect: true),
-    BusRouteConfig(routeNumber: 913, routeId: "CJB270014300", isDirect: true),
+  /// 노선 표는 bus_model.dart의 [kBusRoutes]에 있다(노선 스냅샷·방향 이름과 같이 쓴다).
+  static const List<BusRouteConfig> _kRoutes = kBusRoutes;
 
-    // 2. 탑연삼거리 경유
-    BusRouteConfig(routeNumber: 500, routeId: "CJB270007100", isDirect: false),
-    BusRouteConfig(routeNumber: 502, routeId: "CJB270007300", isDirect: false),
-    BusRouteConfig(routeNumber: 503, routeId: "CJB270026400", isDirect: false),
-    BusRouteConfig(routeNumber: 509, routeId: "CJB270026500", isDirect: false),
-    BusRouteConfig(routeNumber: 511, routeId: "CJB270007500", isDirect: false),
-    BusRouteConfig(routeNumber: 747, routeId: "CJB270011200", isDirect: false),
-  ];
-
-  /// 각 노선에서 "도착"의 기준이 되는 정류장 이름.
-  /// 직행은 교원대 앞, 경유는 탑연삼거리에서 타고 내린다.
-  static String _targetStopName(bool isDirect) =>
-      isDirect ? "한국교원대학교" : "탑연삼거리";
 
   /// 이 노선에서 기준 정류장이 나오는 지점들(상행 1개 + 하행 1개).
   ///
@@ -77,7 +65,7 @@ class BusService {
       final stops = await fetchRouteStops(cfg.routeId);
       final derived = targetOrdsFromStops(
         stops,
-        _targetStopName(cfg.isDirect),
+        busTargetStopName(cfg.isDirect),
       );
       if (derived.isNotEmpty) return derived;
     } catch (e) {
@@ -165,13 +153,12 @@ class BusService {
     final now = DateTime.now();
     final cacheKey = 'all_buses';
     List<BusSummary>? firebaseCached;
+    DateTime? firebaseUpdatedAt;
 
-    // 0. 오프라인 캐시 먼저 확인
-    final offline = await OfflineCache.load();
-    if (offline != null) {
-      debugPrint('🗂️ Offline cache 사용 (최근 5분)');
-      return offline;
-    }
+    // 기기에 저장해 둔 결과(OfflineCache)는 네트워크가 안 될 때만 쓴다(맨 아래).
+    // 예전엔 이걸 맨 먼저 돌려줘서, 혼자 보고 있으면 자동 갱신·당겨서 새로
+    // 고침이 최대 6분 동안 같은 "n분 후"를 다시 보여 줬다 — 이미 지나간
+    // 버스가 곧 온다고 나왔다.
 
     // 1. 로컬 메모리 캐시 먼저 확인 (가장 빠름)
     if (_cache.containsKey(cacheKey)) {
@@ -183,47 +170,49 @@ class BusService {
       }
     }
 
-    // 2. 파이어베이스 캐시 확인 (공유 데이터)
-    try {
-      final fbDoc = await FirebaseFirestore.instance
-          .collection('realtime')
-          .doc('bus_locations')
-          .get(const GetOptions(source: Source.serverAndCache)) // 캐시 우선 확인
-          .timeout(
-            const Duration(seconds: 4),
-            onTimeout: () => throw TimeoutException('Firestore get timeout'),
-          );
-
-      if (fbDoc.exists) {
+    // 2. 공용 문서(realtime/bus_locations) 확인.
+    //    기기 캐시를 먼저 본다 — 읽기 요금이 없다. 버스 화면은 이 문서를
+    //    실시간 리스너로 듣고 있어서, 화면이 열려 있으면 기기 캐시가 곧 서버
+    //    값이다(예전엔 30초마다 서버에서 같은 문서를 또 받았다). 캐시에 없거나
+    //    묵었을 때만 서버에서 읽는다.
+    // 유효 시간 45~59초. 기기마다 조금씩 달라야 여럿이 한꺼번에 API를 부르지 않는다.
+    final int threshold = 45 + (now.millisecond % 15);
+    final sharedDoc =
+        FirebaseFirestore.instance.collection('realtime').doc('bus_locations');
+    for (final source in const [Source.cache, Source.server]) {
+      try {
+        final fbDoc = await sharedDoc
+            .get(GetOptions(source: source))
+            .timeout(
+              const Duration(seconds: 4),
+              onTimeout: () => throw TimeoutException('Firestore get timeout'),
+            );
+        if (!fbDoc.exists) continue;
         final data = fbDoc.data();
-        final Timestamp? lastUpdated = data?['lastUpdated'];
         final dynamic summariesRaw = data?['summaries'];
-        if (summariesRaw is List) {
-          firebaseCached = summariesRaw
-              .whereType<Map>()
-              .map((e) => BusSummary.fromJson(e.cast<String, dynamic>()))
-              .toList();
+        if (summariesRaw is! List) continue;
+        firebaseCached = summariesRaw
+            .whereType<Map>()
+            .map((e) => BusSummary.fromJson(e.cast<String, dynamic>()))
+            .toList();
+        final lastUpdated = data?['lastUpdated'];
+        firebaseUpdatedAt =
+            lastUpdated is Timestamp ? lastUpdated.toDate() : null;
+
+        if (firebaseUpdatedAt != null &&
+            now.difference(firebaseUpdatedAt).inSeconds < threshold) {
+          _cache[cacheKey] = firebaseCached;
+          _cacheTimestamps[cacheKey] = now;
+          debugPrint(
+            "BusService: 공용 문서 히트(${source.name}, "
+            "${now.difference(firebaseUpdatedAt).inSeconds}초 전)",
+          );
+          return firebaseCached;
         }
-
-        if (lastUpdated != null && firebaseCached != null) {
-          final diff = now.difference(lastUpdated.toDate());
-
-          // [개선] 캐시 유효 시간을 45초로 연장하고, 클라이언트별 지터(Random) 추가
-          // 여러 사용자가 동시에 API를 호출하는 현상 방지
-          final int threshold = 45 + (now.millisecond % 15);
-
-          if (diff.inSeconds < threshold) {
-            // 메모리 캐시 업데이트
-            _cache[cacheKey] = firebaseCached;
-            _cacheTimestamps[cacheKey] = now;
-
-            debugPrint("BusService: 파이어베이스 캐시 히트 (${diff.inSeconds}초 전)");
-            return firebaseCached;
-          }
-        }
+      } catch (e) {
+        // 기기 캐시에 문서가 없으면(Source.cache) 예외 — 서버로 넘어간다.
+        debugPrint("BusService: 공용 문서 확인 실패(${source.name}): $e");
       }
-    } catch (e) {
-      debugPrint("BusService: 파이어베이스 확인 실패: $e");
     }
 
     try {
@@ -235,9 +224,13 @@ class BusService {
 
       // 3. API 호출 (실제 전국버스 API 사용)
       // [개선] 개별 요청 타임아웃 단축 (10s -> 5s) 및 병렬 실행
+      final etasFuture = _fetchTargetStopEtas().catchError((Object e) {
+        debugPrint("BusService: 기준 정류장 도착 정보 실패: $e");
+        return <String, List<StopArrival>>{};
+      });
       final results = await Future.wait(
         _kRoutes.map(
-          (cfg) => _fetchRouteRemaining(cfg).timeout(
+          (cfg) => _fetchRouteRemaining(cfg, etasFuture).timeout(
             const Duration(seconds: 12), // 전체 병렬 작업에 대한 약간 긴 타임아웃
             onTimeout: () =>
                 RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []),
@@ -247,7 +240,26 @@ class BusService {
 
       final List<Map<String, dynamic>> summariesJson = [];
       int totalArrivals = 0;
-      for (final r in results) {
+      // 지난 공용 문서(없으면 이 기기 메모리)와 이어 붙인다 — 차가 정류장에 처음
+      // 보인 시각을 이어 받고, 교원대 종점 직전에 위치가 끊기는 513·514를
+      // 3분 동안 이어서 보여 준다(carryTerminalApproach).
+      final previous = firebaseCached ?? _cache[cacheKey] ?? const <BusSummary>[];
+      final previousAt = firebaseCached != null ? firebaseUpdatedAt : _cacheTimestamps[cacheKey];
+      for (final raw in results) {
+        final prevArrivals = previous
+            .where((s) => s.number == '${raw.routeNumber}')
+            .expand((s) => s.arrivals)
+            .toList();
+        final r = RouteRemaining(
+          routeNumber: raw.routeNumber,
+          arrivals: carryTerminalApproach(
+            routeNumber: '${raw.routeNumber}',
+            previous: prevArrivals,
+            previousAt: previousAt,
+            current: raw.arrivals,
+            now: now,
+          ),
+        );
         final config = _kRoutes.firstWhere(
           (e) => e.routeNumber == r.routeNumber,
         );
@@ -277,15 +289,6 @@ class BusService {
       final summaryList = summariesJson
           .map((e) => BusSummary.fromJson(e))
           .toList();
-
-      // 도착 알림 로그
-      for (final summary in summaryList) {
-        final next = summary.nextArrival;
-        if (next != null && next.estimatedMinutes > 0 && next.estimatedMinutes <= 5) {
-          final topic = 'bus_${summary.number}';
-          debugPrint('🔔 알림: ${summary.number}번 버스 ${next.estimatedMinutes.round()}분 내 도착 (topic: $topic)');
-        }
-      }
 
       // 4. 결과 파이어베이스에 업데이트
       // 전 노선이 모두 0대이고 Firebase 캐시도 없으면,
@@ -324,11 +327,20 @@ class BusService {
       return summaryList;
     } catch (e) {
       debugPrint("BusService: 전체 버스 정보 로드 실패: $e");
-      return firebaseCached ?? _cache[cacheKey] ?? [];
+      // 네트워크가 안 될 때 — 가진 것 중 가장 최근 값을 보여 준다.
+      final fallback = newestBusSnapshot([
+        (firebaseCached, firebaseUpdatedAt),
+        (_cache[cacheKey], _cacheTimestamps[cacheKey]),
+        (await OfflineCache.load(), await OfflineCache.savedAt()),
+      ]);
+      return fallback ?? [];
     }
   }
 
-  Future<RouteRemaining> _fetchRouteRemaining(BusRouteConfig cfg) async {
+  Future<RouteRemaining> _fetchRouteRemaining(
+    BusRouteConfig cfg,
+    Future<Map<String, List<StopArrival>>> etasFuture,
+  ) async {
     if (_serviceKey.isEmpty) {
       return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: []);
     }
@@ -377,7 +389,8 @@ class BusService {
 
       final targets = await _resolveTargetOrds(cfg);
 
-      final arrivals = list.whereType<Map>().map((e) {
+      final targetNodeIds = <(int, String?)>[];
+      final raw = list.whereType<Map>().map((e) {
         final b = BusLocation.fromJson(e.cast<String, dynamic>());
         // 이 차가 "다음에" 닿을 기준 정류장을 찾는다. 상행 지점을 이미
         // 지났어도 돌아오는 길의 하행 지점이 남아 있으면 그쪽으로 잡히므로,
@@ -386,6 +399,7 @@ class BusService {
         if (next == null) return null; // 이번 운행에선 우리 정류장을 다 지났다
 
         final int remaining = next.ord - b.nodeOrd;
+        targetNodeIds.add((remaining, next.nodeId));
 
         return BusArrival(
           remainStops: remaining,
@@ -404,6 +418,25 @@ class BusService {
           congestion: b.congestion,
         );
       }).whereType<BusArrival>().toList();
+
+      // 기준 정류장 도착 정보(API)로 도착 예정을 바로잡는다.
+      final etasByNode = await etasFuture;
+      final routeEtas = <StopEta>[
+        for (final entry in etasByNode.entries)
+          for (final a in entry.value)
+            if (a.routeId == cfg.routeId && a.stopsAway != null)
+              StopEta(nodeId: entry.key, stopsAway: a.stopsAway!, seconds: a.arrivalSeconds),
+      ];
+      final etas = resolveVehicleEtas(
+        vehicles: targetNodeIds,
+        etas: routeEtas,
+        fallback: (remaining) =>
+            _calculateEstimatedMinutes(cfg.routeNumber, remaining, DateTime.now()),
+      );
+      final arrivals = [
+        for (var i = 0; i < raw.length; i++)
+          raw[i].withEta(etas[i].$1, fromApi: etas[i].$2),
+      ];
 
       return RouteRemaining(routeNumber: cfg.routeNumber, arrivals: arrivals);
     } catch (e) {
@@ -508,10 +541,7 @@ class BusService {
 
     // 2. API 호출 — 이 엔드포인트는 버스위치와 다른 서비스라 키가 따로다.
     final key = _routeInfoKey;
-    if (key.isEmpty) {
-      debugPrint("BusService: API 키 누락으로 정류장 조회를 건너뜁니다 ($routeId)");
-      return [];
-    }
+    if (key.isEmpty) return _snapshotStops(routeId);
 
     // numOfRows=200은 511(129개)엔 충분하지만 여유를 둔다 — 정류장이 잘리면
     // 하행 기준 정류장이 목록에서 빠져 도착 계산이 조용히 틀어진다.
@@ -527,20 +557,20 @@ class BusService {
 
       if (res.statusCode != 200) {
         debugPrint("BusService: API 응답 오류 (${res.statusCode}) - $routeId");
-        return [];
+        return _snapshotStops(routeId);
       }
 
       final decoded = jsonDecode(utf8.decode(res.bodyBytes));
-      if (decoded is! Map) return [];
+      if (decoded is! Map) return _snapshotStops(routeId);
       
       final dynamic response = decoded["response"];
-      if (response == null || response is! Map) return [];
+      if (response == null || response is! Map) return _snapshotStops(routeId);
       
       final dynamic bodyObj = response["body"];
-      if (bodyObj == null || bodyObj is! Map) return [];
+      if (bodyObj == null || bodyObj is! Map) return _snapshotStops(routeId);
       
       final dynamic itemsObj = bodyObj["items"];
-      if (itemsObj == null || itemsObj is! Map) return [];
+      if (itemsObj == null || itemsObj is! Map) return _snapshotStops(routeId);
       
       final dynamic items = itemsObj["item"];
 
@@ -568,10 +598,59 @@ class BusService {
       return stops;
     } on TimeoutException {
       debugPrint("BusService: 노선 정류장 조회 타임아웃 ($routeId)");
-      return [];
+      return _snapshotStops(routeId);
     } catch (e) {
       debugPrint("BusService: 노선 정류장 조회 실패 ($routeId): $e");
-      return [];
+      return _snapshotStops(routeId);
+    }
+  }
+
+  /// 앱에 담아 둔 노선 스냅샷(tool/fetch_bus_route_stops.dart). 운영 빌드엔
+  /// 노선정보 키가 없어서 보통 이걸 쓴다. 한 번 정하면 이번 실행 동안 API를
+  /// 다시 두드리지 않는다.
+  static List<RouteStop> _snapshotStops(String routeId) {
+    final stops = kRouteStopsSnapshot[routeId] ?? const <RouteStop>[];
+    if (stops.isNotEmpty) _routeStopsCache[routeId] = stops;
+    return stops;
+  }
+
+  // ── 기준 정류장 도착 정보 ────────────────────────────────────────────
+  //
+  // 정류장 도착 정보 API(getSttnAcctoArvlPrearngeInfoList)는 버스 회사 단말이
+  // 계산한 도착 예정 시간을 준다. 기준 정류장(탑연삼거리 3308·3309, 교원대
+  // 3334·2633) 네 곳만 물으면 열 노선 전부가 나온다. 공용 문서를 새로 쓰는
+  // 기기만 부르므로(약 1분에 한 번) 기기 수와 상관없다.
+
+  /// 기준 정류장 id → 그 정류장에 오는 버스들.
+  Future<Map<String, List<StopArrival>>> _fetchTargetStopEtas() async {
+    final nodeIds = <String>{
+      for (final r in _kRoutes)
+        for (final t in snapshotTargetsFor('${r.routeNumber}'))
+          if (t.nodeId != null) t.nodeId!,
+    };
+    final service = NearbyStopService(apiKey: _serviceKey);
+    try {
+      final entries = await Future.wait(nodeIds.map((id) async {
+        try {
+          final stop = NearbyStop(
+            nodeId: id,
+            name: id,
+            sources: [(cityCode: kCheongjuCityCode, nodeId: id)],
+            nodeNo: null,
+            latitude: 0,
+            longitude: 0,
+            distanceMeters: 0,
+          );
+          final (_, list) = await service.arrivals(stop, force: true);
+          return MapEntry(id, list);
+        } catch (e) {
+          debugPrint("BusService: 기준 정류장 도착 정보 실패($id): $e");
+          return MapEntry(id, const <StopArrival>[]);
+        }
+      }));
+      return Map.fromEntries(entries);
+    } finally {
+      service.dispose();
     }
   }
 

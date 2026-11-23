@@ -220,7 +220,13 @@ class HousingCompareSheet extends StatelessWidget {
     final addr = displayAddress(b, override);
     // 구역 표시는 "캠퍼스 시설"만 — 원룸 구역 태그는 뺐다.
     final zone = b.isCampus ? HousingZone.campus : null;
-    final phone = override?.landlordPhone ?? s.publicContactPhone;
+    // 상세 화면과 같은 규칙 — 관리자가 확인한 번호가 있으면 그것만.
+    final phones = effectiveLandlordPhones(
+      admin: override?.allLandlordPhones ?? const [],
+      reported: s.publicContactPhones.isNotEmpty
+          ? s.publicContactPhones
+          : [s.publicContactPhone],
+    );
 
     // 직선거리×1.2 어림값 — 목록과 같이 "약 n분"으로만 적는다.
     final distGate = walkingDistanceMeters(b.center, CampusLandmark.mainGate);
@@ -419,15 +425,26 @@ class HousingCompareSheet extends StatelessWidget {
           Container(
             height: 48,
             alignment: Alignment.centerLeft,
-            child: phone != null && phone.isNotEmpty
+            child: phones.isNotEmpty
                 ? Row(
                     children: [
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.phone_in_talk, size: 18, color: Color(0xFF007AFF)),
-                        tooltip: '전화 걸기',
-                        onPressed: () => _callPhone(context, phone),
-                      ),
+                      if (phones.length == 1)
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.phone_in_talk, size: 18, color: Color(0xFF007AFF)),
+                          tooltip: '전화 걸기',
+                          onPressed: () => _callPhone(context, phones.first),
+                        )
+                      else
+                        // 번호가 여럿이면 눌러서 고른다(카드 폭이 좁다).
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.phone_in_talk, size: 18, color: Color(0xFF007AFF)),
+                          tooltip: '전화 걸기',
+                          onSelected: (p) => _callPhone(context, p),
+                          itemBuilder: (_) => [
+                            for (final p in phones) PopupMenuItem(value: p, child: Text(p)),
+                          ],
+                        ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(Icons.sms_outlined, size: 18, color: Color(0xFF10B981)),

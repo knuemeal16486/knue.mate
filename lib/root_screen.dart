@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'admin_auth_service.dart';
+import 'analytics.dart';
 import 'app_update.dart';
 import 'club_event_model.dart';
 import 'club_event_service.dart';
@@ -176,6 +177,9 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
       if (mounted) AppUpdateGate.check(context, force: true);
     });
 
+    // 처음 보이는 탭도 센다(탭을 누르지 않고 끄는 사람이 대부분이다).
+    _logCurrentTab();
+
     // 앱이 꺼져 있다가 홈 위젯을 눌러 열린 경우, 그 판단은 이 화면이
     // 만들어지기 전에 끝나 있다. 남겨 둔 탭이 있으면 첫 프레임 뒤에 옮긴다.
     final pending = pendingWidgetTab;
@@ -216,7 +220,15 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
       _preloadExitAd();
       // 켜 둔 채로 며칠 지났을 수 있다(한 시간에 한 번만 확인한다).
       AppUpdateGate.check(context);
+      _logCurrentTab();
     }
+  }
+
+  /// 지금 보이는 탭을 사용 통계에 적는다([AppAnalytics.logTab]).
+  void _logCurrentTab() {
+    final tabs = PreferencesService.tabOrder.value;
+    if (_currentIndex < 0 || _currentIndex >= tabs.length) return;
+    AppAnalytics.logTab(tabs[_currentIndex]);
   }
 
   /// 관리자가 종료 팝업 광고를 꺼 두지 않았으면 광고를 하나 받아 둔다.
@@ -246,6 +258,7 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
         _previousIndexAnimating = null;
         _currentIndex = index;
       });
+      _logCurrentTab();
       _pageController.jumpToPage(index);
       return;
     }
@@ -253,6 +266,7 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
       _previousIndexAnimating = leaving;
       _currentIndex = index;
     });
+    _logCurrentTab();
     _pageController
         .animateToPage(
           index,

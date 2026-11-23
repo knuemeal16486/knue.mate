@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'bus_route_snapshot.dart';
+
 /// 실시간 차량 혼잡도(1~4)를 [BusSummary.congestion]/[CongestionIndicator]가 쓰는
 /// 문자열 등급으로 변환한다. 값이 없으면(API 미제공) null을 반환해 호출부가
 /// 시간대 추정치로 폴백할 수 있게 한다.
@@ -64,7 +66,11 @@ BusSummary? pickHomeBusSummary(
 class TargetStopOrd {
   final int ord;
   final BusDirection dir;
-  const TargetStopOrd(this.ord, this.dir);
+
+  /// 그 지점의 정류장 id. 정류장 도착 정보 API를 물을 때 쓴다. 폴백 표에서
+  /// 만든 값엔 없다.
+  final String? nodeId;
+  const TargetStopOrd(this.ord, this.dir, [this.nodeId]);
 
   @override
   bool operator ==(Object other) =>
@@ -101,6 +107,7 @@ List<TargetStopOrd> targetOrdsFromStops(
       TargetStopOrd(
         s.nodeOrd,
         ud == 1 ? BusDirection.inbound : BusDirection.outbound,
+        s.nodeId,
       ),
     );
   }
@@ -164,6 +171,15 @@ class BusArrival {
   /// 다음에 도착할 기준 정류장이 상행 쪽이냐 하행 쪽이냐로 정확히 가른다.
   final BusDirection direction;
 
+  /// [estimatedMinutes]가 정류장 도착 정보 API가 계산한 값인지. 아니면 그
+  /// 노선의 실제 속도로 보정한 어림값이거나 시간대 가중치 어림값이다.
+  final bool etaFromApi;
+
+  /// 이 차가 지금 정류장([nodeOrd])에 처음 보인 시각. 공용 문서를 새로 쓸 때
+  /// 지난 문서에서 이어 받는다. 종점 직전에 위치가 끊기는 차를 이어서 보여 줄
+  /// 때 쓴다([carryTerminalApproach]).
+  final DateTime? atStopSince;
+
   const BusArrival({
     required this.remainStops,
     required this.currentStopName,
@@ -174,7 +190,34 @@ class BusArrival {
     this.nodeOrd,
     this.congestion,
     this.direction = BusDirection.outbound,
+    this.etaFromApi = false,
+    this.atStopSince,
   });
+
+  BusArrival withEta(double minutes, {required bool fromApi}) =>
+      copyWith(estimatedMinutes: minutes, etaFromApi: fromApi);
+
+  BusArrival copyWith({
+    int? remainStops,
+    String? currentStopName,
+    double? estimatedMinutes,
+    int? nodeOrd,
+    bool? etaFromApi,
+    DateTime? atStopSince,
+  }) =>
+      BusArrival(
+        remainStops: remainStops ?? this.remainStops,
+        currentStopName: currentStopName ?? this.currentStopName,
+        estimatedMinutes: estimatedMinutes ?? this.estimatedMinutes,
+        latitude: latitude,
+        longitude: longitude,
+        vehicleNo: vehicleNo,
+        nodeOrd: nodeOrd ?? this.nodeOrd,
+        congestion: congestion,
+        direction: direction,
+        etaFromApi: etaFromApi ?? this.etaFromApi,
+        atStopSince: atStopSince ?? this.atStopSince,
+      );
 
   int compareTo(BusArrival other) => remainStops.compareTo(other.remainStops);
 
@@ -190,7 +233,9 @@ class BusArrival {
         other.vehicleNo == vehicleNo &&
         other.nodeOrd == nodeOrd &&
         other.congestion == congestion &&
-        other.direction == direction;
+        other.direction == direction &&
+        other.etaFromApi == etaFromApi &&
+        other.atStopSince == atStopSince;
   }
 
   @override
@@ -203,7 +248,9 @@ class BusArrival {
       vehicleNo.hashCode ^
       nodeOrd.hashCode ^
       congestion.hashCode ^
-      direction.hashCode;
+      direction.hashCode ^
+      etaFromApi.hashCode ^
+      atStopSince.hashCode;
 
   // 유틸리티 메서드
   bool get isApproaching => remainStops <= 3;
@@ -371,6 +418,12 @@ class BusSummary {
               'vehicleNo': a.vehicleNo,
               'nodeOrd': a.nodeOrd,
               'congestion': a.congestion,
+              // 예전엔 방향을 안 적어서, 공용 문서로 받은 기기에선 모든 차가
+              // "상행"(기본값)이 됐다.
+              'direction': a.direction.name,
+              'etaFromApi': a.etaFromApi,
+              if (a.atStopSince != null)
+                'atStopSince': a.atStopSince!.millisecondsSinceEpoch,
             },
           )
           .toList(),
@@ -397,6 +450,15 @@ class BusSummary {
               vehicleNo: e['vehicleNo'] as String?,
               nodeOrd: (e['nodeOrd'] as num?)?.toInt(),
               congestion: (e['congestion'] as num?)?.toInt(),
+              direction: _directionFromJson(
+                e['direction'],
+                json['number'] as String,
+                (e['nodeOrd'] as num?)?.toInt(),
+              ),
+              etaFromApi: e['etaFromApi'] == true,
+              atStopSince: e['atStopSince'] is num
+                  ? DateTime.fromMillisecondsSinceEpoch((e['atStopSince'] as num).toInt())
+                  : null,
             ),
           )
           .toList(),
@@ -707,6 +769,24 @@ class BusStop {
   }
 }
 
+/// 네트워크가 안 될 때 보여 줄 실시간 버스 값 — 후보(값, 받은 시각) 가운데
+/// 가장 최근 것. 값이 null인 후보는 건너뛰고, 시각을 모르는 값은 맨 뒤로
+/// 미룬다. 순수 함수 — 테스트 대상.
+List<BusSummary>? newestBusSnapshot(
+  List<(List<BusSummary>?, DateTime?)> candidates,
+) {
+  List<BusSummary>? best;
+  DateTime? bestAt;
+  for (final (value, at) in candidates) {
+    if (value == null) continue;
+    if (best == null || (at != null && (bestAt == null || at.isAfter(bestAt)))) {
+      best = value;
+      bestAt = at;
+    }
+  }
+  return best;
+}
+
 /// 시간표 목록에서 광고를 끼울 자리(목록 행 번호).
 ///
 /// 방금 지나간 버스와 다음 버스 사이, 즉 다음 버스 카드 바로 위다. 지나간
@@ -714,3 +794,373 @@ class BusStop {
 /// 순수 함수 — 테스트 대상.
 int busTimetableAdSlot(int nextBusIndex, int count) =>
     nextBusIndex < 0 || nextBusIndex > count ? count : nextBusIndex;
+
+
+// ── 노선·방향 (2026-11-12) ─────────────────────────────────────────────
+
+/// 앱이 다루는 노선. ⚠️ routeId는 getRouteNoList(cityCode=33010) 응답과 대조하고
+/// 넣는다 — 2026-09-19 전수조사에서 10개 중 5개가 엉뚱한 노선이었다.
+/// tool/fetch_bus_route_stops.dart의 목록도 같이 고친다.
+const List<BusRouteConfig> kBusRoutes = [
+  // 교원대 직행/순환
+  BusRouteConfig(routeNumber: 513, routeId: "CJB270008000", isDirect: true),
+  BusRouteConfig(routeNumber: 514, routeId: "CJB270008300", isDirect: true),
+  BusRouteConfig(routeNumber: 518, routeId: "CJB270024700", isDirect: true),
+  BusRouteConfig(routeNumber: 913, routeId: "CJB270014300", isDirect: true),
+  // 탑연삼거리 경유
+  BusRouteConfig(routeNumber: 500, routeId: "CJB270007100", isDirect: false),
+  BusRouteConfig(routeNumber: 502, routeId: "CJB270007300", isDirect: false),
+  BusRouteConfig(routeNumber: 503, routeId: "CJB270026400", isDirect: false),
+  BusRouteConfig(routeNumber: 509, routeId: "CJB270026500", isDirect: false),
+  BusRouteConfig(routeNumber: 511, routeId: "CJB270007500", isDirect: false),
+  BusRouteConfig(routeNumber: 747, routeId: "CJB270011200", isDirect: false),
+];
+
+BusRouteConfig? busRouteConfig(String routeNumber) {
+  for (final r in kBusRoutes) {
+    if ('${r.routeNumber}' == routeNumber) return r;
+  }
+  return null;
+}
+
+/// 각 노선에서 "도착"의 기준이 되는 정류장 이름. 직행은 교원대 앞, 경유는
+/// 탑연삼거리에서 타고 내린다.
+String busTargetStopName(bool isDirect) => isDirect ? "한국교원대학교" : "탑연삼거리";
+
+final Map<String, List<TargetStopOrd>> _snapshotTargetsCache = {};
+
+/// 노선 스냅샷([kRouteStopsSnapshot])에서 뽑은 기준 정류장 지점(정류장 id 포함).
+List<TargetStopOrd> snapshotTargetsFor(String routeNumber) {
+  return _snapshotTargetsCache.putIfAbsent(routeNumber, () {
+    final cfg = busRouteConfig(routeNumber);
+    final stops = cfg == null ? null : kRouteStopsSnapshot[cfg.routeId];
+    if (cfg == null || stops == null) return const [];
+    return targetOrdsFromStops(stops, busTargetStopName(cfg.isDirect));
+  });
+}
+
+/// 기준 정류장 하나(표지판 번호를 보여 줄 때 쓴다).
+RouteStop? busTargetStop(String routeNumber, BusDirection dir) {
+  final cfg = busRouteConfig(routeNumber);
+  final stops = cfg == null ? null : kRouteStopsSnapshot[cfg.routeId];
+  if (stops == null) return null;
+  for (final t in snapshotTargetsFor(routeNumber)) {
+    if (t.dir != dir) continue;
+    for (final s in stops) {
+      if (s.nodeOrd == t.ord) return s;
+    }
+  }
+  return null;
+}
+
+/// 공용 문서의 방향. 예전 앱(1.6.4 이하)이 쓴 문서엔 방향이 없어서, 정류장
+/// 순번으로 다음 기준 정류장을 다시 찾아 정한다. 순수 함수 — 테스트 대상.
+BusDirection _directionFromJson(dynamic raw, String routeNumber, int? nodeOrd) {
+  for (final d in BusDirection.values) {
+    if (d.name == raw) return d;
+  }
+  if (nodeOrd != null) {
+    final t = nextTargetFor(nodeOrd, snapshotTargetsFor(routeNumber));
+    if (t != null) return t.dir;
+  }
+  return BusDirection.outbound;
+}
+
+@visibleForTesting
+BusDirection directionFromJsonForTest(dynamic raw, String routeNumber, int? nodeOrd) =>
+    _directionFromJson(raw, routeNumber, nodeOrd);
+
+/// 화면에 보일 방향 이름 — 노선마다 "상행"의 뜻이 달라서(513은 교원대로 들어오는
+/// 차, 511은 오송역으로 가는 차) 행선지로 보여 준다. 2026-11-12 노선 데이터로
+/// 확인했다(bus_route_snapshot_test). 순수 함수 — 테스트 대상.
+const Map<String, (String, String)> kBusDirectionLabels = {
+  // 교원대가 종점 — 들어오는 차(상행)는 그대로 돌아 청주로 간다.
+  '513': ('교원대 종점 도착', '청주행'),
+  '514': ('교원대 종점 도착', '청주행'),
+  // 교원대에서 출발해 오송을 돌아 교원대로 돌아온다.
+  '518': ('오송행', '교원대 도착'),
+  // 평동(청주) → 교원대 → 미호종점 → 교원대 → 평동.
+  '913': ('미호행', '청주행'),
+  '500': ('오송역행', '청주행'),
+  '502': ('조치원역행', '청주행'),
+  '503': ('오송역행', '청주행'),
+  '509': ('조치원역행', '청주행'),
+  '511': ('오송역행', '청주행'),
+  '747': ('오송역행', '청주공항행'),
+};
+
+String busDirectionLabel(String routeNumber, BusDirection dir) {
+  final l = kBusDirectionLabels[routeNumber];
+  if (l == null) return dir == BusDirection.outbound ? '상행' : '하행';
+  return dir == BusDirection.outbound ? l.$1 : l.$2;
+}
+
+/// 기준 정류장 도착 정보(API) 한 건 — 이 노선 것만.
+@immutable
+class StopEta {
+  final String nodeId;
+  final int stopsAway;
+  final int seconds;
+  const StopEta({required this.nodeId, required this.stopsAway, required this.seconds});
+}
+
+/// 차량마다 도착 예정(분)을 정한다. 순수 함수 — 테스트 대상.
+///
+/// 정류장 도착 정보 API는 정류장마다 노선별로 **가장 먼저 올 차 하나**의 도착
+/// 예정(초)과 남은 정거장 수를 준다(차량 번호는 없다). 그래서
+///  1. 같은 기준 정류장으로 오는 차 중 남은 정거장이 같은(없으면 ±1) 차에 붙인다.
+///  2. 나머지 차는 붙인 값에서 나온 이 노선의 실제 속도(분/정거장)로 어림한다.
+///  3. 그것도 없으면 [fallback](시간대 가중치 어림).
+/// 예전엔 전부 3번이었다 — 22정거장 전 차를 40분으로 봤는데 API는 28분이었다.
+List<(double, bool)> resolveVehicleEtas({
+  required List<(int, String?)> vehicles,
+  required List<StopEta> etas,
+  required double Function(int remaining) fallback,
+}) {
+  final result = List<(double, bool)?>.filled(vehicles.length, null);
+  final paceByNode = <String, List<double>>{};
+
+  final sorted = [...etas]..sort((a, b) => a.seconds.compareTo(b.seconds));
+  for (final e in sorted) {
+    int? best;
+    var bestDiff = 2;
+    for (var i = 0; i < vehicles.length; i++) {
+      if (result[i] != null) continue;
+      final (remaining, nodeId) = vehicles[i];
+      if (nodeId != e.nodeId) continue;
+      final diff = (remaining - e.stopsAway).abs();
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = i;
+      }
+    }
+    if (best == null) continue;
+    result[best] = (e.seconds / 60.0, true);
+    if (e.stopsAway >= 1) {
+      paceByNode.putIfAbsent(e.nodeId, () => []).add(e.seconds / 60.0 / e.stopsAway);
+    }
+  }
+
+  double? avg(List<double>? xs) =>
+      (xs == null || xs.isEmpty) ? null : xs.reduce((a, b) => a + b) / xs.length;
+  final anyPace = avg([for (final l in paceByNode.values) ...l]);
+
+  return [
+    for (var i = 0; i < vehicles.length; i++)
+      result[i] ??
+          (() {
+            final (remaining, nodeId) = vehicles[i];
+            if (remaining <= 0) return (0.0, false);
+            final pace = avg(paceByNode[nodeId]) ?? anyPace;
+            return (pace != null ? remaining * pace : fallback(remaining), false);
+          })(),
+  ];
+}
+
+/// 버스 탭 구역 — 학생이 교원대·탑연삼거리에서 **어느 쪽으로 가려는지**로 나눈다.
+/// 예전엔 "상행(오송·조치원 방면) / 하행(청주 방면)"으로 갈랐는데, 513번의
+/// 상행은 청주에서 교원대로 들어오는 차라 오송 쪽 구역에 잘못 들어갔다.
+enum BusHeading {
+  cheongju('청주 방면', '시내·터미널·청주공항'),
+  osong('오송·조치원 방면', '오송역·조치원역·미호');
+
+  final String title;
+  final String subtitle;
+  const BusHeading(this.title, this.subtitle);
+}
+
+/// 노선·구역 → 그 구역에 넣을 방향들. 순수 함수 — 테스트 대상.
+///
+/// 교원대가 종점인 513·514는 들어오는 차가 그대로 돌아 청주로 나가고,
+/// 교원대에서 출발해 돌아오는 518은 돌아온 차가 다시 오송으로 나간다. 그래서
+/// 두 방향 모두 한 구역에 넣는다.
+List<BusDirection> busDirectionsFor(String routeNumber, BusHeading heading) {
+  switch (routeNumber) {
+    case '513':
+    case '514':
+      return heading == BusHeading.cheongju
+          ? const [BusDirection.outbound, BusDirection.inbound]
+          : const [];
+    case '518':
+      return heading == BusHeading.osong
+          ? const [BusDirection.outbound, BusDirection.inbound]
+          : const [];
+    default:
+      return [heading == BusHeading.osong ? BusDirection.outbound : BusDirection.inbound];
+  }
+}
+
+/// 두 방향을 한 카드로 보여 줄 때의 이름(513·514·518).
+String busCombinedLabel(String routeNumber) {
+  switch (routeNumber) {
+    case '513':
+    case '514':
+      return '청주행 · 교원대 종점';
+    case '518':
+      return '오송행 · 교원대 출발';
+    default:
+      return '';
+  }
+}
+
+/// 노선 한 줄 설명 — 기점 ↔ 반환점(노선 스냅샷의 상행 끝). 예: "정하 ↔ 오송역종점".
+String busRouteSummary(String routeNumber) {
+  final cfg = busRouteConfig(routeNumber);
+  final stops = cfg == null ? null : kRouteStopsSnapshot[cfg.routeId];
+  if (stops == null || stops.isEmpty) return '';
+  final up = stops.where((s) => s.upDownCd == 0).toList();
+  final turn = up.isEmpty ? stops.last : up.last;
+  return '${stops.first.nodeName} ↔ ${turn.nodeName}';
+}
+
+
+/// 시간표 탭에서 보고 있는 시간표가 오늘 것인지 — 지나간 버스에 줄을 긋고
+/// "오늘 운행이 끝났어요"를 띄울지 정한다. 평일 밤에 휴일 시간표를 열었는데
+/// 전부 "출발함"이 되던 것을 막는다. 913은 요일 구분이 없다. 순수 함수 — 테스트 대상.
+bool isTodaysTimetable({
+  required String route,
+  required bool viewingHoliday,
+  required DateTime now,
+}) {
+  if (route == '913') return true;
+  return viewingHoliday == (now.weekday >= DateTime.saturday);
+}
+
+// ── 정류장 표시 이름 (2026-11-12) ─────────────────────────────────────
+
+/// 자주 타는 정류장은 번호 대신 "~ 방면"(다음 정류장)으로 보여 준다. 정류장
+/// 번호(표지판 숫자)만으론 어느 쪽인지 알기 어렵다. 같은 이름이 길 양쪽에
+/// 있어서(한국교원대정문 3333·2107, 월탄1리 3330·3331, 탑연삼거리 3308·3309)
+/// 이걸로 가른다. 정류장 id로 찾는다 — 번호는 세종 정류장과 겹친다(3309).
+/// 이름은 사용자가 정했다(3308 = 궁평3리 방면). 3330은 사용자가 "월탄1리 방면"이라
+/// 했지만 그 정류장이 월탄1리라 다음 정류장(한국교원대학교)으로 적었다.
+const Map<String, String> kStopHeadingLabels = {
+  'CJB271000403': '교원대 후문 방면', // 월탄1리 3331
+  'CJB271000381': '교원대 방면', // 월탄1리 3330
+  'CJB271000402': '월탄1리 방면', // 한국교원대정문 3333
+  'CJB271000424': '다락1리 방면', // 한국교원대정문 2107 (913)
+  'CJB274000278': '한국교원대 방면', // 한국교원대학교입구 4031
+  'CJB274000277': '궁평3리 방면', // 탑연삼거리 3308 (오송 쪽)
+  'CJB271000389': '월곡초등학교 방면', // 탑연삼거리 3309 (청주 쪽)
+  'CJB271000392': '종점 · 내리는 곳', // 한국교원대학교 3334
+  'CJB274000172': '정문 방면 · 타는 곳', // 한국교원대학교 2633
+};
+
+/// 교원대 종점 두 정류장 — 버스 카드에선 번호도 방면도 없이 "교원대"로.
+const Set<String> _kCampusTerminalStops = {'CJB271000392', 'CJB274000172'};
+
+/// 정류장 곁말 — "월탄1리 방면", 없으면 표지판 번호. 순수 함수 — 테스트 대상.
+String stopHeadingOrNumber(String nodeId, String? nodeNo) =>
+    kStopHeadingLabels[nodeId] ?? nodeNo ?? '';
+
+/// 버스 카드의 기준 정류장 — "교원대", "탑연삼거리(월곡초등학교 방면)".
+String busTargetStopShort(RouteStop s) {
+  if (_kCampusTerminalStops.contains(s.nodeId)) return '교원대';
+  final heading = kStopHeadingLabels[s.nodeId];
+  if (heading != null) return '${s.nodeName}($heading)';
+  return s.nodeNo == null ? s.nodeName : '${s.nodeName} ${s.nodeNo}';
+}
+
+// ── 교원대 종점으로 들어오는 차 (2026-11-12) ────────────────────────────
+
+/// 종점 직전 정류장을 지나면 위치 API에서 사라지는 노선과 방향. 513·514는
+/// 월탄1리를 지나 교원대(종점)로 들어가면 위치가 끊긴다(사용자 관찰). 그래서
+/// 월탄1리를 지나고 [kTerminalApproachTime] 뒤에 교원대에 닿는다고 보고 이어서
+/// 보여 준다.
+const Map<String, BusDirection> kTerminalApproachRoutes = {
+  '513': BusDirection.outbound,
+  '514': BusDirection.outbound,
+};
+const Duration kTerminalApproachTime = Duration(minutes: 3);
+
+/// 교원대에 닿은 뒤 "도착"으로 남겨 두는 시간.
+const Duration kTerminalArrivedHold = Duration(minutes: 2);
+
+/// 지난 공용 문서([previous], [previousAt]에 쓴 것)와 이번 위치([current])를
+/// 이어 붙인다. 순수 함수 — 테스트 대상.
+///
+/// 1. 같은 차(차량 번호)가 같은 정류장에 그대로 있으면 처음 보인 시각을 이어
+///    받는다(새로 보이면 지금).
+/// 2. 종점으로 들어오는 노선([kTerminalApproachRoutes])에서 종점 한 정거장 전
+///    차는 "그 정류장에 처음 보인 뒤 3분"으로 도착 시간을 정한다.
+/// 3. 지난번에 종점 한 정거장 전(또는 이미 이어 붙인 차)이었는데 이번에
+///    사라진 차는 3분까지 "곧 도착", 그 뒤 2분은 "도착"으로 남긴다.
+List<BusArrival> carryTerminalApproach({
+  required String routeNumber,
+  required List<BusArrival> previous,
+  required DateTime? previousAt,
+  required List<BusArrival> current,
+  required DateTime now,
+}) {
+  BusArrival? prevOf(BusArrival a) {
+    final v = a.vehicleNo?.trim() ?? '';
+    if (v.isEmpty) return null;
+    for (final p in previous) {
+      if ((p.vehicleNo?.trim() ?? '') == v) return p;
+    }
+    return null;
+  }
+
+  final stamped = [
+    for (final c in current)
+      (() {
+        final p = prevOf(c);
+        final since = (p != null && p.nodeOrd == c.nodeOrd)
+            ? (p.atStopSince ?? previousAt ?? now)
+            : now;
+        return c.copyWith(atStopSince: since);
+      })(),
+  ];
+
+  final dir = kTerminalApproachRoutes[routeNumber];
+  if (dir == null) return stamped;
+
+  double minutesLeft(DateTime since) {
+    final left = kTerminalApproachTime - now.difference(since);
+    return left.isNegative ? 0 : left.inSeconds / 60.0;
+  }
+
+  // 2. 종점 한 정거장 전 차: 지난 뒤 3분
+  final out = [
+    for (final c in stamped)
+      (c.direction == dir && c.remainStops == 1)
+          ? c.copyWith(estimatedMinutes: minutesLeft(c.atStopSince!), etaFromApi: false)
+          : c,
+  ];
+
+  // 3. 사라진 차 이어 붙이기
+  final present = {
+    for (final c in current)
+      if ((c.vehicleNo?.trim() ?? '').isNotEmpty) c.vehicleNo!.trim(),
+  };
+  TargetStopOrd? terminal;
+  for (final t in snapshotTargetsFor(routeNumber)) {
+    if (t.dir == dir) terminal = t;
+  }
+  for (final p in previous) {
+    final v = p.vehicleNo?.trim() ?? '';
+    if (v.isEmpty || present.contains(v)) continue;
+    if (p.direction != dir || p.remainStops > 1) continue;
+    final since = p.atStopSince ?? previousAt;
+    if (since == null) continue;
+    final elapsed = now.difference(since);
+    if (elapsed < kTerminalApproachTime) {
+      out.add(p.copyWith(
+        remainStops: 1,
+        estimatedMinutes: minutesLeft(since),
+        etaFromApi: false,
+        atStopSince: since,
+      ));
+    } else if (elapsed < kTerminalApproachTime + kTerminalArrivedHold) {
+      out.add(p.copyWith(
+        remainStops: 0,
+        currentStopName: '한국교원대학교',
+        nodeOrd: terminal?.ord,
+        estimatedMinutes: 0,
+        etaFromApi: false,
+        atStopSince: since,
+      ));
+    }
+  }
+  return out;
+}

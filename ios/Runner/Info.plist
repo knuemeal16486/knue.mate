@@ -61,7 +61,7 @@
 		<key>UIApplicationSupportsIndirectInputEvents</key>
 		<true/>
 		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-		<string>캠퍼스런 기능을 위해 사용자의 현재 위치와 속도를 계산하는 데 위치 정보가 필요합니다.</string>
+		<string>캠퍼스런 기록(위치·속도)과 버스 탭의 가까운 정류장 찾기에 위치 정보가 필요합니다.</string>
 		<key>LSApplicationQueriesSchemes</key>
 		<array>
 			<string>mailto</string>
@@ -71,7 +71,7 @@
 			<string>sms</string>
 		</array>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>캠퍼스 런 기능을 위해 사용자의 현재 위치를 확인합니다.</string>
+		<string>캠퍼스 런 기록과 버스 탭의 가까운 정류장 찾기에 현재 위치를 사용합니다.</string>
 		<key>NSLocationAlwaysUsageDescription</key>
 		<string>캠퍼스런 기능을 위해 백그라운드에서도 사용자의 위치 정보가 필요합니다.</string>
 		<key>ITSAppUsesNonExemptEncryption</key>

@@ -253,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // 1) 고정해둔 노선이 있으면 실시간 위치를 먼저 본다. 탑연삼거리 경유
       //    노선은 시간표만으론 쓸모가 없다 — 청주에서 출발해 오는 차라
       //    "지금 어디쯤인지"가 곧 탈 수 있느냐를 가른다.
-      //    fetchAllBuses()는 오프라인·메모리·Firestore 캐시를 차례로 타므로
+      //    fetchAllBuses()는 메모리·Firestore 공용 문서를 차례로 타므로
       //    버스 탭과 캐시를 공유한다(홈 때문에 API를 더 두드리지 않는다).
       if (favorites.isNotEmpty) {
         // 실시간 조회 실패(키 누락·네트워크·API 장애)는 여기서 삼키고 아래
@@ -1019,9 +1019,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 3),
-          _buildHeroBusDirectionRow("↑", _busUpNext),
+          // 화살표(↑↓) 대신 행선지 — 노선마다 "상행"의 뜻이 달라 화살표로는
+          // 어느 쪽인지 알 수 없었다.
+          _buildHeroBusDirectionRow(
+            busDirectionLabel(_busRoute ?? '', BusDirection.outbound),
+            _busUpNext,
+          ),
           const SizedBox(height: 2),
-          _buildHeroBusDirectionRow("↓", _busDownNext),
+          _buildHeroBusDirectionRow(
+            busDirectionLabel(_busRoute ?? '', BusDirection.inbound),
+            _busDownNext,
+          ),
         ],
       );
     }
@@ -1055,13 +1063,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 실시간 타일의 방향 한 줄: "↑ 4분 · 석소".
   /// 그 방향으로 오는 차가 없으면 흐리게 "-"만 남겨, 두 줄 높이를 유지한다
   /// (한쪽만 있을 때 타일 높이가 들쭉날쭉하지 않게).
-  Widget _buildHeroBusDirectionRow(String arrow, BusArrival? arrival) {
+  Widget _buildHeroBusDirectionRow(String label, BusArrival? arrival) {
     final faded = Colors.white.withValues(alpha: 0.45);
     if (arrival == null) {
       return Row(
         children: [
           Text(
-            arrow,
+            label,
             style: TextStyle(fontSize: 10.5, color: faded),
           ),
           const SizedBox(width: 4),
@@ -1081,7 +1089,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Row(
       children: [
         Text(
-          arrow,
+          label,
           style: const TextStyle(
             fontSize: 10.5,
             fontWeight: FontWeight.w700,

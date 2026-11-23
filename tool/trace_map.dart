@@ -18,6 +18,8 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
+import 'package:knue_mate/footpath_clean.dart';
+import 'package:knue_mate/stall_align.dart';
 import 'map_trace_lib.dart';
 
 const kScale = 0.619; // m/px
@@ -732,6 +734,303 @@ void main() {
   }
   outers.sort((a, b) => polyArea(b).compareTo(polyArea(a)));
 
+  // ── 5-2. 교내 포장면 전체 ─────────────────────────────────────
+  // 위의 포장면은 OSM 도로가 덮는 통로를 뺀 **조각**이다. 그것만 칠하면 교내가
+  // 파란 바탕에 길과 건물만 뜬 것처럼 휑하다 — 캡처는 광장·건물 앞마당·
+  // 주차장 바닥·보행로가 한 덩어리 크림색 면으로 이어져 있다.
+  //
+  // 그래서 **빼지 않은** 교내 포장면을 따로 낸다. 앱은 이걸 도로(흰색)와 다른
+  // 색으로 도로 **아래**에 깐다. 색이 다르니 도로선 옆으로 나온 가장자리는
+  // 톱니가 아니라 보도·마당으로 읽힌다(같은 흰색일 때는 톱니로 보였다).
+  final fullIn = Mask(gw, gh);
+  for (var i = 0; i < fullIn.bits.length; i++) {
+    // 주차 구획선(빗살)도 포장면이다. 빼 두면 주차장 가장자리가 빗처럼
+    // 이빨이 난다 — 구획선은 앱이 따로 긋는다.
+    fullIn.bits[i] = ((L.pave.bits[i] != 0 || L.mark.bits[i] != 0) &&
+            inCampus.bits[i] != 0 &&
+            notRoad.bits[i] == 0)
+        ? 1
+        : 0;
+  }
+  // 면은 [fullIn](포장 픽셀)에서 뜨지 않는다. 포장 픽셀은 건물·이름표 글씨·
+  // 마커가 있는 자리가 비어 있어서, 건물 둘레와 글씨 자리마다 가장자리가 뜯겨
+  // **계단처럼** 보였다(우리가 세운 건물 모양은 캡처와 조금 달라 그 틈으로
+  // 바탕이 비쳤다). 캡처에서 반듯하게 그려진 건 포장면이 아니라 **잔디·화단
+  // (학교용지 바탕색) 쪽 경계**다. 그래서 거꾸로 낸다:
+  //
+  //   포장면 = 부지 − (바탕색 덩어리 ∪ 녹지 ∪ 물)
+  //
+  // 건물·글씨·마커 자리는 포장면에 든다 — 건물은 어차피 그 위에 그린다.
+  // 바탕색 위의 글씨·마커가 낸 작은 구멍과 건물 외곽선(1픽셀)은 메우고 지운다.
+  // 폭 2m 안팎의 샛길은 이때 바탕에 묻힌다 — 샛길은 5-5에서 선으로 따로 낸다.
+  final lawn = openM(closeM(L.campus & inCampus, 4), 3);
+  {
+    // 바탕색에 둘러싸인 섬 가운데 **포장도 건물도 아닌 것**은 바탕으로 친다 —
+    // 바탕 위에 얹힌 이름표 글씨·마커다(실측: 포장 4~18%, 건물색 0~10%.
+    // 진짜 포장 섬은 포장 64~94%, 건물·시설 바닥은 건물색 80%).
+    // 아주 작은 섬(225㎡ 미만)은 무엇이든 바탕으로 친다.
+    final island = lawn.inverted & inCampus;
+    final il = label4(island, minArea: 1);
+    final solid = List<int>.filled(il.count, 0);
+    for (var i = 0; i < island.bits.length; i++) {
+      final id = il.labels[i];
+      if (id > 0 && (L.pave.bits[i] != 0 || L.pale.bits[i] != 0)) solid[id - 1]++;
+    }
+    for (var i = 0; i < island.bits.length; i++) {
+      final id = il.labels[i];
+      if (id <= 0) continue;
+      final area = il.area[id - 1];
+      if (area < 2500 || (area < 120000 && solid[id - 1] < area * 0.4)) {
+        lawn.bits[i] = 1;
+      }
+    }
+  }
+  final softGreen = closeM(L.green & inCampus, 2);
+  final fullSrc = Mask(gw, gh);
+  for (var i = 0; i < fullSrc.bits.length; i++) {
+    fullSrc.bits[i] = (inCampus.bits[i] != 0 &&
+            lawn.bits[i] == 0 &&
+            softGreen.bits[i] == 0 &&
+            L.water.bits[i] == 0)
+        ? 1
+        : 0;
+  }
+  final full = openM(closeM(fullSrc, 3), 3);
+  final fullOuters = <List<Pt>>[];
+  final fullHoles = <List<Pt>>[];
+  final fl = label4(full, minArea: 700); // 700셀 ≈ 63㎡
+  for (var id = 1; id <= fl.count; id++) {
+    if (fl.area[id - 1] < 700) continue;
+    const pad = 11;
+    final crop = fl.crop(id, pad: pad);
+    final o = fl.cropOrigin(id, pad: pad);
+    // 광장 조각(위)보다 세게 편다. 이 면은 도로 아래 깔리는 **바탕**이라
+    // 가장자리 한두 뼘의 충실도보다 계단이 안 보이는 쪽이 중요하다.
+    final loops = traceSmooth(crop, blurR: 0, blurN: 1, round: 0,
+        preEps: 3.4, minLoopArea: 220); // 220셀² ≈ 20㎡
+    for (var k = 0; k < loops.length; k++) {
+      final w = deSpike(straighten([
+        for (final p in loops[k])
+          Pt(ox + (p.x + o[0]) * res, oy + (p.y + o[1]) * res)
+      ], mergeDeg: 40, maxOffset: 2.2, minEdge: 2.5));
+      final thin = isSliver(w, maxWidth: 1.5, minLength: 12);
+      if (k == 0 && thin) break;
+      if (thin) continue;
+      (k == 0 ? fullOuters : fullHoles).add(w);
+    }
+  }
+  fullOuters.sort((a, b) => polyArea(b).compareTo(polyArea(a)));
+  stdout.writeln('교내 포장면 전체 ${(full.count * res * res).round()}㎡ · '
+      '외곽 ${fullOuters.length} 구멍 ${fullHoles.length} 점 '
+      '${fullOuters.fold<int>(0, (a, r) => a + r.length) + fullHoles.fold<int>(0, (a, r) => a + r.length)}');
+
+  // ── 5-3. 코트·운동장 ──────────────────────────────────────────
+  // 캡처의 테니스 코트·풋살장·축구장은 **반듯한 초록 직사각형**에 선이 그어진
+  // 것이다. 녹지(greens)는 잔디를 뭉쳐 다듬은 덩어리라 코트가 하나로 붙거나
+  // 울퉁불퉁해지고, 1픽셀짜리 코트 선은 면으로는 못 뜬다. 그래서 직사각형을
+  // **중심·길이·폭·각도**로만 재 두고, 선은 앱이 규격대로 긋는다.
+  final courts = <Map<String, dynamic>>[];
+  {
+    // 코트 안의 선(조금 어두운 초록, 1픽셀≈2셀)은 메우되 옆 코트와의 틈
+    // (3픽셀≈6셀)은 남긴다.
+    // 코트 위에 얹힌 이름표 글씨("농구장")가 뚫어 놓은 구멍도 메운다.
+    final g = fillHoles(closeM(L.green & inCampus, 2));
+    final gl = label4(g, minArea: 900); // 900셀 ≈ 81㎡
+    for (var id = 1; id <= gl.count; id++) {
+      if (gl.area[id - 1] < 900) continue;
+      final box = fitBox(gl, id);
+      // 직사각형을 얼마나 채우나. 잔디밭·화단은 모양이 제멋대로라 낮다.
+      stdout.writeln('  초록 (${box.cx.round()}, ${box.cy.round()}) '
+          '${box.len.toStringAsFixed(1)}x${box.wid.toStringAsFixed(1)}m '
+          '${(box.ang * 180 / math.pi).round()}° 채움 ${(box.fill * 100).round()}%');
+      // (가장자리 계단 때문에 반듯한 코트도 86~96%로 나온다.)
+      if (box.fill < 0.84) continue;
+      if (box.wid < 8 || box.len > 130) continue;
+      courts.add({
+        'c': [_r1(box.cx), _r1(box.cy)],
+        'l': _r1(box.len),
+        'w': _r1(box.wid),
+        'a': (box.ang * 1000).round() / 1000,
+      });
+    }
+  }
+
+  // 이름표 글씨에 가려 초록이 조각난 코트. 캡처에 글씨가 박혀 있어 자동으로는
+  // 못 잡는다. 조각의 위치·크기와 옆 코트의 규격으로 사람이 채운 값이다.
+  //   · "테니스장" 두 면 — 옆 줄 코트(23.8×12.7m, 58°)와 같은 규격·같은 간격.
+  //   · "농구장" — 조각 전체의 경계상자(29.1×17.3m, 65°).
+  const hidden = <List<double>>[
+    [662, 374, 23.8, 12.7, 1.012],
+    [650, 381, 23.8, 12.7, 1.012],
+    [517, 72, 29.1, 17.3, 1.134],
+  ];
+  for (final h in hidden) {
+    courts.add({
+      'c': [h[0], h[1]],
+      'l': h[2],
+      'w': h[3],
+      'a': h[4],
+    });
+  }
+
+  // ── 5-4. 주차 구획(사다리 띠) ─────────────────────────────────
+  // 캡처의 주차칸은 **폭 3m쯤의 사다리**(양쪽 줄 + 촘촘한 가로대)로 길을 따라
+  // 놓여 있다. 예전엔 넓은 주차장 면을 찾아 그 안을 가로·세로 빗살로 채웠는데
+  // (구역 7곳), 길가의 사다리 띠는 창(8m)보다 좁아 밀도 문턱에 안 걸렸고
+  // 방향도 0°/90°로만 재서 비스듬한 교내와 어긋났다.
+  //
+  // 사다리를 한 덩어리 띠로 메운 뒤 띠마다 방향·길이·폭을 잰다. 굽은 띠는
+  // 반으로 쪼개 가며 곧은 토막으로 나눈다. 가로대는 앱이 간격대로 긋는다.
+  final strips = <Map<String, dynamic>>[];
+  final rawStrips = <StallStrip>[];
+  //
+  // [markIn]이 아니라 건물 근처를 빼지 않은 구획선을 쓴다. JPEG 캡처(core)는
+  // 사다리 칸 안쪽이 번져 건물 채움색으로 읽히는데, markIn은 건물색 1.8m 안의
+  // 선을 버리므로 **사다리가 통째로 사라진다**(core의 길가 주차칸이 그랬다).
+  // 건물 가장자리에 걸린 낱선은 한 줄뿐이라 아래 열기에서 걸러진다.
+  final markAll = L.mark & inCampus;
+  final stripBand = openM(closeM(markAll, 3), 2);
+  var stripLen = 0.0;
+  var stripsOnRoad = 0;
+  // 띠는 얼룩에 맞춘 직사각형이라 방향·위치가 조금씩 흔들린다. 차도(OSM)는
+  // 반듯하니 가까운 차도의 방향·가장자리에 맞춘다(lib/stall_align.dart).
+  final carRoads = osmCarRoads();
+  {
+    final sl = label4(stripBand, minArea: 250); // 250셀 ≈ 22㎡
+    for (var id = 1; id <= sl.count; id++) {
+      if (sl.area[id - 1] < 250) continue;
+      final xs = <int>[], ys = <int>[];
+      for (var y = sl.minY[id - 1]; y <= sl.maxY[id - 1]; y++) {
+        for (var x = sl.minX[id - 1]; x <= sl.maxX[id - 1]; x++) {
+          if (sl.labels[y * gw + x] == id) {
+            xs.add(x);
+            ys.add(y);
+          }
+        }
+      }
+      for (final box in splitBoxes(xs, ys)) {
+        if (box.wid < 1.8 || box.wid > 7.5 || box.len < 5) continue;
+        if (box.len / box.wid < 1.6) continue; // 띠가 아니라 얼룩
+        // 운동시설 바닥(체육관 옆 코트의 선)이 사다리처럼 잡힌 것은 뺀다.
+        if (facils.any((f) => pip(f, box.cx, box.cy))) continue;
+        stripLen += box.len;
+        rawStrips.add(
+          (cx: box.cx, cy: box.cy, len: box.len, wid: box.wid, ang: box.ang),
+        );
+      }
+    }
+    // 코트 바닥의 선이 사다리처럼 잡힌 것은 뺀다(이름표에 가려 손으로 채운
+    // 코트는 운동시설 면에 안 들어 있어 위의 검사를 빠져나온다).
+    final courtBoxes = [
+      for (final c in courts)
+        (
+          cx: ((c['c'] as List)[0] as num).toDouble(),
+          cy: ((c['c'] as List)[1] as num).toDouble(),
+          len: (c['l'] as num).toDouble(),
+          wid: (c['w'] as num).toDouble(),
+          ang: (c['a'] as num).toDouble(),
+        ),
+    ];
+    final aligned = dropStripsOnCourts(
+      alignStallStrips(rawStrips, carRoads),
+      courtBoxes,
+    );
+    stripsOnRoad = rawStrips.length - aligned.length;
+    for (final al in aligned) {
+      strips.add({
+        'c': [_r2(al.cx), _r2(al.cy)],
+        'l': _r1(al.len),
+        'w': _r1(al.wid),
+        'a': (al.ang * 10000).round() / 10000,
+      });
+    }
+  }
+  stdout.writeln('코트 ${courts.length}  주차 띠 ${strips.length} '
+      '(총 길이 ${stripLen.round()}m, 겹쳐서 합친 것 $stripsOnRoad)');
+
+  // ── 5-5. 샛길 ─────────────────────────────────────────────────
+  // 폭 2m 안팎의 가는 길은 포장면을 다듬을 때(열기·실오라기 제거) 사라진다.
+  // 포장면에서 **넓은 곳을 뺀 나머지 가는 부분**을 따로 뜬다.
+  //
+  // 면으로 뜨면 안 된다 — 3픽셀짜리 길은 가장자리 번짐 때문에 군데군데 끊기고
+  // 울퉁불퉁해서, 외곽선을 따면 얼룩 조각이 된다. 뼈대(가운데 선)만 남겨
+  // **선**으로 내고, 폭은 앱이 일정하게 준다.
+  //
+  // OSM 도로·보행로가 이미 지나는 자리는 뺀다(그 길은 앱이 따로 그린다).
+  final paths = <List<Pt>>[];
+  var pathLen = 0.0;
+  {
+    final base = closeM(fullIn, 1);
+    final wide = dilate(openM(base, 6), 3); // 폭 3.9m 넘는 곳 + 가장자리 여유
+    final ladders = dilate(stripBand, 3);
+    final osm = dilate(osmCorridor(), 2);
+    final thinRaw = Mask(gw, gh);
+    for (var i = 0; i < thinRaw.bits.length; i++) {
+      thinRaw.bits[i] = (base.bits[i] != 0 &&
+              wide.bits[i] == 0 &&
+              ladders.bits[i] == 0 &&
+              osm.bits[i] == 0)
+          ? 1
+          : 0;
+    }
+    // 번짐으로 끊긴 한두 셀 틈을 잇는다.
+    final thin = closeM(thinRaw, 2);
+    final tl = label4(thin, minArea: 120); // 120셀 ≈ 11㎡
+    for (var id = 1; id <= tl.count; id++) {
+      final k = id - 1;
+      if (tl.area[k] < 120) continue;
+      final dw = (tl.maxX[k] - tl.minX[k] + 1) * res;
+      final dh = (tl.maxY[k] - tl.minY[k] + 1) * res;
+      final diag = math.sqrt(dw * dw + dh * dh);
+      if (diag < 14) continue; // 넓은 면 가장자리에 남은 부스러기
+      // 평균 폭 = 넓이 / 길이(대각선으로 어림). 너무 굵으면 길이 아니다.
+      if (tl.area[k] * res * res / diag > 5) continue;
+      const pad = 2;
+      final crop = tl.crop(id, pad: pad);
+      final o = tl.cropOrigin(id, pad: pad);
+      for (final line in skeletonLines(crop)) {
+        // 뼈대의 계단·잔물결을 타 넘고(3셀 = 0.9m) 모서리를 두 번 깎아 굽이를 살린다.
+        final world = smoothOpen(simplify(line, 3.0), 2)
+            .map((q) => Pt(ox + (q.x + o[0]) * res, oy + (q.y + o[1]) * res))
+            .toList();
+        var len = 0.0;
+        for (var i = 0; i + 1 < world.length; i++) {
+          len += math.sqrt(math.pow(world[i + 1].x - world[i].x, 2) +
+              math.pow(world[i + 1].y - world[i].y, 2));
+        }
+        if (len < 9) continue; // 곁가지·부스러기
+        pathLen += len;
+        paths.add(world);
+      }
+    }
+  }
+  // 뼈대를 다듬는다(lib/footpath_clean.dart): OSM 길 옆에 나란히 뜬 그림자를
+  // 빼고, 끊긴 토막을 잇고, 어디에도 닿지 않는 부스러기를 뺀다.
+  final rawPathCount = paths.length;
+  {
+    // 도로·포장면에서 4m 안이면 "닿아 있다".
+    final anchor = dilate(full | osmCorridor(), 13);
+    bool anchored(double x, double y) {
+      final cx = ((x - ox) / res).round(), cy = ((y - oy) / res).round();
+      return cx >= 0 && cy >= 0 && cx < gw && cy < gh && anchor.bits[cy * gw + cx] != 0;
+    }
+
+    var lines = [
+      for (final l in paths) [for (final q in l) (q.x, q.y)],
+    ];
+    lines = dropRoadShadows(lines, osmRoadLines((_, _) => true));
+    lines = joinPolylines(lines);
+    lines = dropIsolatedPaths(lines, anchored: anchored);
+    paths
+      ..clear()
+      ..addAll([
+        for (final l in lines) [for (final q in l) Pt(q.$1, q.$2)],
+      ]);
+    pathLen = lines.fold(0.0, (a, l) => a + polylineLength(l));
+  }
+  stdout.writeln('샛길 ${paths.length}줄 · ${pathLen.round()}m '
+      '(다듬기 전 $rawPathCount줄)');
+
   stdout.writeln('건물 ${blds.length}  운동시설 ${facils.length}  '
       '주차장 ${parks.length}  녹지 ${greens.length}  수면 ${waters.length}');
   stdout.writeln('포장면 외곽 ${outers.length}  구멍 ${holes.length}  '
@@ -876,9 +1175,37 @@ void main() {
     }
   }
 
+  // 횡단보도는 차도 위의 것만 남겨 도로를 가로지르게 돌린다
+  // (lib/stall_align.dart `snapCrosswalks`).
+  final rawCrosswalks = crosswalks.length;
+  {
+    final snapped = snapCrosswalks([
+      for (final c in crosswalks)
+        (
+          cx: ((c['c'] as List)[0] as num).toDouble(),
+          cy: ((c['c'] as List)[1] as num).toDouble(),
+          wid: (c['w'] as num).toDouble(),
+          len: (c['l'] as num).toDouble(),
+          angDeg: (c['a'] as num).toDouble(),
+        ),
+    ], osmCarRoads());
+    crosswalks
+      ..clear()
+      ..addAll([
+        for (final c in snapped)
+          {
+            'c': [_r1(c.cx), _r1(c.cy)],
+            'w': _r1(c.wid),
+            'l': _r1(c.len),
+            'a': _r1(c.angDeg),
+          },
+      ]);
+  }
+
   final pois = extractPois();
   stdout.writeln('국도 ${majors.length}  주차칸 ${stalls.length}구역  '
-      '횡단보도 ${crosswalks.length}  POI ${pois.length}');
+      '횡단보도 ${crosswalks.length}(도로 밖 ${rawCrosswalks - crosswalks.length} 뺌)  '
+      'POI ${pois.length}');
 
   // ── 6.5 필드 라인 ─────────────────────────────────────────────
   // 잔디 폴리곤 **안쪽**의 초록 아닌 밝은 픽셀 = 축구장 선·트랙 레인·코트 라인.
@@ -971,8 +1298,237 @@ void main() {
       ' | 직선펴기 포기 $straightenGaveUp/$straightenTried');
 
   emit(boundary, greens, greenOutside, waters, facils, parks, blds, outers, holes, majors,
-      fieldLines, stalls, crosswalks, pois);
+      fieldLines, stalls, crosswalks, pois, fullOuters, fullHoles,
+      courts, strips, paths);
   debugPng(L, road, parkMask, boundary, blds, facils, parks);
+}
+
+/// 기울어진 직사각형. 중심·긴 변·짧은 변(m)과 긴 변의 방향(라디안),
+/// 그리고 그 직사각형을 실제 셀이 얼마나 채우는지.
+class OBox {
+  final double cx, cy, len, wid, ang, fill;
+  const OBox(this.cx, this.cy, this.len, this.wid, this.ang, this.fill);
+}
+
+/// 셀 좌표 뭉치에 맞는 직사각형. 방향은 주성분(가장 길게 퍼진 축)이다.
+OBox fitCells(List<int> xs, List<int> ys) {
+  final n = xs.length;
+  var mx = 0.0, my = 0.0;
+  for (var i = 0; i < n; i++) {
+    mx += xs[i];
+    my += ys[i];
+  }
+  mx /= n;
+  my /= n;
+  var sxx = 0.0, syy = 0.0, sxy = 0.0;
+  for (var i = 0; i < n; i++) {
+    final dx = xs[i] - mx, dy = ys[i] - my;
+    sxx += dx * dx;
+    syy += dy * dy;
+    sxy += dx * dy;
+  }
+  final ang = 0.5 * math.atan2(2 * sxy, sxx - syy);
+  final c = math.cos(ang), s = math.sin(ang);
+  var u0 = double.infinity, u1 = -double.infinity;
+  var v0 = double.infinity, v1 = -double.infinity;
+  for (var i = 0; i < n; i++) {
+    final dx = xs[i] - mx, dy = ys[i] - my;
+    final u = dx * c + dy * s, v = -dx * s + dy * c;
+    if (u < u0) u0 = u;
+    if (u > u1) u1 = u;
+    if (v < v0) v0 = v;
+    if (v > v1) v1 = v;
+  }
+  final lenC = u1 - u0 + 1, widC = v1 - v0 + 1;
+  final uc = (u0 + u1) / 2, vc = (v0 + v1) / 2;
+  return OBox(
+    ox + (mx + uc * c - vc * s) * res,
+    oy + (my + uc * s + vc * c) * res,
+    lenC * res,
+    widC * res,
+    ang,
+    n / (lenC * widC),
+  );
+}
+
+OBox fitBox(Labeling l, int id) {
+  final xs = <int>[], ys = <int>[];
+  for (var y = l.minY[id - 1]; y <= l.maxY[id - 1]; y++) {
+    for (var x = l.minX[id - 1]; x <= l.maxX[id - 1]; x++) {
+      if (l.labels[y * l.w + x] == id) {
+        xs.add(x);
+        ys.add(y);
+      }
+    }
+  }
+  return fitCells(xs, ys);
+}
+
+/// 굽은 띠를 곧은 토막들로 나눈다. 직사각형을 잘 채우거나(곧다) 충분히
+/// 짧아질 때까지 긴 축의 가운데에서 반으로 쪼갠다.
+List<OBox> splitBoxes(List<int> xs, List<int> ys, [int depth = 0]) {
+  final box = fitCells(xs, ys);
+  if (box.fill >= 0.7 || box.len < 12 || depth >= 5 || xs.length < 120) {
+    return [box];
+  }
+  final c = math.cos(box.ang), s = math.sin(box.ang);
+  final cxC = (box.cx - ox) / res, cyC = (box.cy - oy) / res;
+  final ax = <int>[], ay = <int>[], bx = <int>[], by = <int>[];
+  for (var i = 0; i < xs.length; i++) {
+    final u = (xs[i] - cxC) * c + (ys[i] - cyC) * s;
+    if (u < 0) {
+      ax.add(xs[i]);
+      ay.add(ys[i]);
+    } else {
+      bx.add(xs[i]);
+      by.add(ys[i]);
+    }
+  }
+  if (ax.length < 40 || bx.length < 40) return [box];
+  return [...splitBoxes(ax, ay, depth + 1), ...splitBoxes(bx, by, depth + 1)];
+}
+
+/// 마스크를 한 셀 굵기의 뼈대로 깎는다(Zhang–Suen 세선화).
+Mask thinning(Mask src) {
+  final m = src.clone();
+  final w = m.w, h = m.h;
+  int at(int x, int y) =>
+      (x < 0 || y < 0 || x >= w || y >= h) ? 0 : m.bits[y * w + x];
+  var changed = true;
+  while (changed) {
+    changed = false;
+    for (var pass = 0; pass < 2; pass++) {
+      final kill = <int>[];
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          if (m.bits[y * w + x] == 0) continue;
+          final p2 = at(x, y - 1), p3 = at(x + 1, y - 1), p4 = at(x + 1, y);
+          final p5 = at(x + 1, y + 1), p6 = at(x, y + 1), p7 = at(x - 1, y + 1);
+          final p8 = at(x - 1, y), p9 = at(x - 1, y - 1);
+          final n = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+          if (n < 2 || n > 6) continue;
+          final seq = [p2, p3, p4, p5, p6, p7, p8, p9, p2];
+          var trans = 0;
+          for (var i = 0; i < 8; i++) {
+            if (seq[i] == 0 && seq[i + 1] == 1) trans++;
+          }
+          if (trans != 1) continue;
+          if (pass == 0) {
+            if (p2 * p4 * p6 != 0 || p4 * p6 * p8 != 0) continue;
+          } else {
+            if (p2 * p4 * p8 != 0 || p2 * p6 * p8 != 0) continue;
+          }
+          kill.add(y * w + x);
+        }
+      }
+      for (final i in kill) {
+        m.bits[i] = 0;
+      }
+      if (kill.isNotEmpty) changed = true;
+    }
+  }
+  return m;
+}
+
+/// 마스크의 뼈대를 꺾은선들로 낸다(셀 좌표).
+///
+/// 뼈대 덩어리마다 **가장 긴 줄기**(양 끝이 가장 먼 두 셀 사이의 길)를 뽑고,
+/// 그 줄기를 지운 뒤 남은 가지에서 같은 일을 되풀이한다.
+///
+/// 처음엔 "이웃이 둘이 아닌 셀"을 마디로 보고 마디 사이를 끊었다. 세선화는
+/// 비스듬한 길에서 계단 모양 두 셀짜리 마디를 줄줄이 남기기 때문에 100m짜리
+/// 길이 몇 m짜리 토막 수십 개로 쪼개졌고, 짧은 토막을 버리자 길이 사라졌다.
+List<List<Pt>> skeletonLines(Mask src) {
+  final m = thinning(src);
+  final w = m.w, h = m.h;
+  final alive = Uint8List.fromList(m.bits);
+  const nb = [
+    [1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [-1, -1], [1, -1],
+  ];
+  final out = <List<Pt>>[];
+  final dist = Int32List(w * h);
+  final parent = Int32List(w * h);
+
+  // [start]에서 너비 우선으로 퍼져 가장 먼 셀을 돌려준다. 닿은 셀은 [seen]에.
+  int farthest(int start, List<int> seen) {
+    seen.clear();
+    dist[start] = 0;
+    parent[start] = -1;
+    final queue = <int>[start];
+    final mark = <int>{start};
+    var last = start;
+    for (var qi = 0; qi < queue.length; qi++) {
+      final cur = queue[qi];
+      last = cur;
+      seen.add(cur);
+      final cx = cur % w, cy = cur ~/ w;
+      for (final n in nb) {
+        final tx = cx + n[0], ty = cy + n[1];
+        if (tx < 0 || ty < 0 || tx >= w || ty >= h) continue;
+        final t = ty * w + tx;
+        if (alive[t] == 0 || !mark.add(t)) continue;
+        dist[t] = dist[cur] + 1;
+        parent[t] = cur;
+        queue.add(t);
+      }
+    }
+    return last;
+  }
+
+  final seen = <int>[];
+  for (var guard = 0; guard < 400; guard++) {
+    var start = -1;
+    for (var i = 0; i < alive.length; i++) {
+      if (alive[i] != 0) {
+        start = i;
+        break;
+      }
+    }
+    if (start < 0) break;
+    final a = farthest(start, seen);
+    final component = List<int>.from(seen);
+    final b = farthest(a, seen);
+    if (component.length < 12) {
+      // 너무 작은 덩어리는 통째로 버린다.
+      for (final i in component) {
+        alive[i] = 0;
+      }
+      continue;
+    }
+    final line = <Pt>[];
+    for (var cur = b; cur != -1; cur = parent[cur]) {
+      line.add(Pt((cur % w).toDouble(), (cur ~/ w).toDouble()));
+    }
+    // 줄기와 그 옆 한 셀(계단의 덧살)을 지운다. 가지는 따로 남아 다음 차례에.
+    for (final q in line) {
+      final x = q.x.toInt(), y = q.y.toInt();
+      for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+          final tx = x + dx, ty = y + dy;
+          if (tx >= 0 && ty >= 0 && tx < w && ty < h) alive[ty * w + tx] = 0;
+        }
+      }
+    }
+    if (line.length >= 3) out.add(line);
+  }
+  return out;
+}
+
+/// 열린 꺾은선의 모서리를 깎는다(차이킨). 양 끝점은 제자리에 둔다.
+List<Pt> smoothOpen(List<Pt> pts, int iters) {
+  var cur = pts;
+  for (var k = 0; k < iters; k++) {
+    if (cur.length < 3) return cur;
+    final out = <Pt>[cur.first];
+    for (var i = 0; i + 1 < cur.length; i++) {
+      final a = cur[i], b = cur[i + 1];
+      out.add(Pt(a.x * 0.75 + b.x * 0.25, a.y * 0.75 + b.y * 0.25));
+      out.add(Pt(a.x * 0.25 + b.x * 0.75, a.y * 0.25 + b.y * 0.75));
+    }
+    out.add(cur.last);
+    cur = out;
+  }
+  return cur;
 }
 
 String desc(List<Pt> r) {
@@ -1004,6 +1560,11 @@ void emit(
   List<Map<String, dynamic>> stalls,
   List<Map<String, dynamic>> crosswalks,
   List<Map<String, dynamic>> pois,
+  List<List<Pt>> fullOuters,
+  List<List<Pt>> fullHoles,
+  List<Map<String, dynamic>> courts,
+  List<Map<String, dynamic>> strips,
+  List<List<Pt>> paths,
 ) {
   List<List<List<double>>> rings(List<List<Pt>> src) => [
         for (final r in src)
@@ -1026,6 +1587,10 @@ void emit(
     'major': rings(majors),
     'fieldLines': rings(fieldLines),
     'pavement': {'outer': rings(outers), 'holes': rings(holes)},
+    'pavementFull': {'outer': rings(fullOuters), 'holes': rings(fullHoles)},
+    'courts': courts,
+    'stallStrips': strips,
+    'paths': rings(paths),
     'parkingStalls': stalls,
     'crosswalks': crosswalks,
     'pois': pois,
@@ -1207,6 +1772,30 @@ List<Map<String, dynamic>> extractPois() {
   }
   return uniq;
 }
+
+/// 주차 띠를 맞출 차도 — 중심선과 앱이 그리는 반 폭. OSM의 road·major와,
+/// 보행로로 적혀 있어도 차가 다닐 폭(4m 이상)인 교내 길.
+List<RoadLine> osmCarRoads() => osmRoadLines(isStallRoad);
+
+/// OSM 길 가운데 [keep](종류, 폭)가 고른 것 — 중심선과 앱이 그리는 반 폭.
+List<RoadLine> osmRoadLines(bool Function(String kind, double width) keep) {
+  final f = File('assets/housing/campus_roads.json');
+  if (!f.existsSync()) return const [];
+  final j = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+  return [
+    for (final r in (j['roads'] as List))
+      if (keep(r['k'] as String, (r['w'] as num).toDouble()))
+        RoadLine(
+          [
+            for (final p in (r['pts'] as List))
+              ((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+          ],
+          osmRoadDrawnHalfWidth(r['k'] as String, (r['w'] as num).toDouble()),
+        ),
+  ];
+}
+
+double _r2(double v) => (v * 100).round() / 100;
 
 /// OSM 도로가 덮는 통로를 격자에 칠한다(assets/housing/campus_roads.json).
 ///

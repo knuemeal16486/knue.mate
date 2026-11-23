@@ -218,6 +218,13 @@ class OfflineCache {
     return list.map((e) => BusSummary.fromJson(e)).toList();
   }
 
+  /// 마지막으로 저장한 시각. 없으면 null.
+  static Future<DateTime?> savedAt() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ts = prefs.getInt('${_key}_ts');
+    return ts == null ? null : DateTime.fromMillisecondsSinceEpoch(ts);
+  }
+
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key);

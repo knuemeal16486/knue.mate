@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'housing_model.dart' show IsochroneCenter;
+import 'stall_align.dart';
 import 'ui_utils.dart' show KnueTokens;
 
 /// 건물 용도 — 지붕 색이 여기서 갈린다.
@@ -188,6 +189,163 @@ class MapPoi {
   const MapPoi(this.kind, this.at);
 }
 
+/// 바닥에 놓인 기울어진 직사각형 — 코트·운동장, 주차 구획 띠.
+/// 캡처에서는 [center]·긴 변 [length]·짧은 변 [width](m)·긴 변의 방향
+/// [angle](라디안)만 재 두고, 안의 선은 [courtLines]·[stallLadder]가 긋는다.
+@immutable
+class GroundBox {
+  final Offset center;
+  final double length, width, angle;
+  const GroundBox(this.center, this.length, this.width, this.angle);
+
+  factory GroundBox.fromJson(Map<String, dynamic> j) => GroundBox(
+        Offset((j['c'][0] as num).toDouble(), (j['c'][1] as num).toDouble()),
+        (j['l'] as num).toDouble(),
+        (j['w'] as num).toDouble(),
+        (j['a'] as num).toDouble(),
+      );
+
+  /// 상자 안 좌표 → 지도 좌표. [u]는 긴 변 방향, [v]는 짧은 변 방향(가운데가 0).
+  Offset at(double u, double v) {
+    final c = math.cos(angle), s = math.sin(angle);
+    return Offset(center.dx + u * c - v * s, center.dy + u * s + v * c);
+  }
+
+  List<Offset> get corners => [
+        at(-length / 2, -width / 2),
+        at(length / 2, -width / 2),
+        at(length / 2, width / 2),
+        at(-length / 2, width / 2),
+      ];
+
+  /// [p]가 상자 안인지([margin]m만큼 넉넉히).
+  bool contains(Offset p, {double margin = 0}) {
+    final c = math.cos(angle), s = math.sin(angle);
+    final dx = p.dx - center.dx, dy = p.dy - center.dy;
+    final u = dx * c + dy * s, v = -dx * s + dy * c;
+    return u.abs() <= length / 2 + margin && v.abs() <= width / 2 + margin;
+  }
+}
+
+/// 마주 보는 주차 띠 사이의 통로들(계산은 stall_align.dart의 [stallAisles]).
+List<GroundBox> groundStallAisles(List<GroundBox> strips) => [
+      for (final a in stallAisles([
+        for (final b in strips)
+          (
+            cx: b.center.dx,
+            cy: b.center.dy,
+            len: b.length,
+            wid: b.width,
+            ang: b.angle,
+          ),
+      ]))
+        GroundBox(Offset(a.cx, a.cy), a.len, a.wid, a.ang),
+    ];
+
+/// 샛길을 그리는 폭(m). 캡처의 가는 길이 3~4픽셀(약 2m)이다.
+const double kFootpathWidth = 2.0;
+
+enum CourtKind { soccer, tennis, court }
+
+/// 크기로 가른 코트 종류. 긴 변 60m 이상은 축구장, 테니스 코트 규격
+/// (23.77×10.97m에 여백)이면 테니스, 나머지는 풋살·농구 같은 일반 코트.
+CourtKind courtKindOf(GroundBox b) {
+  if (b.length >= 60) return CourtKind.soccer;
+  if (b.length >= 21 && b.length <= 27 && b.width >= 10 && b.width <= 15) {
+    return CourtKind.tennis;
+  }
+  return CourtKind.court;
+}
+
+/// 코트 바닥 선(지도 좌표의 꺾은선들). 순수 함수 — 테스트 대상.
+///
+/// 캡처의 코트 선은 1픽셀짜리라 면으로 뜨면 얼룩이 된다. 코트는 규격이
+/// 정해져 있으니 상자 크기에 맞춰 규격 비율로 긋는다.
+List<List<Offset>> courtLines(GroundBox b) {
+  final out = <List<Offset>>[];
+  List<Offset> rect(double hu, double hv, [double cu = 0]) => [
+        b.at(cu - hu, -hv),
+        b.at(cu + hu, -hv),
+        b.at(cu + hu, hv),
+        b.at(cu - hu, hv),
+        b.at(cu - hu, -hv),
+      ];
+  List<Offset> circle(double r) => [
+        for (var k = 0; k <= 28; k++)
+          b.at(r * math.cos(k * math.pi / 14), r * math.sin(k * math.pi / 14)),
+      ];
+
+  switch (courtKindOf(b)) {
+    case CourtKind.soccer:
+      final hu = b.length / 2 * 0.955, hv = b.width / 2 * 0.94;
+      out.add(rect(hu, hv));
+      out.add([b.at(0, -hv), b.at(0, hv)]);
+      out.add(circle(hv * 0.27)); // 9.15m / 34m
+      // 벌칙 구역(16.5×40.3m)과 골 구역(5.5×18.3m) — 105×68m 경기장 비율.
+      for (final side in [-1.0, 1.0]) {
+        final pd = hu * 0.314, gd = hu * 0.105;
+        out.add(rect(pd / 2, hv * 0.593, side * (hu - pd / 2)));
+        out.add(rect(gd / 2, hv * 0.269, side * (hu - gd / 2)));
+      }
+    case CourtKind.tennis:
+      // 복식 코트 23.77×10.97m를 상자에 맞춘다(둘레에 조금 여백).
+      final hu = b.length / 2 * 0.93, hv = b.width / 2 * 0.86;
+      final single = hv * 0.75; // 8.23 / 10.97
+      final service = hu * 0.538; // 6.40 / 11.885
+      out.add(rect(hu, hv));
+      out.add([b.at(-hu, -single), b.at(hu, -single)]);
+      out.add([b.at(-hu, single), b.at(hu, single)]);
+      out.add([b.at(-service, -single), b.at(-service, single)]);
+      out.add([b.at(service, -single), b.at(service, single)]);
+      out.add([b.at(-service, 0), b.at(service, 0)]);
+      out.add([b.at(0, -hv), b.at(0, hv)]); // 네트
+    case CourtKind.court:
+      final hu = b.length / 2 * 0.93, hv = b.width / 2 * 0.9;
+      out.add(rect(hu, hv));
+      out.add([b.at(0, -hv), b.at(0, hv)]);
+      out.add(circle(hv * 0.24));
+  }
+  return out;
+}
+
+/// 꺾은선을 폭 [width]m의 가는 사각형들로 바꾼다. 바닥에 그린 선은 지도를
+/// 확대하면 같이 굵어져야 해서(화면 고정 굵기가 아니라) 면으로 칠한다.
+List<List<Offset>> lineQuads(List<List<Offset>> lines, double width) {
+  final out = <List<Offset>>[];
+  final h = width / 2;
+  for (final line in lines) {
+    for (var i = 0; i + 1 < line.length; i++) {
+      final a = line[i], c = line[i + 1];
+      final d = c - a;
+      final len = d.distance;
+      if (len < 1e-6) continue;
+      final t = d / len;
+      final n = Offset(-t.dy, t.dx) * h;
+      // 모서리가 비지 않게 양 끝을 반 폭만큼 늘인다.
+      final a2 = a - t * h, c2 = c + t * h;
+      out.add([a2 + n, c2 + n, c2 - n, a2 - n]);
+    }
+  }
+  return out;
+}
+
+/// 주차 구획 띠의 선분들 — 양쪽 긴 줄과 [pitch]m마다의 가로대(사다리 모양).
+/// 순수 함수 — 테스트 대상.
+List<(Offset, Offset)> stallLadder(GroundBox b, {double pitch = 2.5}) {
+  final hu = b.length / 2, hv = b.width / 2;
+  final out = <(Offset, Offset)>[
+    (b.at(-hu, -hv), b.at(hu, -hv)),
+    (b.at(-hu, hv), b.at(hu, hv)),
+  ];
+  // 가로대를 양 끝에 맞춰 고르게 나눈다(끝에 자투리 칸이 남지 않게).
+  final n = math.max(1, (b.length / pitch).round());
+  for (var k = 0; k <= n; k++) {
+    final u = -hu + b.length * k / n;
+    out.add((b.at(u, -hv), b.at(u, hv)));
+  }
+  return out;
+}
+
 /// 네이버지도 캡처에서 그대로 뽑은 바닥. 이쪽이 지도의 정답이다.
 class TracedGround {
   final List<List<Offset>> campusOutline;
@@ -217,6 +375,21 @@ class TracedGround {
   final List<BaseCrosswalk> crosswalks;
   final List<MapPoi> pois;
 
+  /// 코트·운동장(초록 직사각형). 선은 [courtLines]가 긋는다. 여기 든 자리는
+  /// [greens]의 뭉친 덩어리와 [fieldLines]의 얼룩 대신 이걸로 그린다.
+  final List<GroundBox> courts;
+
+  /// 주차 구획 띠(사다리). 있으면 예전 [parking]·[parkingStalls] 대신 그린다.
+  final List<GroundBox> stallStrips;
+
+  /// 마주 보는 두 줄 주차칸 사이의 통로([stallAisles]로 [stallStrips]에서 낸다).
+  /// 주차칸 바닥과 함께 포장면 색으로 깐다.
+  final List<GroundBox> stallAisles;
+
+  /// 샛길 — 포장면을 다듬을 때 사라지는 폭 2m 안팎의 가는 길. 가운데 선
+  /// (열린 꺾은선)이고, 폭은 그릴 때 [kFootpathWidth]로 준다.
+  final List<List<Offset>> footpaths;
+
   const TracedGround({
     this.campusOutline = const [],
     this.pavementOutlines = const [],
@@ -231,6 +404,10 @@ class TracedGround {
     this.parkingStalls = const {},
     this.crosswalks = const [],
     this.pois = const [],
+    this.courts = const [],
+    this.stallStrips = const [],
+    this.stallAisles = const [],
+    this.footpaths = const [],
   });
 
   static const empty = TracedGround();
@@ -399,7 +576,15 @@ class CampusBase {
 
     // 캠퍼스 지형은 캡처에서 그대로 뽑은 것을 쓴다.
     // 예전엔 운동장·코트 위치를 규격 치수로 추정해 얹었는데, 실제와 어긋났다.
-    final pave = tr['pavement'] as Map<String, dynamic>;
+    // 포장면은 **교내 전체**(pavementFull — 광장·앞마당·주차장 바닥·보행로)를
+    // 쓴다. 'pavement'는 OSM 도로 통로를 뺀 조각이라, 그것만 칠하면 가장자리가
+    // 잘린 자국투성이다. 전체 면을 도로와 다른 색으로 도로 아래에 깐다.
+    final pave =
+        (tr['pavementFull'] ?? tr['pavement']) as Map<String, dynamic>;
+    final stallStrips = [
+      for (final c in (tr['stallStrips'] as List? ?? []))
+        GroundBox.fromJson(c as Map<String, dynamic>),
+    ];
     final traced = TracedGround(
       campusOutline: listOfPts(tr['outline']),
       pavementOutlines: listOfPts(pave['outer']),
@@ -442,6 +627,13 @@ class CampusBase {
             ),
           ),
       ],
+      courts: [
+        for (final c in (tr['courts'] as List? ?? []))
+          GroundBox.fromJson(c as Map<String, dynamic>),
+      ],
+      stallStrips: stallStrips,
+      stallAisles: groundStallAisles(stallStrips),
+      footpaths: listOfPts(tr['paths']),
     );
     BaseTerrain parsedTerrain = BaseTerrain(traced: traced);
     if (json.containsKey('terrain')) {
@@ -798,6 +990,10 @@ class IsoTerrain {
   /// 캡처에서 뽑은 층 — 부지 테두리·포장면·녹지·운동시설·수면.
   final Path campusOutline;
   final Path pavement;
+
+  /// 샛길(가는 포장길)과 주차칸 바닥·주차장 통로. 포장면과 같은 색으로
+  /// 그 위에 칠한다.
+  final Path footpaths;
   final Path majorRoads;
   final Path fieldLines;
 
@@ -863,6 +1059,7 @@ class IsoTerrain {
   const IsoTerrain({
     required this.campusOutline,
     required this.pavement,
+    required this.footpaths,
     required this.majorRoads,
     required this.fieldLines,
     required this.parkingStalls,
@@ -909,6 +1106,7 @@ class IsoTerrain {
   static IsoTerrain empty = IsoTerrain(
     campusOutline: Path(),
     pavement: Path(),
+    footpaths: Path(),
     majorRoads: Path(),
     fieldLines: Path(),
     parkingStalls: Path(),
@@ -1217,12 +1415,64 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     pavement.addPath(_poly(projPts(r)), Offset.zero);
   }
 
+  // 코트·운동장: 캡처에서 잰 직사각형으로 그린다. 그 자리의 뭉친 잔디 덩어리와
+  // 선 얼룩은 뺀다(가운데 점이 코트 안이면 그 코트의 것이다).
+  final courts = terrain.traced.courts;
+  bool onCourt(List<Offset> ring) {
+    if (courts.isEmpty || ring.isEmpty) return false;
+    var c = Offset.zero;
+    for (final q in ring) {
+      c += q;
+    }
+    c = c / ring.length.toDouble();
+    return courts.any((b) => b.contains(c, margin: 2));
+  }
+
+  // 주차 구획: 사다리 띠가 있으면 그걸로 긋는다(예전 빗살·주차장 면 대신).
+  final strips = terrain.traced.stallStrips;
+  Path ladders() {
+    final path = Path();
+    for (final b in strips) {
+      for (final (a, c) in stallLadder(b)) {
+        final s0 = projectOnRoadLevel(p, a.dx, a.dy);
+        final s1 = projectOnRoadLevel(p, c.dx, c.dy);
+        path
+          ..moveTo(s0.dx, s0.dy)
+          ..lineTo(s1.dx, s1.dy);
+      }
+    }
+    return path;
+  }
+
+  // 주차칸 바닥과 주차장 통로(포장면 색). lineQuads와 감는 방향을 맞춘다.
+  Path stallBeds() {
+    final path = Path();
+    for (final b in [...strips, ...terrain.traced.stallAisles]) {
+      path.addPath(
+        _poly([
+          for (final q in b.corners.reversed) projectOnRoadLevel(p, q.dx, q.dy),
+        ]),
+        Offset.zero,
+      );
+    }
+    return path;
+  }
+
   return IsoTerrain(
     campusOutline: merged(terrain.traced.campusOutline),
     pavement: pavement,
+    // 샛길과 같은 포장면 색으로 주차칸 바닥·주차장 통로도 깐다 — 안 깔면
+    // 사다리 선만 맨바닥에 떠 보인다. (lineQuads와 감는 방향을 맞춰 뒤집는다.)
+    // 주차칸 바닥·통로는 사다리 선과 같이 도로 높이에 맞춘다.
+    footpaths: merged(lineQuads(terrain.traced.footpaths, kFootpathWidth))
+      ..addPath(stallBeds(), Offset.zero),
     majorRoads: merged(terrain.traced.majorRoads),
-    fieldLines: merged(terrain.traced.fieldLines),
-    parkingStalls: _stallPath(terrain.traced, p),
+    fieldLines: merged([
+      for (final r in terrain.traced.fieldLines)
+        if (!onCourt(r)) r,
+      for (final b in courts) ...lineQuads(courtLines(b), 0.45),
+    ]),
+    parkingStalls: strips.isEmpty ? _stallPath(terrain.traced, p) : ladders(),
     crosswalkBars: _crosswalkPath(terrain.traced, p),
     pois: [
       for (final poi in terrain.traced.pois)
@@ -1230,9 +1480,11 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     ],
     greens: merged([
       for (var i = 0; i < terrain.traced.greens.length; i++)
-        if (i >= terrain.traced.greensOutside.length ||
-            !terrain.traced.greensOutside[i])
+        if ((i >= terrain.traced.greensOutside.length ||
+                !terrain.traced.greensOutside[i]) &&
+            !onCourt(terrain.traced.greens[i]))
           terrain.traced.greens[i],
+      for (final b in courts) b.corners,
     ]),
     greensWood: merged([
       for (var i = 0; i < terrain.traced.greens.length; i++)
@@ -1241,7 +1493,7 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
           terrain.traced.greens[i],
     ]),
     sportsFacilities: merged(terrain.traced.sportsFacilities),
-    parking: merged(terrain.traced.parking),
+    parking: strips.isEmpty ? merged(terrain.traced.parking) : Path(),
     waterAreas: merged(terrain.traced.waterAreas),
     campusBoundary: _poly(projPts(terrain.campusBoundary)),
     athleticTrack: _poly(projPts(terrain.athleticTrack)),
@@ -1585,22 +1837,27 @@ class IsoOsmRoads {
   static const empty = IsoOsmRoads([]);
 }
 
+/// 도로에 붙는 것(주차 구획·횡단보도)을 **도로와 같은 높이로** 투영한다.
+///
+/// 기울어진 시점에서 OSM 도로는 언덕 높이의 0.45배만큼 화면 위로 띄워
+/// 그린다([projectOsmRoads]). 바닥에 붙여 그리면 언덕에서 길과 어긋난다 —
+/// 길가에 딱 붙인 주차칸이 길에서 떨어져 보인다. 평면 시점은 높이를 안 쓴다.
+Offset projectOnRoadLevel(IsoProjection p, double x, double y) =>
+    p.project(x, y, CampusElevation.elevationAt(x, y) * kRoadLift);
+
+/// 도로를 띄우는 비율(언덕 높이 대비).
+const double kRoadLift = 0.45;
+
 IsoOsmRoads projectOsmRoads(List<OsmRoad> roads, IsoProjection p) {
   // 굵기는 실제 폭(m) × 배율이다. 화면 고정 굵기로 그으면 확대했을 때
   // 길만 가늘어져 건물 사이로 실처럼 보인다.
   // 네이버 지도 위계: 국도(간선)는 시원하게, 차도는 정갈하게, 보행로는 섬세하게
-  const squash = 0.75;
+  const squash = kOsmRoadSquash;
   final byKey = <String, ({String kind, double width, Path path})>{};
   for (final r in roads) {
     if (r.points.length < 2) continue;
-    double baseW;
-    if (r.kind == 'major') {
-      baseW = math.max(r.widthM, 8.5);
-    } else if (r.kind == 'walk' || r.kind == 'path' || r.kind == 'steps') {
-      baseW = math.max(r.widthM, 2.6);
-    } else {
-      baseW = math.max(r.widthM, 5.2);
-    }
+    // 폭 규칙은 stall_align.dart와 같이 쓴다 — 주차 띠를 이 폭에 맞춰 붙인다.
+    final baseW = osmRoadBaseWidth(r.kind, r.widthM);
     final w = (baseW * p.scale * squash).clamp(1.2, 60.0);
     // 0.5px 단위로 묶어 Path 수를 줄인다.
     final q = (w * 2).round() / 2;
@@ -1611,8 +1868,7 @@ IsoOsmRoads projectOsmRoads(List<OsmRoad> roads, IsoProjection p) {
     );
     // 도로의 각 점에 지반 고도(CampusElevation)를 반영하여 3차원 언덕 경사면을 따라 흐르도록 투영!
     final pts = r.points.map((v) {
-      final z = CampusElevation.elevationAt(v.dx, v.dy) * 0.45;
-      return p.project(v.dx, v.dy, z);
+      return projectOnRoadLevel(p, v.dx, v.dy);
     }).toList();
     lane.path.moveTo(pts.first.dx, pts.first.dy);
     for (final pt in pts.skip(1)) {
@@ -1906,6 +2162,19 @@ class HousingMapPainter extends CustomPainter {
         ..color = isDark ? const Color(0xFF1A2636) : const Color(0xFFDFEAF5),
     );
 
+    // 포장면(광장·건물 앞마당·주차장 바닥) — 캡처의 크림색 면. 이게 빠지면
+    // 교내가 파란 바탕에 길과 건물만 떠 있는 것처럼 휑하다.
+    canvas.drawPath(
+      terrain.pavement,
+      Paint()
+        ..color = isDark ? const Color(0xFF2A2F36) : const Color(0xFFF6F4EF),
+    );
+    canvas.drawPath(
+      terrain.footpaths,
+      Paint()
+        ..color = isDark ? const Color(0xFF2A2F36) : const Color(0xFFF6F4EF),
+    );
+
     // 국도는 네이버 지도 고유의 부드럽고 산뜻한 옐로우 (#FFE682)
     canvas.drawPath(
       terrain.majorRoads,
@@ -1959,13 +2228,6 @@ class HousingMapPainter extends CustomPainter {
       terrain.waterAreas,
       Paint()
         ..color = isDark ? const Color(0xFF15334A) : const Color(0xFFCCE6FA),
-    );
-    canvas.drawPath(
-      terrain.crosswalkBars,
-      Paint()
-        ..color = isDark
-            ? Colors.white.withValues(alpha: 0.35)
-            : Colors.white.withValues(alpha: 0.95),
     );
 
     // 부지 테두리 — 페일블루 부지와 자연스럽게 분리되는 소프트 블루그레이 외곽선
@@ -2271,14 +2533,15 @@ class HousingMapPainter extends CustomPainter {
       canvas.drawPath(terrain.parkingLotsCombined, parkingBorder);
     }
 
-    // 3. 주차 구획선 (선명한 화이트 실선 1.1dp)
+    // 3. 주차 구획선. 크림색 포장면 위에 긋는다 — 흰색이면 안 보인다
+    // (예전엔 푸른 주차장 면 위라 흰색이었다). 캡처처럼 옅은 회색.
     final stallPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1
-      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 0.9
+      ..strokeCap = StrokeCap.butt
       ..color = isDark
-          ? Colors.white.withValues(alpha: 0.45)
-          : const Color(0xFFFFFFFF);
+          ? Colors.white.withValues(alpha: 0.30)
+          : const Color(0xFFB7C2CE);
 
     if (!terrain.parkingStalls.getBounds().isEmpty) {
       canvas.drawPath(terrain.parkingStalls, stallPaint);
@@ -2292,6 +2555,15 @@ class HousingMapPainter extends CustomPainter {
       ..strokeCap = StrokeCap.butt
       ..color = isDark ? Colors.white38 : const Color(0xFFFFFFFF);
     canvas.drawPath(terrain.crosswalkStripesCombined, cwPaint);
+    // 캡처에서 뽑아 도로에 맞춘 횡단보도. 도로 노면이 흰색이라 흰 줄은 안
+    // 보인다 — 도로를 그린 뒤에, 노면과 구분되는 회색 줄로 그린다.
+    canvas.drawPath(
+      terrain.crosswalkBars,
+      Paint()
+        ..color = isDark
+            ? Colors.white.withValues(alpha: 0.35)
+            : const Color(0xFFC3CDD8),
+    );
 
     final islandPaint = Paint()
       ..style = PaintingStyle.fill
@@ -3184,10 +3456,13 @@ Path _stallPath(TracedGround g, IsoProjection p) {
 Path _crosswalkPath(TracedGround g, IsoProjection p) {
   final path = Path();
   for (final c in g.crosswalks) {
+    // 주차 구획 띠 위의 "횡단보도"는 사다리 가로대를 잘못 읽은 것이다.
+    if (g.stallStrips.any((b) => b.contains(c.center, margin: 2.5))) continue;
     final rad = c.angleDeg * math.pi / 180;
     final dx = math.cos(rad), dy = math.sin(rad);
     final nx = -dy, ny = dx;
-    const barW = 0.8, gap = 1.4;
+    // 줄 0.5m, 사이 0.5m — 도로 폭(5~9m)에 줄이 5~9개 들어가 횡단보도로 읽힌다.
+    const barW = 0.5, gap = 0.5;
     final n = (c.length / (barW + gap)).floor();
     if (n < 2) continue;
     for (var i = 0; i < n; i++) {
@@ -3211,7 +3486,7 @@ Path _crosswalkPath(TracedGround g, IsoProjection p) {
           by - dy * barW / 2 + ny * c.width / 2,
         ],
       ];
-      final proj = [for (final q in quad) p.project(q[0], q[1])];
+      final proj = [for (final q in quad) projectOnRoadLevel(p, q[0], q[1])];
       path
         ..moveTo(proj[0].dx, proj[0].dy)
         ..lineTo(proj[1].dx, proj[1].dy)

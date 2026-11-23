@@ -103,6 +103,19 @@ List<String> parseContactPhones(List<String?> inputs) {
   return result;
 }
 
+/// 건물 상세에 보여 줄 임대 문의 번호. 순수 함수 — 테스트 대상.
+///
+/// 관리자가 직접 확인한 번호([admin], 2026-10-16 원룸촌을 돌며 모은 연락처)가
+/// 있으면 **그것만** 쓴다 — 더 최신이고, 학생이 예전에 제보한 번호가 섞이면
+/// 이미 바뀐 번호로 전화하게 된다. 없을 때만 학생 제보([reported])를 쓴다.
+List<String> effectiveLandlordPhones({
+  required List<String?> admin,
+  required List<String?> reported,
+}) {
+  final confirmed = parseContactPhones(admin);
+  return confirmed.isNotEmpty ? confirmed : parseContactPhones(reported);
+}
+
 /// 자취방 시세 제보 한 건.
 ///
 /// 학교 주변 원룸은 공개된 시세표가 없어서 학생들이 서로 물어보는 수밖에 없다.
@@ -376,9 +389,13 @@ class HousingBuildingOverride {
   /// 비워두면 대장 값을 그대로 쓴다.
   final String? address;
 
-  /// 집주인·관리인 연락처. **공개 화면에는 띄우지 않는다** — 개인정보이고,
-  /// 동의 없이 앱에 뿌리면 곤란해진다. 관리자 화면에서만 보인다.
+  /// 집주인·관리인 이름/호칭. **공개 화면에는 띄우지 않는다** — 개인정보다.
+  /// 관리자 화면에서만 보인다.
   final String? landlordName;
+
+  /// 임대 문의 번호(2026-10-16 원룸촌을 돌며 확인). 학생 상세 화면에
+  /// "확인된 번호"로 나오고, 있으면 학생 제보 번호 대신 이것만 쓴다
+  /// ([effectiveLandlordPhones]).
   final String? landlordPhone;
   final String? landlordPhone2;
 

@@ -19,6 +19,8 @@ import 'housing_service.dart';
 import 'housing_shape_edit.dart';
 import 'housing_sun.dart';
 import 'housing_survey.dart';
+import 'housing_view3d.dart';
+import 'housing_view3d_screen.dart';
 import 'building_data.dart' show BuildingData, kBuildings;
 import 'campus_building_info.dart';
 import 'ui_utils.dart';
@@ -924,6 +926,42 @@ class _HousingScreenState extends State<HousingScreen>
         setState(() => _landmarks = list);
       },
       onError: (Object e) => debugPrint('watchLandmarks error: $e'),
+    );
+  }
+
+  /// 3D 둘러보기를 연다. 지금 보고 있던 자리·방향에서 시작하고, 건물을
+  /// 골라 둔 상태면 그 건물에서 시작한다.
+  void _openView3D() {
+    if (_loading || _buildings.isEmpty) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    Offset start;
+    BaseBuilding? picked;
+    final pickedId = _selectedId ?? _peekBuilding?.id;
+    if (pickedId != null) {
+      for (final b in _effectiveBuildings) {
+        if (b.id == pickedId) picked = b;
+      }
+    }
+    if (picked != null) {
+      start = picked.center;
+    } else if (_viewportSize == Size.zero) {
+      start = const Offset(280, 150);
+    } else {
+      final scene = _transformController.toScene(
+        Offset(_viewportSize.width / 2, _viewportSize.height * 0.48),
+      );
+      start = _proj.unproject(scene.dx - _origin.dx, scene.dy - _origin.dy);
+    }
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        builder: (_) => HousingView3DScreen(
+          base: _base,
+          osmRoads: _osmRoads,
+          buildings: view3SpecsFrom(_buildings, isDark),
+          start: start,
+          azimuth: view3AzimuthFromMap(_rotationAngle, topDown: _topDown),
+        ),
+      ),
     );
   }
 
@@ -2676,6 +2714,15 @@ class _HousingScreenState extends State<HousingScreen>
           ),
           const SizedBox(height: 4),
 
+          // 3D 둘러보기 — 손가락으로 돌려 보고 골목을 걸어 본다.
+          _hudIconButton(
+            icon: Icons.view_in_ar_rounded,
+            tooltip: "3D 둘러보기",
+            onTap: _openView3D,
+            isDark: isDark,
+          ),
+          const SizedBox(height: 4),
+
           // 여기부터는 폰에서 [더보기]를 눌러야 보인다.
           if (showAll) ...[
           // 원룸 시세 뱃지 토글 (기본 끈 상태, 터치 시 켜짐)
@@ -3308,6 +3355,7 @@ class _HousingScreenState extends State<HousingScreen>
     final nameCtrl = TextEditingController(text: known?.name ?? b.officialName ?? '');
     final addrCtrl = TextEditingController(text: displayAddress(b, existing));
     final phoneCtrl = TextEditingController(text: existing?.landlordPhone ?? '');
+    final phone2Ctrl = TextEditingController(text: existing?.landlordPhone2 ?? '');
     final floorCtrl = TextEditingController(text: (existing?.floors ?? b.floors).toString());
     final yearCtrl = TextEditingController(
       text: (existing?.builtYear ?? known?.builtYear ?? builtYearByName(b.officialName) ?? '').toString(),
@@ -3516,6 +3564,13 @@ class _HousingScreenState extends State<HousingScreen>
                 const SizedBox(height: 12),
 
                 TextField(
+                  controller: phone2Ctrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: "2번째 연락처", border: OutlineInputBorder(), isDense: true),
+                ),
+                const SizedBox(height: 12),
+
+                TextField(
                   controller: noteCtrl,
                   decoration: const InputDecoration(labelText: "개발자/관리자 메모", border: OutlineInputBorder(), isDense: true),
                 ),
@@ -3633,6 +3688,7 @@ class _HousingScreenState extends State<HousingScreen>
                             zone: selectedZone,
                             address: addrCtrl.text.trim().isNotEmpty ? addrCtrl.text.trim() : null,
                             landlordPhone: phoneCtrl.text.trim().isNotEmpty ? phoneCtrl.text.trim() : null,
+                            landlordPhone2: phone2Ctrl.text.trim().isNotEmpty ? phone2Ctrl.text.trim() : null,
                             // b는 지도에 그려진 건물이라 floors가 지도 높이일 수 있다 —
                             // 표시 층수는 기존 값에서 가져온다.
                             floors: int.tryParse(floorCtrl.text.trim()) ?? existing?.floors ?? b.floors,

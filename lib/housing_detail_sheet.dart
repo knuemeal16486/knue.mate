@@ -139,14 +139,19 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
     Share.share(buffer.toString());
   }
 
-  /// 외벽 현수막/관리인/집주인 복수 연락처 (보통 최대 2개)
-  List<String> get _effectivePhones {
-    final overridePhones = widget.edited?.allLandlordPhones ?? [];
-    final reportedPhones = widget.summary.publicContactPhones.isNotEmpty
-        ? widget.summary.publicContactPhones
-        : [if (widget.summary.publicContactPhone != null) widget.summary.publicContactPhone!];
-    return parseContactPhones([...overridePhones, ...reportedPhones]);
-  }
+  /// 외벽 현수막/관리인/집주인 복수 연락처 (보통 최대 2개).
+  /// 관리자가 확인한 번호가 있으면 그것만([effectiveLandlordPhones]).
+  List<String> get _effectivePhones => effectiveLandlordPhones(
+        admin: widget.edited?.allLandlordPhones ?? const [],
+        reported: widget.summary.publicContactPhones.isNotEmpty
+            ? widget.summary.publicContactPhones
+            : [widget.summary.publicContactPhone],
+      );
+
+  /// 관리자가 직접 확인한 연락처가 있는 건물. 연락처 제보를 받지 않는다
+  /// (수정/제보 버튼·2번째 번호 제보를 숨긴다).
+  bool get _contactConfirmed =>
+      (widget.edited?.allLandlordPhones ?? const []).isNotEmpty;
 
   Future<void> _callLandlord(String phone) async {
     final clean = phone.replaceAll(RegExp(r'[^0-9+]'), '');
@@ -1785,7 +1790,11 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            phones.isNotEmpty ? '${phones.length}개 번호 제공' : '외벽 번호 제보',
+                            _contactConfirmed
+                                ? '확인된 번호'
+                                : phones.isNotEmpty
+                                    ? '${phones.length}개 번호 제공'
+                                    : '외벽 번호 제보',
                             style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
@@ -1796,7 +1805,9 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                       ],
                     ),
                     Text(
-                      phones.isNotEmpty
+                      _contactConfirmed
+                          ? '직접 확인한 임대 문의 번호입니다.'
+                          : phones.isNotEmpty
                           ? '외벽 현수막/관리인 직거래 문의 번호입니다.'
                           : '외벽 현수막이나 출입문에 적힌 문의 번호를 등록해주세요.',
                       style: TextStyle(
@@ -1807,6 +1818,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                   ],
                 ),
               ),
+              if (!_contactConfirmed)
               InkWell(
                 onTap: () => _showSubmitPhoneDialog(
                   initialPhone1: phones.isNotEmpty ? phones[0] : null,
@@ -1923,7 +1935,8 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
             }),
 
             // 번호가 1개만 있을 때 관리인/사모님 2번째 연락처 추가 권장
-            if (phones.length == 1) ...[
+            // (확인된 번호가 있는 건물은 제보를 받지 않는다)
+            if (phones.length == 1 && !_contactConfirmed) ...[
               const SizedBox(height: 6),
               InkWell(
                 onTap: () => _showSubmitPhoneDialog(initialPhone1: phones[0]),

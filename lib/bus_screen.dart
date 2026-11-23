@@ -13,10 +13,24 @@ import 'call_bus_sheet.dart';
 import 'favorite_service.dart';
 import 'ui_utils.dart';
 import 'native_ad_card.dart';
+import 'nearby_stop.dart';
+import 'nearby_stop_card.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BusAppScreen extends StatefulWidget {
-  const BusAppScreen({super.key});
+  const BusAppScreen({super.key, this.previewBuses, this.previewNearby, this.initialTab = 0});
+
+  /// 화면 확인용(test/bus_preview.dart). 넣으면 네트워크·Firebase를 건드리지
+  /// 않고 이 값으로 실시간 탭을 그린다.
+  @visibleForTesting
+  final List<BusSummary>? previewBuses;
+
+  /// 화면 확인용 — 가까운 정류장 카드에 그릴 값.
+  @visibleForTesting
+  final (List<NearbyStop>, List<StopArrival>)? previewNearby;
+
+  /// 처음 보일 탭(0: 시간표, 1: 실시간).
+  final int initialTab;
 
   @override
   State<BusAppScreen> createState() => _BusAppScreenState();
@@ -85,9 +99,17 @@ class _BusAppScreenState extends State<BusAppScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
     final weekday = DateTime.now().weekday;
     _isWeekend = (weekday == 6 || weekday == 7);
+
+    final preview = widget.previewBuses;
+    if (preview != null) {
+      _realtimeBusList = preview;
+      _isLoading = false;
+      _lastUpdateTime = DateTime.now();
+      return;
+    }
 
     // 초기 데이터 로드 및 알람 로드
     // [개선] 초기 로딩을 백그라운드에서 수행하고 Firestore 리스너가 UI를 관리하도록 함
@@ -269,7 +291,7 @@ class _BusAppScreenState extends State<BusAppScreen>
 
         // 수동 새로고침일 때 && 데이터가 갱신되었을 때만 토스트
         if (!isQuietRefetch) {
-          showToast(context, "버스 정보를 업데이트했습니다.");
+          showToast(context, "버스 정보를 새로 받았어요.");
         }
       }
     } catch (e) {
@@ -301,6 +323,17 @@ class _BusAppScreenState extends State<BusAppScreen>
         }
       });
     }
+  }
+
+  /// 내일 첫차. 내일이 다른 요일 종류(금→토, 일→월)면 그 시간표에서 찾는다.
+  String? _tomorrowFirstBus(String directionKey, List<String> todayList) {
+    if (_selectedBus == "913") return todayList.isEmpty ? null : todayList.first;
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    final tomorrowKey =
+        tomorrow.weekday >= DateTime.saturday ? "holiday" : "weekday";
+    final list = _busSchedules[_selectedBus]?[directionKey]?[tomorrowKey] ?? const [];
+    if (list.isEmpty) return null;
+    return _addMinutes(list.first, _selectedStopOffset);
   }
 
   String _addMinutes(String timeStr, int minutesToAdd) {
@@ -360,7 +393,10 @@ class _BusAppScreenState extends State<BusAppScreen>
             leading: null, // 햄버거 메뉴 제거
             actions: [
               IconButton(
-                onPressed: () => _fetchBusData(), // [수정] 수동 새로고침 연결
+                // 실시간 탭에선 가까운 정류장 카드도 같이 새로 받는다.
+                onPressed: () => _tabController.index == 1
+                    ? _refreshRealtime()
+                    : _fetchBusData(),
                 icon: const Icon(Icons.refresh),
                 tooltip: "새로고침",
               ),
@@ -414,15 +450,46 @@ class _BusAppScreenState extends State<BusAppScreen>
     );
   }
 
+  /// 가까운 정류장 카드. 로딩·오류·목록 상태를 오가며 자리가 바뀌어도
+  /// 위치·선택 정류장을 다시 잡지 않도록 GlobalKey로 상태를 이어 간다.
+  final GlobalKey<NearbyStopCardState> _nearbyKey = GlobalKey<NearbyStopCardState>();
+
+  Widget _nearbyCard(bool isDark) =>
+      NearbyStopCard(key: _nearbyKey, isDark: isDark, preview: widget.previewNearby);
+
+  /// 오류·버스 없음 화면에도 가까운 정류장 카드를 위에 둔다 — 노선 카드가
+  /// 비어도(심야·장애) 정류장 도착 정보는 따로 볼 수 있다.
+  Widget _withNearbyCard(bool isDark, Widget state) {
+    return RefreshIndicator(
+      onRefresh: _refreshRealtime,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        children: [
+          _nearbyCard(isDark),
+          const SizedBox(height: 32),
+          state,
+        ],
+      ),
+    );
+  }
+
+  Future<void> _refreshRealtime() async {
+    await Future.wait([
+      _fetchBusData(),
+      if (_nearbyKey.currentState != null) _nearbyKey.currentState!.refresh(),
+    ]);
+  }
+
   // 시간대에 따른 운행 안내 메시지
   String _getEmptyStateMessage() {
     final hour = DateTime.now().hour;
     if (hour >= 23 || hour < 5) {
-      return "운행이 종료된 시간대입니다.\n첫차는 05:30부터 운행됩니다.";
+      return "운행이 끝난 시간대예요.";
     } else if (hour >= 5 && hour < 6) {
-      return "곧 운행이 시작됩니다.\n잠시 후 다시 확인해주세요.";
+      return "곧 운행이 시작돼요.\n잠시 후 다시 확인해 주세요.";
     }
-    return "현재 운행 중인 버스가 없습니다.\n잠시 후 다시 확인해주세요.";
+    return "지금 운행 중인 버스가 없어요.\n잠시 후 다시 확인해 주세요.";
   }
 
   // 마지막 갱신 시간 포맷
@@ -443,7 +510,7 @@ class _BusAppScreenState extends State<BusAppScreen>
 
     // 2. 에러 발생 시
     if (_hasError) {
-      return Center(
+      return _withNearbyCard(isDark, Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -471,7 +538,7 @@ class _BusAppScreenState extends State<BusAppScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              "네트워크 연결을 확인해주세요",
+              "네트워크 연결을 확인해 주세요",
               style: TextStyle(
                 fontSize: 13,
                 color: isDark ? Colors.white38 : Colors.grey,
@@ -494,12 +561,12 @@ class _BusAppScreenState extends State<BusAppScreen>
             ),
           ],
         ),
-      );
+      ));
     }
 
     // 3. 데이터 없음 → 시간대별 안내 메시지
     if (_realtimeBusList.isEmpty) {
-      return Center(
+      return _withNearbyCard(isDark, Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -530,12 +597,12 @@ class _BusAppScreenState extends State<BusAppScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              "운행 시간표를 확인해주세요.",
+              "첫차는 버스 시간표 탭에서 확인할 수 있어요.",
               style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
             ),
           ],
         ),
-      );
+      ));
     }
 
     // 4. 버스 목록 표시 — 즐겨찾기(고정)한 노선을 맨 위로. 나머지는 원래
@@ -555,16 +622,16 @@ class _BusAppScreenState extends State<BusAppScreen>
       0,
       (sum, b) => sum + b.arrivals.length,
     );
-    final traffic = BusService.estimateTrafficCondition(DateTime.now());
 
     return RefreshIndicator(
-      onRefresh: () async => _fetchBusData(),
+      onRefresh: _refreshRealtime,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(vertical: 12),
         children: [
-          // === 실시간 요약 카드 ===
-          _buildRealtimeSummaryCard(isDark, traffic, totalBuses),
+          // === 내 위치에서 가장 가까운 정류장 ===
+          _nearbyCard(isDark),
+
 
           // === 마지막 갱신 시간 + 갱신 중 표시 ===
           if (_lastUpdateTime != null)
@@ -596,7 +663,7 @@ class _BusAppScreenState extends State<BusAppScreen>
                     KnueLiveDot(isDark: isDark),
                     const SizedBox(width: 6),
                     Text(
-                      _formatLastUpdate(),
+                      "${_formatLastUpdate()} · 운행 중 $totalBuses대",
                       style: TextStyle(
                         fontSize: 11,
                         fontFeatures: KnueTokens.tabularFigures,
@@ -615,16 +682,17 @@ class _BusAppScreenState extends State<BusAppScreen>
               ),
             ),
 
-          // 방향별로 완전히 갈라서 보여준다. 예전엔 한 카드에 상행·하행이
-          // 섞여 들어가 "지금 탈 수 있는 차"가 어느 쪽인지 알 수 없었다.
-          ..._buildDirectionSection(
-            BusDirection.outbound,
+          // 가려는 쪽(청주 / 오송·조치원)으로 갈라서 보여 준다. 예전엔 "상행·
+          // 하행"으로 갈랐는데 노선마다 상행의 뜻이 달라(513 상행 = 교원대로
+          // 들어오는 차) 엉뚱한 구역에 들어갔다.
+          ..._buildHeadingSection(
+            BusHeading.cheongju,
             directBuses,
             tapyeonBuses,
             isDark,
           ),
-          ..._buildDirectionSection(
-            BusDirection.inbound,
+          ..._buildHeadingSection(
+            BusHeading.osong,
             directBuses,
             tapyeonBuses,
             isDark,
@@ -638,7 +706,7 @@ class _BusAppScreenState extends State<BusAppScreen>
                 vertical: 24,
               ),
               child: Text(
-                "지금 우리 정류장으로 오는 버스가 없어요.\n버스 시간표 탭에서 다음 운행을 확인해주세요.",
+                "지금 우리 정류장으로 오는 버스가 없어요.\n버스 시간표 탭에서 다음 운행을 확인해 주세요.",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
@@ -650,163 +718,6 @@ class _BusAppScreenState extends State<BusAppScreen>
 
           _buildArrivalInfoSection(isDark),
         ],
-      ),
-    );
-  }
-
-  Widget _buildRealtimeSummaryCard(
-    bool isDark,
-    String traffic,
-    int totalBuses,
-  ) {
-    String trafficText;
-    Color trafficColor;
-    IconData trafficIcon;
-    switch (traffic) {
-      case "slow":
-        trafficText = "서행";
-        trafficColor = Colors.orange;
-        trafficIcon = Icons.speed;
-        break;
-      case "congested":
-        trafficText = "정체";
-        trafficColor = Colors.red;
-        trafficIcon = Icons.warning_amber_rounded;
-        break;
-      default:
-        trafficText = "원활";
-        trafficColor = Colors.green;
-        trafficIcon = Icons.check_circle_outline;
-    }
-
-    final timeStr =
-        "${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} 기준";
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: GlassContainer(
-        opacity: isDark ? 0.08 : 0.4,
-        blur: 16.0,
-        padding: const EdgeInsets.all(16),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark
-              ? Colors.white10
-              : Colors.blue.shade100.withOpacity(0.5),
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                // 교통 상황
-                Expanded(
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: trafficColor.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(trafficIcon, color: trafficColor, size: 20),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "교통 상황",
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? Colors.white38
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
-                          Text(
-                            trafficText,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: trafficColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  height: 36,
-                  color: isDark ? Colors.white10 : Colors.blue.shade100,
-                ),
-                // 총 운행 대수
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          Icons.directions_bus,
-                          color: isDark ? Colors.blue.shade300 : Colors.blue,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "운행 중",
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? Colors.white38
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
-                          Text(
-                            "$totalBuses대",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Icon(
-                  Icons.access_time,
-                  size: 11,
-                  color: isDark ? Colors.white24 : Colors.grey.shade400,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  timeStr,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: isDark ? Colors.white24 : Colors.grey.shade400,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -844,9 +755,9 @@ class _BusAppScreenState extends State<BusAppScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            "• 예상 도착 시간은 교통상황, 시간대, 날씨 등을 고려하여 계산됩니다.\n"
-            "• 실제 도착 시간과 차이가 있을 수 있습니다.\n"
-            "• 출퇴근 시간(7-9시, 17-19시)에는 지연이 발생할 수 있습니다.",
+            "• 도착 시간은 정류장 도착 정보(국토교통부) 값이에요. \"약\"이 붙으면 그 노선의 실제 속도로 어림한 값이에요.\n"
+            "• 차량 위치는 마지막으로 지난 정류장 기준이라 1분 안팎 늦을 수 있어요.\n"
+            "• 교원대가 종점인 513·514번은 도착 예측이 제공되지 않아 어림값이에요.",
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.white70 : Colors.blueGrey[700],
@@ -867,18 +778,17 @@ class _BusAppScreenState extends State<BusAppScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              "예상 도착 시간은 다음 요소를 고려하여 계산됩니다:",
+              "도착 시간은 이렇게 정합니다:",
               style: TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 12),
-            _buildInfoItem("정거장 당 기본 시간", "1.6-3.0분 (노선별 상이)"),
-            _buildInfoItem("시간대별 교통", "출퇴근 혼잡시간 최대 +50%"),
-            _buildInfoItem("주말 영향", "주말 +10%"),
-            _buildInfoItem("계절/날씨", "겨울 +10%, 한여름 +5%"),
-            _buildInfoItem("근접 보정", "3정거장 이하 남으면 +1분"),
+            _buildInfoItem("정류장 도착 정보", "탑연삼거리·교원대 정류장의 실제 도착 예정 시간(국토교통부)"),
+            _buildInfoItem("뒤차", "같은 노선의 실제 속도(분/정거장)로 어림 — \"약\" 표시"),
+            _buildInfoItem("예측이 없을 때", "정거장당 1.6~3.0분 + 출퇴근 시간 가중치 — \"약\" 표시"),
+            _buildInfoItem("방향", "\"상행/하행\" 대신 행선지(오송역행·청주행 등)"),
             const SizedBox(height: 12),
             const Text(
-              "이 정보는 참고용이며 실제 도착 시간과 다를 수 있습니다.",
+              "실제 도착 시간과 다를 수 있어요.",
               style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
             ),
           ],
@@ -914,38 +824,70 @@ class _BusAppScreenState extends State<BusAppScreen>
 
   /// 한 방향(상행/하행)의 구역 전체. 그 방향으로 오는 차가 하나도 없으면
   /// 구역째 빼서, 지금 탈 수 있는 쪽만 화면에 남게 한다.
-  List<Widget> _buildDirectionSection(
-    BusDirection dir,
+  List<Widget> _buildHeadingSection(
+    BusHeading heading,
     List<BusSummary> directBuses,
     List<BusSummary> tapyeonBuses,
     bool isDark,
   ) {
-    bool hasDir(BusSummary b) => b.arrivalsTowards(dir).isNotEmpty;
-    final direct = directBuses.where(hasDir).toList();
-    final tapyeon = tapyeonBuses.where(hasDir).toList();
+    Widget? card(BusSummary b) {
+      final dirs = busDirectionsFor(b.number, heading);
+      if (!dirs.any((d) => b.arrivalsTowards(d).isNotEmpty)) return null;
+      // 두 방향을 한 구역에 넣는 노선(513·514·518)은 카드 하나로 — 방향 없이.
+      return BusCard(bus: b, direction: dirs.length == 1 ? dirs.first : null);
+    }
+
+    // 고정한 노선을 위로, 그다음은 이 구역 방향으로 빨리 오는 순.
+    final favorites = FavoriteService.favoritesNotifier.value;
+    double soonest(BusSummary b) {
+      var best = double.infinity;
+      for (final d in busDirectionsFor(b.number, heading)) {
+        for (final a in b.arrivalsTowards(d)) {
+          final m = a.remainStops == 0 ? 0.0 : a.estimatedMinutes;
+          if (m < best) best = m;
+        }
+      }
+      return best;
+    }
+
+    List<Widget> ordered(List<BusSummary> list) {
+      final sorted = [...list]..sort((a, b) {
+          final fa = favorites.contains(a.number) ? 0 : 1;
+          final fb = favorites.contains(b.number) ? 0 : 1;
+          if (fa != fb) return fa - fb;
+          return soonest(a).compareTo(soonest(b));
+        });
+      return sorted.map(card).whereType<Widget>().toList();
+    }
+
+    final direct = ordered(directBuses);
+    final tapyeon = ordered(tapyeonBuses);
     if (direct.isEmpty && tapyeon.isEmpty) return const [];
 
-    final isOutbound = dir == BusDirection.outbound;
+    final toCheongju = heading == BusHeading.cheongju;
     return [
       _buildDirectionHeader(
-        title: isOutbound ? "상행" : "하행",
-        subtitle: isOutbound ? "오송·조치원 방면" : "청주 방면",
-        color: isOutbound
-            ? (isDark ? Colors.blueAccent : Colors.blue.shade700)
-            : (isDark ? Colors.orangeAccent : Colors.deepOrange.shade600),
+        title: heading.title,
+        subtitle: heading.subtitle,
+        color: toCheongju
+            ? (isDark ? Colors.orangeAccent : Colors.deepOrange.shade600)
+            : (isDark ? Colors.blueAccent : Colors.blue.shade700),
         isDark: isDark,
       ),
       if (direct.isNotEmpty) ...[
-        _buildSectionHeader("🎯 교원대 직행", isDark, subtitle: "정문까지 직통"),
-        ...direct.map((b) => BusCard(bus: b, direction: dir)),
+        _buildSectionHeader("교원대 정류장", isDark, subtitle: "한국교원대학교 정류장에서 승차"),
+        ...direct,
       ],
       if (tapyeon.isNotEmpty) ...[
         _buildSectionHeader(
-          "🔄 탑연삼거리 경유",
+          "탑연삼거리",
           isDark,
-          subtitle: "탑연삼거리 하차 후 환승",
+          // 탑연삼거리는 길 양쪽에 정류장이 있다 — 번호 대신 "~ 방면"(다음 정류장).
+          subtitle: toCheongju
+              ? "${kStopHeadingLabels['CJB271000389']} 정류장에서 승차"
+              : "${kStopHeadingLabels['CJB274000277']} 정류장에서 승차",
         ),
-        ...tapyeon.map((b) => BusCard(bus: b, direction: dir)),
+        ...tapyeon,
       ],
       const SizedBox(height: 20),
     ];
@@ -1033,9 +975,11 @@ class _BusAppScreenState extends State<BusAppScreen>
   // 스켈레톤 로딩 UI (초기 로딩 시 보여줄 플레이스홀더)
   Widget _buildSkeletonLoading(bool isDark) {
     return ListView(
-      physics: const NeverScrollableScrollPhysics(),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 12),
       children: [
+        // 가까운 정류장 카드는 노선 정보와 따로 받으니 로딩 중에도 띄운다.
+        _nearbyCard(isDark),
         // 요약 카드 스켈레톤
         _buildSkeletonCard(
           isDark,
@@ -1323,6 +1267,21 @@ class _BusAppScreenState extends State<BusAppScreen>
         continue;
       }
     }
+
+    // 지나간 버스 표시는 "오늘" 시간표를 볼 때만. 평일 밤에 휴일 시간표를 열면
+    // 예전엔 지금 시각으로 줄이 그어져 전부 "출발함"이 됐다.
+    // (913은 요일 구분이 없다.)
+    final viewingToday = isTodaysTimetable(
+      route: _selectedBus,
+      viewingHoliday: _isWeekend,
+      now: DateTime.now(),
+    );
+    final allPassedToday =
+        viewingToday && timeList.isNotEmpty && nextBusIndex == -1;
+    if (!viewingToday) nextBusIndex = -1;
+    final String? tomorrowFirst = allPassedToday
+        ? _tomorrowFirstBus(directionKey, timeList)
+        : null;
 
     final dayKey = _isWeekend ? "holiday" : "weekday";
     final scrollKey =
@@ -1725,6 +1684,36 @@ class _BusAppScreenState extends State<BusAppScreen>
             ],
           ),
         ),
+        if (allPassedToday)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: KnueTokens.surface(isDark),
+              borderRadius: BorderRadius.circular(KnueTokens.radiusCard),
+              border: Border.all(color: KnueTokens.hairline(isDark), width: 0.5),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.nightlight_round, size: 18, color: KnueTokens.caption(isDark)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    tomorrowFirst == null
+                        ? "오늘 운행이 끝났어요"
+                        : "오늘 운행이 끝났어요 · 내일 첫차 $tomorrowFirst",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: KnueTokens.tabularFigures,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Expanded(
           child: ListView.builder(
             controller: _scrollController,
@@ -1751,11 +1740,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                 return const SizedBox();
               }
 
-              bool passed = false;
-              if (nextBusIndex == -1)
-                passed = true;
-              else
-                passed = index < nextBusIndex;
+              final bool passed = viewingToday &&
+                  (nextBusIndex == -1 || index < nextBusIndex);
               final isNext = index == nextBusIndex;
 
               String remainText = "";

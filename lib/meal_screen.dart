@@ -146,6 +146,17 @@ class _TodayMealPageState extends State<TodayMealPage>
   bool _loading = false;
   String? _error;
   bool _alarmOn = false;
+
+  /// 교직원 식당 안내(선택식 메뉴·가격)를 열어 봤는지. 안 열어 봤으면 ⓘ에
+  /// 빨간 점을 단다 — 거기 메뉴·가격이 있는 걸 사람들이 잘 몰랐다(2026-11-12).
+  /// 읽기 전엔 true로 둬서 점이 잠깐 깜빡이지 않게 한다.
+  bool _staffInfoSeen = true;
+
+  /// 식단 카드 아래 광고. 처음 열 때 한 번 살짝 내려 이것까지 보이게 한다
+  /// ([_revealAdOnce]) — 광고를 맨 위에 두지 않는 대신(사용자 결정, 2026-11-12).
+  final GlobalKey _mealAdKey = GlobalKey();
+  bool _adRevealed = false;
+  bool _userScrolled = false;
   Map<String, List<String>> _meals = {
     "breakfast": [],
     "lunch": [],
@@ -169,8 +180,18 @@ class _TodayMealPageState extends State<TodayMealPage>
     if (mounted) {
       setState(() {
         _alarmOn = prefs.getBool('alarm_enabled') ?? false;
+        _staffInfoSeen = prefs.getBool(kStaffMenuInfoSeenKey) ?? false;
       });
     }
+  }
+
+  Future<void> _markStaffInfoSeen() async {
+    if (_staffInfoSeen) return;
+    setState(() => _staffInfoSeen = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(kStaffMenuInfoSeenKey, true);
+    } catch (_) {}
   }
 
   void _updateSelectionByTime() {
@@ -198,6 +219,7 @@ class _TodayMealPageState extends State<TodayMealPage>
       if (myReq != _reqId) return;
       _applyMealsFromBackend(res);
       if (mounted) setState(() => _loading = false);
+      _revealAdOnce();
     } catch (e) {
       if (mounted && myReq == _reqId) {
         setState(() {
@@ -205,8 +227,32 @@ class _TodayMealPageState extends State<TodayMealPage>
           _loading = false;
           _meals = {"breakfast": [], "lunch": [], "dinner": []};
         });
+        _revealAdOnce();
       }
     }
+  }
+
+  /// 처음 식단을 불러온 뒤 한 번, 식단 카드 아래 광고까지 보이도록 살짝 내린다.
+  /// 이미 보이면(큰 화면) 움직이지 않고, 그새 사용자가 스크롤했으면 건드리지
+  /// 않는다. 날짜·식당을 바꿀 땐 다시 하지 않는다.
+  void _revealAdOnce() {
+    if (_adRevealed) return;
+    _adRevealed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(milliseconds: 350));
+      if (!mounted || _userScrolled) return;
+      final ctx = _mealAdKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      final reduceMotion = MediaQuery.maybeDisableAnimationsOf(ctx) ?? false;
+      await Scrollable.ensureVisible(
+        ctx,
+        alignment: 1.0,
+        // 아래로 벗어나 있을 때만 움직인다.
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 550),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   void _applyMealsFromBackend(dynamic decoded) {
@@ -220,6 +266,11 @@ class _TodayMealPageState extends State<TodayMealPage>
       "lunch": asStringList(meals["중식"] ?? meals["점심"] ?? meals["lunch"]),
       "dinner": asStringList(meals["석식"] ?? meals["저녁"] ?? meals["dinner"]),
     };
+  }
+
+  void _goToday() {
+    setState(() => _date = DateTime.now());
+    fetchMeals();
   }
 
   void _changeDate(int deltaDays) {
@@ -324,7 +375,12 @@ class _TodayMealPageState extends State<TodayMealPage>
     final primaryColor = Theme.of(context).primaryColor;
 
     return Scaffold(
-      body: NestedScrollView(
+      body: NotificationListener<UserScrollNotification>(
+        onNotification: (_) {
+          _userScrolled = true;
+          return false;
+        },
+        child: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             SliverAppBar(
@@ -352,13 +408,35 @@ class _TodayMealPageState extends State<TodayMealPage>
                   ),
                   const SizedBox(width: 4),
                   GestureDetector(
-                    onTap: () => _showCafeteriaInfo(context),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.info_outline,
-                        color: Colors.white.withOpacity(0.8),
-                        size: 18,
+                    onTap: () {
+                      // 교직원 식당 안내를 열면 빨간 점을 끈다.
+                      if (_source == MealSource.b) _markStaffInfoSeen();
+                      _showCafeteriaInfo(context);
+                    },
+                    child: Semantics(
+                      label: showStaffMenuInfoDot(_source, seen: _staffInfoSeen)
+                          ? '식당 운영 정보, 선택식 메뉴와 가격 새 소식'
+                          : '식당 운영 정보',
+                      button: true,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              color: Colors.white.withValues(alpha: 0.8),
+                              size: 18,
+                            ),
+                            // 아이폰 앱 아이콘의 새 소식 점처럼.
+                            if (showStaffMenuInfoDot(_source, seen: _staffInfoSeen))
+                              const Positioned(
+                                top: -2,
+                                right: -2,
+                                child: _NewDot(),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -425,11 +503,12 @@ class _TodayMealPageState extends State<TodayMealPage>
                           ),
                         ),
                         const SizedBox(height: 15),
-                        _DateSwitcher(
+                        MealDateSwitcher(
                           date: _date,
                           isToday: isToday,
                           onPrev: _loading ? null : () => _changeDate(-1),
                           onNext: _loading ? null : () => _changeDate(1),
+                          onToday: _loading ? null : _goToday,
                           primaryColor: primaryColor,
                         ),
                       ],
@@ -501,18 +580,13 @@ class _TodayMealPageState extends State<TodayMealPage>
                   );
                 },
               ),
-              // 날짜(헤더)와 식단 카드 사이 — 스크롤하지 않아도 보이는 자리.
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               _MealTabs(
                 selected: _selected,
                 source: _source,
                 onSelect: (t) => setState(() => _selected = t),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: kMealSectionGap),
               if (_loading)
                 // 스피너 대신 카드 형태를 미리 그려 로딩→표시 전환에 덜컹임이 없게.
                 _MealCardSkeleton(
@@ -547,10 +621,22 @@ class _TodayMealPageState extends State<TodayMealPage>
                     date: _date,
                   ),
                 ),
-              const SizedBox(height: 32),
+              // 광고는 식단 카드 아래 — 가장 자주 보는 탭이라 맨 위 광고는 지저분해
+              // 보였다(사용자 결정, 2026-11-12. 0309885에서 위로 올렸던 것을 되돌림).
+              const SizedBox(height: 16),
+              KeyedSubtree(
+                key: _mealAdKey,
+                // 아래 12는 자동으로 내려갈 때 광고가 화면 끝에 딱 붙지 않게 하는 여유.
+                child: const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
+                ),
+              ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -827,18 +913,64 @@ class _TodayMealPageState extends State<TodayMealPage>
 // Helper Widgets
 // =============================================================================
 
-class _DateSwitcher extends StatelessWidget {
+/// 교직원 식당 안내를 열어 봤는지 적는 키.
+const String kStaffMenuInfoSeenKey = 'meal_staff_menu_info_seen';
+
+/// ⓘ에 빨간 점을 달지 — 교직원 식당을 보고 있고 그 안내(선택식 메뉴·가격)를
+/// 아직 안 열어 봤을 때. 순수 함수 — 테스트 대상.
+bool showStaffMenuInfoDot(MealSource source, {required bool seen}) =>
+    source == MealSource.b && !seen;
+
+/// 새 소식 빨간 점(아이폰 앱 아이콘 배지처럼). 머리 색 위에서도 보이게 흰 테.
+class _NewDot extends StatelessWidget {
+  const _NewDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 9,
+      height: 9,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF3B30), // iOS 시스템 빨강
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.5),
+      ),
+    );
+  }
+}
+
+/// 청람밥상의 끼니 탭(아침·점심·저녁)과 식단 카드 사이 간격.
+const double kMealSectionGap = 8;
+
+/// 날짜 위 알약에 쓸 말 — 오늘 기준. 순수 함수 — 테스트 대상.
+String mealDayBadge(DateTime date, DateTime today) {
+  final d = DateUtils.dateOnly(date).difference(DateUtils.dateOnly(today)).inDays;
+  if (d == 0) return '오늘의 식단';
+  if (d == -1) return '어제의 식단';
+  if (d == 1) return '내일의 식단';
+  return d < 0 ? '${-d}일 전 식단' : '$d일 후 식단';
+}
+
+/// 청람밥상 머리의 날짜 전환.
+///
+/// 날짜 위 알약은 **어느 날이든 같은 자리에** 그린다. 예전엔 오늘일 때만
+/// "오늘의 식단"을 그려서, 다른 날로 넘기면 그 높이만큼 날짜 묶음이 짧아지고
+/// (머리 높이는 240 고정) 날짜 아래가 비었다. 다른 날엔 눌러서 오늘로 돌아간다.
+class MealDateSwitcher extends StatelessWidget {
   final DateTime date;
   final bool isToday;
   final VoidCallback? onPrev;
   final VoidCallback? onNext;
+  final VoidCallback? onToday;
   final Color primaryColor;
 
-  const _DateSwitcher({
+  const MealDateSwitcher({
+    super.key,
     required this.date,
     required this.isToday,
     required this.onPrev,
     required this.onNext,
+    this.onToday,
     required this.primaryColor,
   });
 
@@ -859,25 +991,43 @@ class _DateSwitcher extends StatelessWidget {
           ),
           Column(
             children: [
-              if (isToday)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    "오늘의 식단",
-                    style: TextStyle(
-                      color: primaryColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
+              GestureDetector(
+                onTap: isToday ? null : onToday,
+                child: Semantics(
+                  button: !isToday,
+                  label: isToday ? null : '오늘 식단으로 돌아가기',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      // 다른 날은 한 단계 옅게 — 오늘이 아님을 보여 주고, 누를 수 있다.
+                      color: isToday
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          mealDayBadge(date, DateTime.now()),
+                          style: TextStyle(
+                            color: isToday ? primaryColor : Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (!isToday) ...[
+                          const SizedBox(width: 4),
+                          const Icon(Icons.undo_rounded, size: 13, color: Colors.white),
+                        ],
+                      ],
                     ),
                   ),
                 ),
+              ),
               const SizedBox(height: 4),
               Text(
                 "${wd[date.weekday]}요일",
@@ -1200,19 +1350,13 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            // 날짜(달력)와 식단 카드 사이.
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             _MealTabs(
               selected: _selectedType,
               source: _source,
               onSelect: (t) => setState(() => _selectedType = t),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: kMealSectionGap),
             if (_loading)
               const Center(
                 child: Padding(
@@ -1236,6 +1380,13 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
                 isToday: DateUtils.isSameDay(_selectedDate, DateTime.now()),
                 date: _selectedDate,
               ),
+            // 광고는 식단 카드 아래 — 가장 자주 보는 탭이라 맨 위 광고는 지저분해
+            // 보였다(사용자 결정, 2026-11-12. 0309885에서 위로 올렸던 것을 되돌림).
+            const SizedBox(height: 16),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
+            ),
             const SizedBox(height: 32),
           ],
         ),
@@ -3136,7 +3287,9 @@ class _MealDetailCardState extends State<_MealDetailCard> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
+                  stream: Firebase.apps.isEmpty // Firebase 없이(화면 확인용 테스트) 그릴 때
+                      ? const Stream.empty()
+                      : FirebaseFirestore.instance
                       .collection('meal_ratings')
                       .where(
                         'date',
@@ -3530,7 +3683,9 @@ class _MealDetailCardState extends State<_MealDetailCard> {
               children: [
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
+                    stream: Firebase.apps.isEmpty // Firebase 없이(화면 확인용 테스트) 그릴 때
+                      ? const Stream.empty()
+                      : FirebaseFirestore.instance
                         .collection('meal_ratings')
                         .where(
                           'date',

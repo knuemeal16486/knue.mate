@@ -6,7 +6,6 @@ import 'bus_model.dart';
 import 'bus_service.dart';
 import 'bus_route_data.dart';
 import 'favorite_service.dart';
-import 'congestion_indicator.dart';
 import 'ui_utils.dart';
 
 class BusCard extends StatelessWidget {
@@ -28,7 +27,7 @@ class BusCard extends StatelessWidget {
     "종합교육관": [36.6107, 127.3610],
     "학생회관": [36.6086, 127.3598],
     "정문": [36.6067, 127.3564],
-    "탑연삼거리": [36.6053, 127.3516],
+    "탑연삼거리": [36.6238, 127.3576], // 2026-11-12 정류장 3308 좌표로 바로잡음
     "강내면행정복지센터": [36.6051, 127.3530],
     "충청대학교": [36.6074, 127.3486],
     "오송역": [36.6200, 127.3275],
@@ -83,7 +82,7 @@ class BusCard extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _RouteDetailSheet(bus: bus),
+      builder: (context) => _RouteDetailSheet(bus: bus, initialDirection: direction),
     );
   }
 
@@ -109,19 +108,17 @@ class BusCard extends StatelessWidget {
     // 갈랐는데, 그러면 돌아오는 길의 버스가 전부 "이미 지나감"이 됐다.
     final BusDirection dir =
         direction ?? best?.direction ?? BusDirection.outbound;
-    final bool isOutbound = dir == BusDirection.outbound;
 
-    final String directionSubText;
-    final String targetStation;
-    if (bus.isDirect) {
-      directionSubText = isOutbound ? "오송·조치원 방면" : "청주 방면";
-      targetStation = "한국교원대 정류장";
-    } else {
-      directionSubText = isOutbound ? "오송 방면" : "청주 방면";
-      targetStation = isOutbound
-          ? "탑연삼거리 (궁평3리 방면)"
-          : "탑연삼거리 (월곡초등학교 방면)";
-    }
+    // 방향은 "상행/하행"이 아니라 행선지로 — 노선마다 상행의 뜻이 다르다.
+    // 두 방향을 한 카드로 보여 주는 노선(513·514·518)은 노선 이름 하나로.
+    final String combined = direction == null ? busCombinedLabel(bus.number) : '';
+    final String directionSubText =
+        combined.isNotEmpty ? combined : busDirectionLabel(bus.number, dir);
+    // 기준 정류장은 표지판 번호까지 — 탑연삼거리는 길 양쪽(3308·3309)에 있다.
+    final targetStop = busTargetStop(bus.number, dir);
+    final String targetStation = targetStop == null
+        ? (bus.isDirect ? "교원대" : "탑연삼거리")
+        : busTargetStopShort(targetStop);
 
     String remainText;
     if (hasInfo) {
@@ -140,14 +137,14 @@ class BusCard extends StatelessWidget {
         ..sort((a, b) => a.remainStops.compareTo(b.remainStops));
       final second = sorted[1];
       secondBusInfo = second.estimatedMinutes > 0
-          ? "뒤차 약 ${second.estimatedMinutes.round()}분 후"
+          ? "뒤차 ${second.etaFromApi ? '' : '약 '}${second.estimatedMinutes.round()}분 후"
           : "뒤차 ${second.remainStops}정거장 전";
     }
 
-    // ETA: BusService가 교통/시간대/혼잡도를 반영해 계산한 값.
-    // 이제 상행·하행 모두 실제 도착 예정 시간이 나온다.
+    // ETA: 정류장 도착 정보 API 값이면 그대로, 아니면 어림값이라 "약"을 붙인다.
     String etaText = "";
     if (hasInfo) {
+      final about = best.etaFromApi ? "" : "약 ";
       if (isArrived) {
         etaText = "잠시 후 도착";
       } else if (best.estimatedMinutes > 0) {
@@ -157,9 +154,9 @@ class BusCard extends StatelessWidget {
         } else if (mins >= 60) {
           final h = mins ~/ 60;
           final m = mins % 60;
-          etaText = "약 $h시간 $m분 후";
+          etaText = "$about$h시간 $m분 후";
         } else {
-          etaText = "약 $mins분 후 도착";
+          etaText = "$about$mins분 후 도착";
         }
       } else {
         etaText = "도착 예정";
@@ -220,10 +217,6 @@ class BusCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                          CongestionIndicator(
-                            bus.congestion,
-                            isEstimated: bus.isCongestionEstimated,
-                          ),
                         if (arrivals.length > 1)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -362,7 +355,7 @@ class BusCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "현재 버스 위치 ($directionSubText)",
+                          "현재 버스 위치 · $directionSubText",
                           style: TextStyle(
                             color: isDark ? Colors.white54 : Colors.grey[600],
                             fontSize: 11,
@@ -413,24 +406,25 @@ class BusCard extends StatelessWidget {
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                             ),
+                            // "탑연삼거리(월곡초등학교 방면)까지 3정거장 전"은 길다.
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  if (secondBusInfo.isNotEmpty)
-                    Flexible(
-                      child: Text(
-                        secondBusInfo,
-                        style: TextStyle(
-                          color: isDark ? Colors.white38 : Colors.grey[400],
-                          fontSize: 11,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.end,
+                  // 뒤차는 짧으니 필요한 만큼만 — 반씩 나누면 왼쪽 "n정거장 전"이 잘렸다.
+                  if (secondBusInfo.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      secondBusInfo,
+                      style: TextStyle(
+                        color: isDark ? Colors.white38 : Colors.grey[400],
+                        fontSize: 11,
                       ),
                     ),
+                  ],
                 ],
               ),
             ],
@@ -445,13 +439,29 @@ class BusCard extends StatelessWidget {
 class _RouteDetailSheet extends StatefulWidget {
   final BusSummary bus;
 
-  const _RouteDetailSheet({required this.bus});
+  /// 카드가 맡은 방향(구역). 있으면 노선도를 그 방향으로 연다.
+  final BusDirection? initialDirection;
+
+  const _RouteDetailSheet({required this.bus, this.initialDirection});
 
   @override
   State<_RouteDetailSheet> createState() => _RouteDetailSheetState();
 }
 
 class _RouteDetailSheetState extends State<_RouteDetailSheet> {
+  /// 공용 문서 구독. Firebase가 없으면(화면 확인용 테스트) 빈 흐름 — 카드가
+  /// 받은 값으로만 그린다.
+  static Stream<DocumentSnapshot> _busLocationsStream() {
+    try {
+      return FirebaseFirestore.instance
+          .collection('realtime')
+          .doc('bus_locations')
+          .snapshots();
+    } catch (_) {
+      return const Stream.empty();
+    }
+  }
+
   final ScrollController _scrollController = ScrollController();
   bool _hasInitialScrolled = false;
   String _selectedDirection = "상행";
@@ -459,7 +469,6 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
   List<RouteStop>? _apiStops; // API에서 가져온 정류장 데이터
   bool _isLoadingStops = true;
   String _trafficCondition = "smooth";
-  String _congestion = "normal";
   Set<String> _favStops = {}; // 즐겨찾기(주요) 정류장
   Map<String, int> _lastVehicleStopIndex = {};
 
@@ -471,8 +480,6 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     _loadApiStops();
     _loadFavStops();
     _trafficCondition = BusService.estimateTrafficCondition(DateTime.now());
-    // 카드 배지와 같은 값을 쓴다 — 실시간 혼잡도가 있으면 그것, 없으면 시간대 추정치.
-    _congestion = widget.bus.congestion;
   }
 
   Future<void> _loadFavStops() async {
@@ -542,7 +549,10 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
       _selectedDirection = "순환";
     } else if (routeData is Map) {
       final arrivals = widget.bus.arrivals;
-      if (arrivals.isNotEmpty) {
+      if (widget.initialDirection != null) {
+        // "청주 방면" 구역에서 눌렀으면 청주행 노선도부터.
+        _selectedDirection = widget.initialDirection!.label;
+      } else if (arrivals.isNotEmpty) {
         // 가장 먼저 도착하는 차의 방향을 기본 탭으로 — 지금 당장 탈 수 있는
         // 쪽을 먼저 보여주는 게 맞다.
         _selectedDirection =
@@ -574,10 +584,28 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     } catch (_) {}
   }
 
-  String? _getNearestStopName(List<String> stops) {
+  String? _getNearestStopName(List<String> stops, [List<RouteStop>? routeStops]) {
     if (_userPosition == null) return null;
     String? nearest;
     double minDistance = double.infinity;
+    // 노선 정류장이 있으면 그 좌표(API 값)로. 손으로 적은 좌표 표는 틀린 곳이
+    // 있었다(탑연삼거리가 교원대 정문 자리로 2km 어긋나 있었다).
+    if (routeStops != null) {
+      for (final s in routeStops) {
+        if (s.latitude == null || s.longitude == null) continue;
+        final d = Geolocator.distanceBetween(
+          _userPosition!.latitude,
+          _userPosition!.longitude,
+          s.latitude!,
+          s.longitude!,
+        );
+        if (d < minDistance) {
+          minDistance = d;
+          nearest = s.nodeName;
+        }
+      }
+      return nearest;
+    }
     for (final stop in stops) {
       final coords = BusCard.stopCoordinates[stop];
       if (coords != null) {
@@ -604,7 +632,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
           final congestionSuffix = b.congestion != null
               ? " [${b.formattedCongestion}]"
               : "";
-          final dirTag = "[${b.direction.label}] ";
+          final dirTag = "[${busDirectionLabel(widget.bus.number, b.direction)}] ";
           if (b.remainStops == 0) return "$dirTag곧 도착$congestionSuffix";
           return "$dirTag${b.remainStops}전$congestionSuffix";
         })
@@ -615,7 +643,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
       final congestionSuffix = first.congestion != null
           ? " [${first.formattedCongestion}]"
           : "";
-      final dirTag = "[${first.direction.label}] ";
+      final dirTag = "[${busDirectionLabel(widget.bus.number, first.direction)}] ";
       return "$dirTag${first.remainStops}전$congestionSuffix 외 ${busesAtStop.length - 1}대";
     }
     return info;
@@ -703,54 +731,6 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     }
   }
 
-  // 교통 상황 한글 텍스트
-  String get _trafficText {
-    switch (_trafficCondition) {
-      case "slow":
-        return "서행";
-      case "moderate":
-        return "보통";
-      case "congested":
-        return "정체";
-      default:
-        return "원활";
-    }
-  }
-
-  // 혼잡도 한글 텍스트
-  String get _congestionText {
-    switch (_congestion) {
-      case "crowded":
-        return "혼잡";
-      case "empty":
-        return "여유";
-      default:
-        return "보통";
-    }
-  }
-
-  Color get _congestionColor {
-    switch (_congestion) {
-      case "crowded":
-        return Colors.redAccent;
-      case "empty":
-        return Colors.green;
-      default:
-        return Colors.blue;
-    }
-  }
-
-  IconData get _congestionIcon {
-    switch (_congestion) {
-      case "crowded":
-        return Icons.people;
-      case "empty":
-        return Icons.person;
-      default:
-        return Icons.person_outline;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -758,34 +738,40 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
     final routeData = BusRouteData.routeStops[widget.bus.number];
     final bool hasFallbackDirections = routeData != null;
 
-    // API 정류장이 있으면 통합 노선으로 표시 (상행/하행 토글 없음)
-    final bool useUnifiedRoute = _apiStops != null && _apiStops!.isNotEmpty;
+    // 정류장 목록 — 노선 스냅샷(또는 노선정보 API)을 방향(upDownCd)별로 나눈다.
+    // 예전엔 운영 빌드에 노선정보 키가 없어 손으로 줄여 적은 목록(bus_route_data)
+    // 에 이름으로 차를 꽂았다. 그 목록이 실제와 달라(511 상행 끝이 조치원역,
+    // 747이 오송역↔오송역) 차가 엉뚱한 곳에 찍히거나 빠졌다.
+    final int selectedUd = _selectedDirection == "하행" ? 1 : 0;
+    final bool hasApiStops = _apiStops != null && _apiStops!.isNotEmpty;
+    final bool apiHasBothDirections = hasApiStops &&
+        _apiStops!.any((s) => s.upDownCd == 0) &&
+        _apiStops!.any((s) => s.upDownCd == 1);
+    final List<RouteStop>? dirStops = !hasApiStops
+        ? null
+        : apiHasBothDirections
+            ? _apiStops!.where((s) => s.upDownCd == selectedUd).toList()
+            : _apiStops!;
+    final bool useUnifiedRoute = dirStops != null;
 
     List<String> stops = [];
-    if (useUnifiedRoute) {
-      // API: 전체 노선 통합 표시 (NodeOrd 순서대로)
-      stops = _apiStops!.map((s) => s.nodeName).toList();
+    if (dirStops != null) {
+      stops = dirStops.map((s) => s.nodeName).toList();
     } else if (hasFallbackDirections) {
-      // routeData는 Map<String, List<String>> 타입임
       final Map<String, List<String>> routeMap = routeData;
       final List<String>? list = routeMap[_selectedDirection];
-      
       if (list != null) {
         stops = List<String>.from(list);
       } else if (routeMap.isNotEmpty) {
-        // 현재 선택된 방향의 데이터가 없으면 첫 번째 가용한 방향 사용
         stops = List<String>.from(routeMap.values.first);
       }
     }
 
-    // 방향 토글은 API 없이 fallback만 사용하고 방향 데이터가 있을 때만 표시
-    final bool showDirectionToggle = !useUnifiedRoute && hasFallbackDirections;
+    final bool showDirectionToggle =
+        apiHasBothDirections || (!hasApiStops && hasFallbackDirections);
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('realtime')
-          .doc('bus_locations')
-          .snapshots(),
+      stream: _busLocationsStream(),
       builder: (context, snapshot) {
         List<BusArrival> currentArrivals = widget.bus.arrivals;
         if (snapshot.hasData && snapshot.data!.exists) {
@@ -804,21 +790,15 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
           }
         }
 
-        // 통합 모드: 모든 버스 표시 / 방향 모드: 해당 방향 정류장에 있는 버스만
+        // 노선 정류장이 있으면 정류장 순번으로 정확히 거른다 — 지금 이 방향
+        // 목록 위에 있는 차만. 없으면(옛 폴백) 이름으로.
         List<BusArrival> filteredArrivals;
         if (useUnifiedRoute) {
-          // 통합 모드 — nodeOrd 범위 또는 이름 매칭으로 전체 포함
+          final ords = {for (final s in dirStops) s.nodeOrd};
           filteredArrivals = currentArrivals.where((a) {
-            if (a.nodeOrd != null) {
-              return _apiStops!.any(
-                (s) =>
-                    s.nodeOrd == a.nodeOrd ||
-                    (a.nodeOrd! >= _apiStops!.first.nodeOrd &&
-                        a.nodeOrd! <= _apiStops!.last.nodeOrd),
-              );
-            }
+            if (a.nodeOrd != null) return ords.contains(a.nodeOrd);
             final n = _normalize(a.currentStopName);
-            return _apiStops!.any(
+            return dirStops.any(
               (s) =>
                   _normalize(s.nodeName).contains(n) ||
                   n.contains(_normalize(s.nodeName)),
@@ -852,14 +832,14 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
         final Map<String, int> currentVehicleStopIndex = {};
         for (final arrival in filteredArrivals) {
           int bestIdx = -1;
-          if (_apiStops != null && _apiStops!.isNotEmpty && arrival.nodeOrd != null) {
-            // API stops: nodeOrd로 정확히 매칭
-            bestIdx = _apiStops!.indexWhere((s) => s.nodeOrd == arrival.nodeOrd);
+          if (dirStops != null && arrival.nodeOrd != null) {
+            // 노선 정류장: nodeOrd로 정확히 매칭
+            bestIdx = dirStops.indexWhere((s) => s.nodeOrd == arrival.nodeOrd);
             // 정확 매칭 없으면 가장 가까운 nodeOrd 정류장
             if (bestIdx == -1) {
               int minDiff = 9999;
-              for (int i = 0; i < _apiStops!.length; i++) {
-                final diff = (_apiStops![i].nodeOrd - arrival.nodeOrd!).abs();
+              for (int i = 0; i < dirStops.length; i++) {
+                final diff = (dirStops[i].nodeOrd - arrival.nodeOrd!).abs();
                 if (diff < minDiff) { minDiff = diff; bestIdx = i; }
               }
             }
@@ -888,13 +868,20 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
           _scrollToCurrentBus(filteredArrivals, stops);
         }
 
-        final nearestStop = _getNearestStopName(stops);
-        final upboundCount = currentArrivals
-            .where((a) => a.direction == BusDirection.outbound)
-            .length;
-        final downboundCount = currentArrivals
-            .where((a) => a.direction == BusDirection.inbound)
-            .length;
+        final nearestStop = _getNearestStopName(stops, dirStops);
+        int countOn(int ud, BusDirection fallbackDir) {
+          if (!apiHasBothDirections) {
+            return currentArrivals.where((a) => a.direction == fallbackDir).length;
+          }
+          final ords = {
+            for (final s in _apiStops!)
+              if (s.upDownCd == ud) s.nodeOrd,
+          };
+          return currentArrivals.where((a) => ords.contains(a.nodeOrd)).length;
+        }
+
+        final upboundCount = countOn(0, BusDirection.outbound);
+        final downboundCount = countOn(1, BusDirection.inbound);
 
         return Container(
           height: MediaQuery.of(context).size.height * 0.85,
@@ -960,7 +947,9 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                widget.bus.direction,
+                                busRouteSummary(widget.bus.number).isNotEmpty
+                                    ? busRouteSummary(widget.bus.number)
+                                    : widget.bus.direction,
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -972,7 +961,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                 children: [
                                   if (_apiStops != null)
                                     Text(
-                                      "${_apiStops!.length}개 정류장",
+                                      "${dirStops?.length ?? _apiStops!.length}개 정류장",
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: isDark
@@ -1043,86 +1032,65 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                       ),
                       child: Row(
                         children: [
-                          // 교통 상황
+                          // 이 방향 다음 도착 — 시간대로 짐작한 교통·혼잡도 대신 실제 값.
                           Expanded(
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: _trafficColor(isDark),
-                                    shape: BoxShape.circle,
+                            flex: 2,
+                            child: Builder(builder: (context) {
+                              final dirEnum = _selectedDirection == "하행"
+                                  ? BusDirection.inbound
+                                  : BusDirection.outbound;
+                              final towards = currentArrivals
+                                  .where((a) => a.direction == dirEnum)
+                                  .toList()
+                                ..sort((a, b) => a.remainStops.compareTo(b.remainStops));
+                              final stop = busTargetStop(widget.bus.number, dirEnum);
+                              final next = towards.isEmpty ? null : towards.first;
+                              final mins = next?.estimatedMinutes.round() ?? 0;
+                              final value = next == null
+                                  ? "운행 정보 없음"
+                                  : next.remainStops == 0 || mins < 1
+                                      ? "곧 도착"
+                                      : "${next.etaFromApi ? '' : '약 '}$mins분 후";
+                              return Row(
+                                children: [
+                                  Icon(
+                                    Icons.schedule_rounded,
+                                    size: 16,
+                                    color: isDark ? Colors.white54 : Colors.grey[600],
                                   ),
-                                ),
-                                const SizedBox(width: 6),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "교통",
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: isDark
-                                            ? Colors.white38
-                                            : Colors.grey,
-                                      ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          stop == null
+                                              ? "다음 도착"
+                                              : "${busTargetStopShort(stop)} 도착",
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: isDark ? Colors.white38 : Colors.grey,
+                                          ),
+                                        ),
+                                        Text(
+                                          value,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            fontFeatures: KnueTokens.tabularFigures,
+                                            color: next == null
+                                                ? Colors.grey
+                                                : (isDark ? Colors.white : Colors.black87),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Text(
-                                      _trafficText,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: _trafficColor(isDark),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 28,
-                            color: isDark
-                                ? Colors.white10
-                                : Colors.grey.shade200,
-                          ),
-                          // 혼잡도
-                          Expanded(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  _congestionIcon,
-                                  size: 16,
-                                  color: _congestionColor,
-                                ),
-                                const SizedBox(width: 4),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "혼잡도",
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: isDark
-                                            ? Colors.white38
-                                            : Colors.grey,
-                                      ),
-                                    ),
-                                    Text(
-                                      _congestionText,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: _congestionColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                                  ),
+                                ],
+                              );
+                            }),
                           ),
                           Container(
                             width: 1,
@@ -1203,10 +1171,10 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                         final dirCount = dir == "상행"
                             ? upboundCount
                             : downboundCount;
-                        final isTapyeonVia = !widget.bus.isDirect;
-                        final displayDir = !isTapyeonVia
-                            ? dir
-                            : (dir == "상행" ? "오송 방면" : "청주 방면");
+                        final displayDir = busDirectionLabel(
+                          widget.bus.number,
+                          dir == "상행" ? BusDirection.outbound : BusDirection.inbound,
+                        );
                         return Expanded(
                           child: GestureDetector(
                             onTap: () {
@@ -1300,7 +1268,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              "정류장 정보를 가져올 수 없습니다.",
+                              "정류장 정보를 가져오지 못했어요.",
                               style: TextStyle(
                                 color: isDark ? Colors.white54 : Colors.grey[500],
                               ),
@@ -1564,7 +1532,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: const Text(
-                                    "이 방향으로 운행 중인 차량이 없습니다.",
+                                    "이 방향으로 운행 중인 차가 없어요.",
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 12,
