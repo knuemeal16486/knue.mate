@@ -445,5 +445,6 @@ struct NoticeWidget: Widget {
         .configurationDisplayName("공지")
         .description("즐겨찾기 게시판마다 가장 최신 글을 봅니다.")
         .supportedFamilies([.systemMedium, .systemLarge])
+        .ownContentMargins()
     }
 }

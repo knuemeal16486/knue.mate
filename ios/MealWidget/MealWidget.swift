@@ -1,5 +1,10 @@
 import SwiftUI
 import WidgetKit
+#if canImport(UIKit)
+import UIKit
+#else
+import AppKit
+#endif
 
 // KNUE Mate 식단 홈 위젯 (iOS).
 //
@@ -67,33 +72,135 @@ struct MealProvider: TimelineProvider {
     }
 }
 
-/// 한 줄에 하나씩 [maxLines]개가 넘으면 " · "로 이어 쓴다 — 넘친 메뉴가
-/// 말없이 잘리지 않게. 메뉴 안에서는 줄이 바뀌지 않게 글자 사이에 U+2060
-/// (WORD JOINER)을, 낱말 사이에 NBSP를 넣는다. Android MealWidgetProvider.fitMenu와
-/// 같은 방식이다.
-func fitMealMenu(_ menu: String, maxLines: Int) -> String {
-    let lines = menu.split(separator: "\n")
-        .map { $0.trimmingCharacters(in: .whitespaces) }
-        .filter { !$0.isEmpty }
-    if lines.count <= maxLines { return lines.joined(separator: "\n") }
-    return lines.map { line -> String in
-        var item = line
-        if item.hasPrefix("·") { item.removeFirst() }
-        item = item.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: " ", with: "\u{00A0}")
-        return item.map { String($0) }.joined(separator: "\u{2060}")
-    }.joined(separator: "\u{00A0}· ")
+/// small 위젯 메뉴 줄. [rows]줄 안에 다 들어가면 한 줄에 하나씩("· " 머리).
+/// 아니면 메뉴를 앞에서부터 " · "로 이어 붙이되 한 줄 폭([maxWidth])을
+/// 넘기 전에 줄을 바꾼다 — 메뉴 이름이 줄 끝에서 끊기거나 줄 끝에 "·"가 남지 않는다.
+/// 줄이 [rows]개를 넘으면 마지막 줄 끝을 "외 N개"로(들어가게 앞 메뉴를 뺀다).
+/// 폭보다 긴 메뉴는 혼자 한 줄(그리는 쪽에서 글자를 줄인다).
+/// [width]는 글자 폭을 재는 함수 — 위젯에선 13pt 시스템 글꼴로 잰다.
+let kMealMenuSeparator = " · "
+
+func mealMenuFlowLines(_ items: [String], rows: Int, maxWidth: CGFloat,
+                       width: (String) -> CGFloat) -> [String] {
+    // 다 들어가면 한 줄에 하나씩이 가장 읽기 쉽다.
+    if items.count <= max(1, rows) { return items.map { "· " + $0 } }
+    var lines: [[String]] = []
+    for item in items {
+        if var last = lines.last,
+           width((last + [item]).joined(separator: kMealMenuSeparator)) <= maxWidth {
+            last.append(item)
+            lines[lines.count - 1] = last
+        } else {
+            lines.append([item])
+        }
+    }
+    let rows = max(1, rows)
+    if lines.count <= rows { return lines.map { $0.joined(separator: kMealMenuSeparator) } }
+    var kept = Array(lines[..<rows])
+    var last = kept.removeLast()
+    // 줄이 넘쳤으니 rest는 1 이상이다.
+    var rest = items.count - kept.reduce(0) { $0 + $1.count } - last.count
+    while !last.isEmpty,
+          width((last + ["외 \(rest)개"]).joined(separator: kMealMenuSeparator)) > maxWidth {
+        last.removeLast()
+        rest += 1
+    }
+    return kept.map { $0.joined(separator: kMealMenuSeparator) }
+        + [(last + ["외 \(rest)개"]).joined(separator: kMealMenuSeparator)]
 }
 
-/// 메뉴 칸 높이(pt)에 들어가는 줄 수. 13pt 한 줄은 줄 간격까지 약 19pt.
-/// small 위젯 높이가 기기마다 141~170pt라 크기 종류(family)로는 못 정하고,
-/// 실제 칸 높이(GeometryReader)로 정한다.
-func mealMenuCapacity(menuHeight: CGFloat) -> Int {
-    max(1, Int(menuHeight / 19))
+/// 메뉴 본문을 한 줄에 하나씩 나눈다. 앱이 붙인 "· " 머리는 뗀다.
+func mealMenuItems(_ menu: String) -> [String] {
+    menu.split(separator: "\n").map { line -> String in
+        var item = line.trimmingCharacters(in: .whitespaces)
+        if item.hasPrefix("·") { item.removeFirst() }
+        return item.trimmingCharacters(in: .whitespaces)
+    }.filter { !$0.isEmpty }
+}
+
+/// medium 위젯 메뉴 열. 한 열에 다 들어가면 한 열, 넘치면 두 열로 고르게
+/// (왼쪽이 하나 더) 나눈다. 두 열에도 넘치면 마지막 칸을 "외 N개"로 — 줄바꿈으로
+/// 이어 쓰면 메뉴 이름이 줄 끝에서 들쭉날쭉 끊겨 보였다.
+func mealMenuColumns(_ items: [String], rows: Int) -> [[String]] {
+    let rows = max(1, rows)
+    if items.count <= rows { return [items] }
+    if items.count <= rows * 2 {
+        let left = (items.count + 1) / 2
+        return [Array(items[..<left]), Array(items[left...])]
+    }
+    let shown = rows * 2 - 1
+    return [Array(items[..<rows]),
+            Array(items[rows..<shown]) + ["외 \(items.count - shown)개"]]
+}
+
+/// 메뉴가 적으면 글자를 키워 칸 아래가 비지 않게 한다. 이 크기들 중 메뉴가 다
+/// 들어가는(“외 N개” 없이) 가장 큰 것을 쓰고, 다 안 들어가면 13pt에 “외 N개”.
+let kMealMenuFontSizes: [CGFloat] = [16, 15, 14, 13]
+let kMealMenuMinGap: CGFloat = 3
+/// 남는 높이는 줄 사이에 나누되 이보다 벌리면 줄끼리 떨어져 보인다.
+let kMealMenuMaxGap: CGFloat = 10
+
+/// 글자 [size]pt 한 줄 높이.
+func mealMenuLineHeight(_ size: CGFloat) -> CGFloat { size + 3 }
+
+/// 줄 사이 간격 — 남는 높이를 나누되 [kMealMenuMinGap]~[kMealMenuMaxGap].
+func mealMenuRowGap(height: CGFloat, lines: Int, lineHeight: CGFloat) -> CGFloat {
+    guard lines > 1 else { return kMealMenuMinGap }
+    let gap = (height - CGFloat(lines) * lineHeight) / CGFloat(lines - 1)
+    return min(kMealMenuMaxGap, max(kMealMenuMinGap, gap))
+}
+
+/// 높이 [height]에 글자 [size]pt 줄이 몇 개 들어가는지(최소 간격 기준).
+func mealMenuCapacity(height: CGFloat, size: CGFloat) -> Int {
+    max(1, Int((height + kMealMenuMinGap) / (mealMenuLineHeight(size) + kMealMenuMinGap)))
+}
+
+struct MealMenuFit {
+    let size: CGFloat
+    let gap: CGFloat
+    /// small: 한 열(줄 목록). medium: 한 열 또는 두 열.
+    let columns: [[String]]
+    var lines: [String] { columns.first ?? [] }
+}
+
+private func isOverflow(_ cells: [String]) -> Bool {
+    guard let last = cells.last else { return false }
+    return last.hasSuffix("개") && (last.hasPrefix("외 ") || last.contains(kMealMenuSeparator + "외 "))
+}
+
+/// small 위젯 메뉴 배치. [width]는 (글, 글자 크기) → 폭.
+func mealMenuFitSmall(_ items: [String], height: CGFloat, maxWidth: CGFloat,
+                      width: (String, CGFloat) -> CGFloat) -> MealMenuFit {
+    var lines: [String] = []
+    var size = kMealMenuFontSizes.last!
+    for z in kMealMenuFontSizes {
+        size = z
+        lines = mealMenuFlowLines(items, rows: mealMenuCapacity(height: height, size: z),
+                                  maxWidth: maxWidth, width: { width($0, z) })
+        if !isOverflow(lines) { break }
+    }
+    let gap = mealMenuRowGap(height: height, lines: lines.count, lineHeight: mealMenuLineHeight(size))
+    return MealMenuFit(size: size, gap: gap, columns: [lines])
+}
+
+/// medium 위젯 메뉴 배치(메뉴 하나에 한 줄, 넘치면 두 열).
+func mealMenuFitMedium(_ items: [String], height: CGFloat) -> MealMenuFit {
+    var columns: [[String]] = []
+    var size = kMealMenuFontSizes.last!
+    for z in kMealMenuFontSizes {
+        size = z
+        columns = mealMenuColumns(items, rows: mealMenuCapacity(height: height, size: z))
+        if !isOverflow(columns.last ?? []) { break }
+    }
+    let gap = mealMenuRowGap(height: height, lines: columns.map(\.count).max() ?? 0,
+                             lineHeight: mealMenuLineHeight(size))
+    return MealMenuFit(size: size, gap: gap, columns: columns)
 }
 
 struct MealWidgetEntryView: View {
     var entry: MealEntry
     @Environment(\.colorScheme) private var systemColorScheme
+    @Environment(\.widgetFamily) private var family
 
     private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme) }
 
@@ -113,12 +220,35 @@ struct MealWidgetEntryView: View {
             }
 
             GeometryReader { geo in
-                Text(fitMealMenu(entry.menu, maxLines: mealMenuCapacity(menuHeight: geo.size.height)))
-                    .font(.system(size: 13))
-                    .foregroundColor(palette.body)
-                    .lineSpacing(3)
+                let items = mealMenuItems(entry.menu)
+                if family == .systemSmall {
+                    // small: 메뉴를 줄 폭에 맞춰 묶는다(줄 끝에서 메뉴가 끊기지 않게).
+                    let fit = mealMenuFitSmall(items, height: geo.size.height,
+                                               maxWidth: geo.size.width,
+                                               width: { mealMenuTextWidth($0, size: $1) })
+                    VStack(alignment: .leading, spacing: fit.gap) {
+                        ForEach(Array(fit.lines.enumerated()), id: \.offset) { _, line in
+                            menuLine(line, size: fit.size)
+                        }
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else {
+                    // medium: 메뉴 하나에 한 줄, 넘치면 두 열.
+                    let fit = mealMenuFitMedium(items, height: geo.size.height)
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(Array(fit.columns.enumerated()), id: \.offset) { _, column in
+                            VStack(alignment: .leading, spacing: fit.gap) {
+                                ForEach(Array(column.enumerated()), id: \.offset) { _, item in
+                                    menuLine(item.hasPrefix("외 ") ? item : "· " + item, size: fit.size)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
             }
+
         }
         .padding(14)
         .widgetBackground(palette.background)
@@ -127,6 +257,34 @@ struct MealWidgetEntryView: View {
         // 이동한다. 스킴은 Runner Info.plist의 CFBundleURLSchemes와 같아야 한다.
         .widgetURL(URL(string: "knuemate://meal?homeWidget"))
     }
+}
+
+extension MealWidgetEntryView {
+    /// 한 줄. 끝의 "외 N개"는 흐리게, 구분점도 흐리게.
+    @ViewBuilder
+    func menuLine(_ line: String, size: CGFloat) -> some View {
+        let parts = line.components(separatedBy: kMealMenuSeparator)
+        parts.enumerated().reduce(Text("")) { acc, p in
+            let (i, part) = p
+            let sep = i == 0 ? Text("") : Text(kMealMenuSeparator).foregroundColor(palette.muted)
+            let more = part.hasPrefix("외 ") && i == parts.count - 1 && part.hasSuffix("개")
+            return acc + sep + Text(part).foregroundColor(more ? palette.muted : palette.body)
+        }
+        .font(.system(size: size))
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .frame(height: mealMenuLineHeight(size), alignment: .leading)
+    }
+}
+
+/// [size]pt 시스템 글꼴로 잰 글자 폭(pt). 조금 여유를 둬서 실제 그릴 때 넘치지 않게.
+func mealMenuTextWidth(_ s: String, size: CGFloat) -> CGFloat {
+    #if canImport(UIKit)
+    let font = UIFont.systemFont(ofSize: size)
+    #else
+    let font = NSFont.systemFont(ofSize: size)
+    #endif
+    return ceil((s as NSString).size(withAttributes: [.font: font]).width) + 2
 }
 
 struct MealWidget: Widget {
@@ -141,6 +299,7 @@ struct MealWidget: Widget {
         .configurationDisplayName("청람 밥상")
         .description("오늘의 학식 메뉴를 홈 화면에서 바로 봅니다.")
         .supportedFamilies([.systemSmall, .systemMedium])
+        .ownContentMargins()
     }
 }
 

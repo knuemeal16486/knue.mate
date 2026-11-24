@@ -198,5 +198,6 @@ struct BusWidget: Widget {
         .configurationDisplayName("학교 출발 버스")
         .description("교원대에서 나가는 513·514·518·913 다음 차 시각.")
         .supportedFamilies([.systemSmall, .systemMedium])
+        .ownContentMargins()
     }
 }

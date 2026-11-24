@@ -398,6 +398,12 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   다음 차 규칙(같은 분은 지난 차)·링크 허용(https + knue.ac.kr 계열)을 바꾸면 셋 다.
   키 이름·kind·Manifest는 `test/native_id_consistency_test.dart`가 확인한다.
 - 테마·투명도(`themeMode`·`transparency`)는 식단 위젯 설정 하나로 세 위젯에 같이.
+- iOS 17부터 시스템이 위젯 가장자리에 여백을 자동으로 넣는다. 각 위젯이 `.padding(14)`를 직접
+  주므로 위젯 구성에 `.ownContentMargins()`(WidgetShared.swift)를 붙여 시스템 여백을 끈다 —
+  새 위젯도 붙인다. 안 붙이면 여백이 두 번 들어가 small 식단 위젯에 메뉴가 3줄만 보였다.
+- 식단 medium은 메뉴 하나에 한 줄, 넘치면 두 열(`mealMenuColumns`, 두 열에도 넘치면 "외 N개").
+  small은 다 들어가면 한 줄에 하나씩, 넘치면 줄 폭에 맞춰 " · "로 묶는다(`mealMenuFlowLines`,
+  메뉴가 줄 끝에서 끊기지 않고 마지막 줄은 "외 N개").
 - iOS 위젯은 모두 `MealWidget` 확장 하나(`MealWidgetBundle`)에 들어 있다 — 새 파일은
   MealWidget 타깃 Sources에도 넣는다.
 - Android 위젯 확인: 에뮬레이터 `HomeWidgetPreferences.xml`을 `run-as`로 덮고

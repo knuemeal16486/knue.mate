@@ -73,3 +73,17 @@ extension View {
         }
     }
 }
+
+// iOS 17부터 시스템이 위젯 가장자리에 여백(약 16pt)을 자동으로 넣는다. 각 위젯은
+// 직접 .padding(14)을 주므로 그대로 두면 여백이 두 번 들어가 칸이 좁아진다
+// (small 식단 위젯에 메뉴가 3줄밖에 안 보였다). 시스템 여백은 끄고 우리 여백만 쓴다 —
+// iOS 16 이하는 원래 시스템 여백이 없어 같은 모양이 된다.
+extension WidgetConfiguration {
+    func ownContentMargins() -> some WidgetConfiguration {
+        if #available(iOSApplicationExtension 17.0, *) {
+            return contentMarginsDisabled()
+        } else {
+            return self
+        }
+    }
+}
