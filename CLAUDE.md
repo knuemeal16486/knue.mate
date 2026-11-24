@@ -400,7 +400,7 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 - 테마·투명도(`themeMode`·`transparency`)는 식단 위젯 설정 하나로 세 위젯에 같이.
 - **모양(2026-11-24, 에브리타임식)**: 크고 굵은 머리글("점심"·"버스"·"공지", 제목색) + 흐린 보조 줄,
   항목 왼쪽에 옅은 색 막대(iOS `WidgetBar`·`WidgetBigHeader`, Android `drawable/widget_bar` +
-  `WidgetColors.applyBar`). 식단은 세로 막대 대신 "점심" 밑에 짧은 가로 막대(앱 테마 색, iOS
+  `WidgetColors.applyBar`). 식단은 세로 막대 대신 "점심" 밑에 가로 막대(앱 테마 색, small 48·medium 72, iOS
   `WidgetBigHeader(underline:)`, Android `meal_top_line`·`meal_side_line`). 막대 색: 버스는 노선 색(`kBusRouteColorIndex` /
   `ROUTE_COLOR_INDEX` — 게시판 색 목록에서 고름, 일관성 테스트), 공지는 게시판 색. 넓은 위젯(medium,
   Android 220dp 이상)은 머리글이 왼쪽 칸, 좁으면 위. 공지는 높이가 낮아 머리글이 한 줄.

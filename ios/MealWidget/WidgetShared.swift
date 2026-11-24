@@ -136,6 +136,8 @@ struct WidgetBigHeader: View {
     var size: CGFloat = 24
     /// 제목 바로 밑 짧은 가로 막대 색(식단 위젯 — 앱 테마 색). nil이면 없음.
     var underline: Color? = nil
+    /// 가로 막대 길이(pt). 식단 small 48, medium 72(Android meal_top_line·meal_side_line과 같다).
+    var underlineWidth: CGFloat = 48
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -147,7 +149,7 @@ struct WidgetBigHeader: View {
             if let underline {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(underline)
-                    .frame(width: kWidgetUnderlineWidth, height: 3)
+                    .frame(width: underlineWidth, height: 3)
                     .padding(.top, 3)
                     .padding(.bottom, 3)
             }
@@ -161,9 +163,6 @@ struct WidgetBigHeader: View {
         }
     }
 }
-
-/// 머리글 밑 가로 막대 길이(pt). Android meal_*_line 24dp와 같다.
-let kWidgetUnderlineWidth: CGFloat = 24
 
 /// "RRGGBB" 정수 → Color.
 func widgetRGB(_ v: UInt32) -> Color {

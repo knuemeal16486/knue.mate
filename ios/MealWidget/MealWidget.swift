@@ -230,7 +230,7 @@ struct MealWidgetEntryView: View {
                     WidgetBigHeader(title: header.meal,
                                     subs: [[entry.title, header.day].filter { !$0.isEmpty }
                                         .joined(separator: " · ")],
-                                    palette: palette, size: 22, underline: palette.accent)
+                                    palette: palette, size: 22, underline: palette.accent, underlineWidth: 48)
                     GeometryReader { geo in
                         if isMessage {
                             messageText
@@ -252,7 +252,7 @@ struct MealWidgetEntryView: View {
                 HStack(alignment: .top, spacing: 12) {
                     WidgetBigHeader(title: header.meal,
                                     subs: [entry.title, header.day].filter { !$0.isEmpty },
-                                    palette: palette, underline: palette.accent)
+                                    palette: palette, underline: palette.accent, underlineWidth: 72)
                         .frame(width: 84, alignment: .leading)
                     GeometryReader { geo in
                         if isMessage {
