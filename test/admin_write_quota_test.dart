@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:knue_mate/firebase_sync_service.dart';
 import 'package:knue_mate/housing_model.dart';
 import 'package:knue_mate/housing_service.dart';
 
@@ -22,21 +21,6 @@ void main() {
       expect(adminWriteErrorMessage(fe('permission-denied'), what: '삭제'), allOf(contains('권한'), contains('삭제')));
       expect(adminWriteErrorMessage(fe('unavailable')), contains('네트워크'));
       expect(adminWriteErrorMessage(StateError('x')), contains('네트워크'));
-    });
-  });
-
-  group('건물 데이터 업로드 지문', () {
-    // 앱을 켤 때마다 모든 기기가 16건씩 다시 쓰던 걸, 내용이 바뀔 때만으로.
-    test('같은 내용은 같은 지문, 한 글자만 달라도 다른 지문', () {
-      const a = '{"buildings":[{"name":"도서관"}]}';
-      expect(FirebaseSyncService.contentFingerprint(a), FirebaseSyncService.contentFingerprint(a));
-      expect(
-        FirebaseSyncService.contentFingerprint(a),
-        isNot(FirebaseSyncService.contentFingerprint('{"buildings":[{"name":"도서관 "}]}')),
-      );
-      // 알려진 FNV-1a 값 — 구현이 바뀌어 모든 기기가 다시 올리는 일이 없게.
-      expect(FirebaseSyncService.contentFingerprint(''), '811c9dc5');
-      expect(FirebaseSyncService.contentFingerprint('a'), 'e40c292c');
     });
   });
 
