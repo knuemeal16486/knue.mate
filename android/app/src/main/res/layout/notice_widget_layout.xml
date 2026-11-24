@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 공지 위젯. 배경은 식단 위젯과 같은 방식(ImageView에 색·투명도).
+<!-- 공지 위젯. 에브리타임식: 크게 쓴 "공지", 줄마다 게시판 색 막대 + 굵은 제목 +
+     오른쪽 끝에 게시판 이름(그 색)·날짜. 배경은 식단 위젯과 같은 방식(ImageView에 색·투명도).
      줄 10개(kNoticeWidgetMaxRows)는 고정이고 NoticeWidgetProvider가 위젯 높이에
      맞는 만큼만 보이게 한다. 보이는 줄은 layout_weight로 높이를 나눠 아래까지 찬다.
      적힌 글은 위젯 고르는 화면의 미리보기용이다. -->
@@ -26,11 +27,11 @@
             android:id="@+id/notice_header"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingBottom="4dp"
+            android:paddingBottom="6dp"
             android:text="공지"
-            android:textSize="11sp"
+            android:textSize="20sp"
             android:textStyle="bold"
-            android:textColor="#4285F4"
+            android:textColor="#000000"
             android:includeFontPadding="false"
             android:maxLines="1" />
 
@@ -52,23 +53,44 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_0"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_0"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="[학사공지] 겨울 계절학기 수강신청 안내"
+                android:text="겨울 계절학기 수강신청 안내"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_0"
+                android:id="@+id/notice_board_0"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
+                android:text="학사공지"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
                 android:text="11/22"
                 android:textSize="11sp"
                 android:textColor="#999999"
@@ -86,24 +108,45 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_1"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_1"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="[장학금] 국가장학금 1차 신청 안내"
+                android:text="학생회관 외벽 청소작업 안내"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_1"
+                android:id="@+id/notice_board_1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
-                android:text="11/21"
+                android:text="대학소식"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
+                android:text="11/23"
                 android:textSize="11sp"
                 android:textColor="#999999"
                 android:fontFeatureSettings="tnum"
@@ -120,24 +163,45 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_2"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_2"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="[대학소식] 금고지정 결과 공고"
+                android:text="국가장학금 1차 신청"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_2"
+                android:id="@+id/notice_board_2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
-                android:text="11/18"
+                android:text="장학금"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
+                android:text="11/21"
                 android:textSize="11sp"
                 android:textColor="#999999"
                 android:fontFeatureSettings="tnum"
@@ -154,24 +218,45 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_3"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_3"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="[청람소양] 12월 교양특강 참가자 모집"
+                android:text="겨울 계절학기 수강신청 안내"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_3"
+                android:id="@+id/notice_board_3"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
-                android:text="11/17"
+                android:text="학사공지"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
+                android:text="11/22"
                 android:textSize="11sp"
                 android:textColor="#999999"
                 android:fontFeatureSettings="tnum"
@@ -188,24 +273,45 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_4"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_4"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text=""
+                android:text="학생회관 외벽 청소작업 안내"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_4"
+                android:id="@+id/notice_board_4"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
-                android:text=""
+                android:text="대학소식"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
+                android:text="11/23"
                 android:textSize="11sp"
                 android:textColor="#999999"
                 android:fontFeatureSettings="tnum"
@@ -222,24 +328,45 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_5"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_5"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text=""
+                android:text="국가장학금 1차 신청"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_5"
+                android:id="@+id/notice_board_5"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
-                android:text=""
+                android:text="장학금"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
+                android:text="11/21"
                 android:textSize="11sp"
                 android:textColor="#999999"
                 android:fontFeatureSettings="tnum"
@@ -256,24 +383,45 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_6"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_6"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text=""
+                android:text="겨울 계절학기 수강신청 안내"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_6"
+                android:id="@+id/notice_board_6"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
-                android:text=""
+                android:text="학사공지"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_6"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
+                android:text="11/22"
                 android:textSize="11sp"
                 android:textColor="#999999"
                 android:fontFeatureSettings="tnum"
@@ -290,24 +438,45 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_7"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_7"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text=""
+                android:text="학생회관 외벽 청소작업 안내"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_7"
+                android:id="@+id/notice_board_7"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
-                android:text=""
+                android:text="대학소식"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_7"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
+                android:text="11/23"
                 android:textSize="11sp"
                 android:textColor="#999999"
                 android:fontFeatureSettings="tnum"
@@ -324,24 +493,45 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_8"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_8"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text=""
+                android:text="국가장학금 1차 신청"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_8"
+                android:id="@+id/notice_board_8"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
-                android:text=""
+                android:text="장학금"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_8"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
+                android:text="11/21"
                 android:textSize="11sp"
                 android:textColor="#999999"
                 android:fontFeatureSettings="tnum"
@@ -358,24 +548,45 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <ImageView
+                android:id="@+id/notice_bar_9"
+                android:layout_width="3dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_bar" />
+
             <TextView
                 android:id="@+id/notice_title_9"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text=""
+                android:text="겨울 계절학기 수강신청 안내"
                 android:textSize="13sp"
+                android:textStyle="bold"
                 android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/notice_date_9"
+                android:id="@+id/notice_board_9"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="6dp"
-                android:text=""
+                android:text="학사공지"
+                android:textSize="11sp"
+                android:textColor="#1A73E8"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/notice_date_9"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="5dp"
+                android:text="11/22"
                 android:textSize="11sp"
                 android:textColor="#999999"
                 android:fontFeatureSettings="tnum"
@@ -384,4 +595,5 @@
         </LinearLayout>
 
     </LinearLayout>
+
 </FrameLayout>

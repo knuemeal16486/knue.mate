@@ -114,3 +114,48 @@ extension WidgetConfiguration {
         }
     }
 }
+
+// ── 에브리타임식 공용 부품 ──
+// 크고 굵은 머리글 + 흐린 보조 줄, 항목마다 왼쪽 옅은 색 막대.
+
+/// 항목 왼쪽의 옅은 세로 막대. 높이는 쓰는 쪽에서 정한다.
+struct WidgetBar: View {
+    let color: Color
+    var body: some View {
+        RoundedRectangle(cornerRadius: 1.5)
+            .fill(color.opacity(0.4))
+            .frame(width: 3)
+    }
+}
+
+/// 큰 굵은 머리글(예: "점심")과 그 아래 흐린 보조 줄.
+struct WidgetBigHeader: View {
+    let title: String
+    let subs: [String]
+    let palette: WidgetPalette
+    var size: CGFloat = 24
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(.system(size: size, weight: .bold))
+                .foregroundColor(palette.title)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            ForEach(Array(subs.enumerated()), id: \.offset) { _, s in
+                Text(s)
+                    .font(.system(size: 12))
+                    .foregroundColor(palette.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+    }
+}
+
+/// "RRGGBB" 정수 → Color.
+func widgetRGB(_ v: UInt32) -> Color {
+    Color(red: Double((v >> 16) & 0xFF) / 255,
+          green: Double((v >> 8) & 0xFF) / 255,
+          blue: Double(v & 0xFF) / 255)
+}

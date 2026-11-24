@@ -398,12 +398,21 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   다음 차 규칙(같은 분은 지난 차)·링크 허용(https + knue.ac.kr 계열)을 바꾸면 셋 다.
   키 이름·kind·Manifest는 `test/native_id_consistency_test.dart`가 확인한다.
 - 테마·투명도(`themeMode`·`transparency`)는 식단 위젯 설정 하나로 세 위젯에 같이.
-- 머리글 강조색("오늘 점심"·"학교 출발 버스"·"공지")은 앱 테마 색을 따른다. 앱이 켜질 때와
-  `themeColor`가 바뀔 때 `pushWidgetAccent`가 `accent_light`·`accent_dark`("#RRGGBB")를 넣는다
-  (`widgetAccentHex` — 흰 배경엔 너무 밝은 색을 어둡게, 검은 배경엔 너무 어두운 색을 밝게).
+- **모양(2026-11-24, 에브리타임식)**: 크고 굵은 머리글("점심"·"버스"·"공지", 제목색) + 흐린 보조 줄,
+  항목 왼쪽에 옅은 색 막대(iOS `WidgetBar`·`WidgetBigHeader`, Android `drawable/widget_bar` +
+  `WidgetColors.applyBar`). 막대 색: 식단은 앱 테마 색(`accent`), 버스는 노선 색(`kBusRouteColorIndex` /
+  `ROUTE_COLOR_INDEX` — 게시판 색 목록에서 고름, 일관성 테스트), 공지는 게시판 색. 넓은 위젯(medium,
+  Android 220dp 이상)은 머리글이 왼쪽 칸, 좁으면 위. 공지는 높이가 낮아 머리글이 한 줄.
+  "오늘 점심"은 위젯이 "점심"(큰 글씨)·"오늘"(보조)로 나눠 쓴다(`mealHeaderParts`/`headerParts`).
+- 앱 테마 색(`accent_light`·`accent_dark`): 앱이 켜질 때와 `themeColor`가 바뀔 때 `pushWidgetAccent`가
+  넣는다(`widgetAccentHex` — 흰 배경엔 너무 밝은 색을 어둡게, 검은 배경엔 너무 어두운 색을 밝게).
   무지개 모드의 날마다 바뀌는 색은 앱을 열어야 위젯에 반영된다.
-- 버스 medium은 다음 차가 가장 먼저 오는 노선의 첫 시각·"N분 뒤"를 주황(`highlight`)으로
-  (`soonestRoutes`, Swift·Kotlin). small은 노선 이름이 줄고 시각은 안 잘린다.
+- 버스 위젯은 **두 종류**를 위젯 고르는 화면에서 사용자가 고른다: 노선별(`BusWidget` /
+  `BusWidgetProvider`)과 곧 떠나는 차(`BusNextWidget` / `BusNextWidgetProvider`, 모든 노선을 합쳐 시각 순
+  `upcomingDepartures`). 같은 시간표·레이아웃을 쓰고, Dart는 둘 다 다시 그린다(`_updateBusWidgets`).
+  가장 먼저 오는 차는 주황(`highlight`, `soonestRoutes`).
+- Android 위젯 레이아웃에 맨 `View`를 쓰면 "Can't load widget"이 난다(RemoteViews 허용 목록) —
+  빈 칸은 `FrameLayout`으로.
 - iOS 17부터 시스템이 위젯 가장자리에 여백을 자동으로 넣는다. 각 위젯이 `.padding(14)`를 직접
   주므로 위젯 구성에 `.ownContentMargins()`(WidgetShared.swift)를 붙여 시스템 여백을 끈다 —
   새 위젯도 붙인다. 안 붙이면 여백이 두 번 들어가 small 식단 위젯에 메뉴가 3줄만 보였다.

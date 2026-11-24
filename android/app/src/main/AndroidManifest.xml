@@ -81,13 +81,25 @@
         <receiver
             android:name=".BusWidgetProvider"
             android:exported="true"
-            android:label="학교 출발 버스">
+            android:label="버스 · 노선별">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/bus_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".BusNextWidgetProvider"
+            android:exported="true"
+            android:label="버스 · 곧 떠나는 차">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bus_next_widget_info" />
         </receiver>
 
         <receiver

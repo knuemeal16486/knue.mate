@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  배경을 ImageView로 따로 깔아 둔 이유:
-  예전에는 루트 LinearLayout에 setBackgroundColor를 걸어 색과 투명도를
-  적용했는데, RemoteViews의 setBackgroundColor는 배경 drawable을 단색
-  ColorDrawable로 **통째로 갈아끼운다**. 그래서 widget_background.xml의
-  둥근 모서리(16dp)가 사라져 각진 사각형으로 나왔다.
-  지금은 모양은 drawable이 유지하고, 색과 투명도는 ImageView의
-  setColorFilter / setImageAlpha로 입힌다.
+  식단 위젯. 에브리타임식: 크게 쓴 끼니("점심") + 흐린 식당·날, 메뉴 왼쪽에 테마 색 막대.
+  좁으면(2칸) 머리글을 위에(meal_top), 넓으면 왼쪽 칸에(meal_side) 둔다 —
+  MealWidgetProvider가 하나만 보이게 한다.
+
+  배경을 ImageView로 따로 깔아 둔 이유: RemoteViews의 setBackgroundColor는 배경
+  drawable을 단색으로 통째로 갈아끼워 둥근 모서리가 사라진다. 모양은 drawable이
+  유지하고, 색과 투명도는 ImageView의 setColorFilter / setImageAlpha로 입힌다.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
@@ -25,52 +25,122 @@
         android:id="@+id/widget_layout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
+        android:orientation="horizontal"
         android:padding="14dp">
 
-        <!-- 끼니를 제목 위에 작게 둔다. 예전엔 한 줄에 나란히 두었는데, 2×2처럼
-             좁은 위젯에선 끼니 칸이 먼저 자리를 잡아 제목이 "테스..."로 잘렸다. -->
-        <TextView
-            android:id="@+id/widget_time"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="오늘 점심"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:textColor="#4285F4"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <TextView
-            android:id="@+id/widget_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:paddingBottom="6dp"
-            android:text="기숙사 식당"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:letterSpacing="-0.02"
-            android:textColor="#000000"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <TextView
-            android:id="@+id/widget_menu"
-            android:layout_width="match_parent"
+        <!-- 넓은 위젯: 왼쪽 머리글 칸 -->
+        <LinearLayout
+            android:id="@+id/meal_side"
+            android:layout_width="84dp"
             android:layout_height="match_parent"
-            android:text="메뉴 정보를\n불러오는 중입니다..."
-            android:textSize="13sp"
-            android:textStyle="normal"
-            android:textColor="#333333"
-            android:lineSpacingExtra="3dp"
-            android:letterSpacing="-0.02"
-            android:gravity="top|start"
-            android:includeFontPadding="false"
-            android:ellipsize="end" />
+            android:layout_marginEnd="12dp"
+            android:orientation="vertical"
+            android:visibility="gone">
 
+            <TextView
+                android:id="@+id/meal_side_meal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="점심"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="#000000"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/meal_side_place"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="기숙사 식당"
+                android:textSize="12sp"
+                android:textColor="#999999"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/meal_side_day"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="오늘"
+                android:textSize="12sp"
+                android:textColor="#999999"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <!-- 좁은 위젯: 위 머리글 -->
+            <LinearLayout
+                android:id="@+id/meal_top"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingBottom="8dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_time"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="점심"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="#000000"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/widget_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="기숙사 식당 · 오늘"
+                    android:textSize="12sp"
+                    android:textColor="#999999"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/meal_bar"
+                    android:layout_width="3dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="7dp"
+                    android:scaleType="fitXY"
+                    android:contentDescription="@null"
+                    android:src="@drawable/widget_bar" />
+
+                <TextView
+                    android:id="@+id/widget_menu"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="쌀밥\n돈육김치찌개\n계란말이"
+                    android:textSize="13sp"
+                    android:textColor="#000000"
+                    android:lineSpacingExtra="3dp"
+                    android:letterSpacing="-0.02"
+                    android:gravity="top|start"
+                    android:includeFontPadding="false"
+                    android:ellipsize="end" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 
 </FrameLayout>

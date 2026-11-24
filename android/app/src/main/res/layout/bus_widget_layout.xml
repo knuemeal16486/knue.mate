@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 버스 시간표 위젯. 배경은 식단 위젯(home_widget_layout.xml)과 같은 방식 —
-     ImageView에 색·투명도를 입혀 둥근 모서리를 지킨다. 줄 5개는 고정이고
-     BusWidgetProvider가 채운다(513·514·518·913 평동행·913 미호행).
+<!-- 버스 시간표 위젯 — 노선별(BusWidgetProvider)과 곧 떠나는 차(BusNextWidgetProvider)가
+     같이 쓴다. 에브리타임식: 크게 쓴 "버스" + 흐린 "학교 출발 · 평일", 줄마다 노선 색 막대.
+     좁으면 머리글이 위(bus_top), 넓으면 왼쪽 칸(bus_side). 곧 떠나는 차 + 좁은 위젯은
+     줄 대신 큰 한 대(bus_next). 배경은 식단 위젯(home_widget_layout.xml)과 같은 방식.
      적힌 글은 위젯 고르는 화면의 미리보기용이다. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/bus_root"
@@ -19,268 +20,442 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
+        android:orientation="horizontal"
         android:padding="14dp">
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingBottom="4dp"
-            android:orientation="horizontal">
+            android:id="@+id/bus_side"
+            android:layout_width="62dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
 
             <TextView
-                android:id="@+id/bus_header"
-                android:layout_width="0dp"
+                android:id="@+id/bus_side_title"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="학교 출발 버스"
-                android:textSize="11sp"
+                android:text="버스"
+                android:textSize="22sp"
                 android:textStyle="bold"
-                android:textColor="#4285F4"
+                android:textColor="#000000"
                 android:includeFontPadding="false"
                 android:maxLines="1" />
 
             <TextView
-                android:id="@+id/bus_day"
-                android:layout_width="wrap_content"
+                android:id="@+id/bus_side_sub"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="학교 출발"
+                android:textSize="12sp"
+                android:textColor="#999999"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/bus_side_day"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
                 android:text="평일"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:textColor="#999999"
                 android:includeFontPadding="false"
                 android:maxLines="1" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/bus_empty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="앱을 한 번 열면\n시간표를 불러옵니다."
-            android:textSize="13sp"
-            android:textColor="#555555"
-            android:visibility="gone" />
-
         <LinearLayout
-            android:id="@+id/bus_rows"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:layout_weight="1"
             android:orientation="vertical">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            <LinearLayout
+                android:id="@+id/bus_top"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingBottom="8dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/bus_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="버스"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="#000000"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+
+                <TextView
+                    android:id="@+id/bus_day"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="학교 출발 · 평일"
+                    android:textSize="12sp"
+                    android:textColor="#999999"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+            </LinearLayout>
 
             <TextView
-                android:id="@+id/bus_label_0"
-                android:text="513"
-                android:layout_width="wrap_content"
+                android:id="@+id/bus_empty"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minWidth="70dp"
-                android:paddingEnd="6dp"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:textColor="#000000"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
-
-            <TextView
-                android:id="@+id/bus_times_0"
-                android:text="08:50"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textSize="13sp"
-                android:textColor="#555555"
-                android:fontFeatureSettings="tnum"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:ellipsize="end" />
-
-            <TextView
-                android:id="@+id/bus_eta_0"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:textColor="#4285F4"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/bus_label_1"
-                android:text="514"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="70dp"
-                android:paddingEnd="6dp"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:textColor="#000000"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
-
-            <TextView
-                android:id="@+id/bus_times_1"
-                android:text="09:25"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
+                android:text="앱을 한 번 열면\n시간표를 불러옵니다."
                 android:textSize="13sp"
                 android:textColor="#555555"
-                android:fontFeatureSettings="tnum"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/bus_eta_1"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:textColor="#4285F4"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
-        </LinearLayout>
+            <LinearLayout
+                android:id="@+id/bus_next"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:visibility="gone">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/bus_label_2"
-                android:text="518"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="70dp"
-                android:paddingEnd="6dp"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:textColor="#000000"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
+                    <ImageView
+                        android:id="@+id/bus_next_bar"
+                        android:layout_width="3dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="7dp"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null"
+                        android:src="@drawable/widget_bar" />
 
-            <TextView
-                android:id="@+id/bus_times_2"
-                android:text="08:55"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/bus_next_label"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="518"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="#000000"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
+
+                        <TextView
+                            android:id="@+id/bus_next_time"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:text="14:25  4분 뒤"
+                            android:textSize="14sp"
+                            android:textColor="#E8710A"
+                            android:fontFeatureSettings="tnum"
+                            android:includeFontPadding="false"
+                            android:maxLines="1" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 위젯에는 View를 못 쓴다(RemoteViews 허용 목록) — 빈 FrameLayout으로 띄운다. -->
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/bus_next_more"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="다음 513 14:27\n다음 913 미호행 14:50"
+                    android:textSize="11sp"
+                    android:textColor="#999999"
+                    android:lineSpacingExtra="2dp"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/bus_rows"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
                 android:layout_weight="1"
-                android:textSize="13sp"
-                android:textColor="#555555"
-                android:fontFeatureSettings="tnum"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/bus_eta_2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:textColor="#4285F4"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
-        </LinearLayout>
+                <ImageView
+                    android:id="@+id/bus_bar_0"
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:layout_marginEnd="6dp"
+                    android:scaleType="fitXY"
+                    android:contentDescription="@null"
+                    android:src="@drawable/widget_bar" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/bus_label_0"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="513"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#000000"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
 
-            <TextView
-                android:id="@+id/bus_label_3"
-                android:text="913 평동행"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="70dp"
-                android:paddingEnd="6dp"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:textColor="#000000"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
+                <TextView
+                    android:id="@+id/bus_times_0"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="14:27  15:35"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#555555"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
 
-            <TextView
-                android:id="@+id/bus_times_3"
-                android:text="09:33"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                <TextView
+                    android:id="@+id/bus_eta_0"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:text="6분 뒤"
+                    android:textSize="11sp"
+                    android:textColor="#999999"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
                 android:layout_weight="1"
-                android:textSize="13sp"
-                android:textColor="#555555"
-                android:fontFeatureSettings="tnum"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/bus_eta_3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:textColor="#4285F4"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
-        </LinearLayout>
+                <ImageView
+                    android:id="@+id/bus_bar_1"
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:layout_marginEnd="6dp"
+                    android:scaleType="fitXY"
+                    android:contentDescription="@null"
+                    android:src="@drawable/widget_bar" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/bus_label_1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="514"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#000000"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
 
-            <TextView
-                android:id="@+id/bus_label_4"
-                android:text="913 미호행"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="70dp"
-                android:paddingEnd="6dp"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:textColor="#000000"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
+                <TextView
+                    android:id="@+id/bus_times_1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="15:02  16:03"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#555555"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
 
-            <TextView
-                android:id="@+id/bus_times_4"
-                android:text="09:03"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                <TextView
+                    android:id="@+id/bus_eta_1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:text="41분 뒤"
+                    android:textSize="11sp"
+                    android:textColor="#999999"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
                 android:layout_weight="1"
-                android:textSize="13sp"
-                android:textColor="#555555"
-                android:fontFeatureSettings="tnum"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/bus_eta_4"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:textColor="#4285F4"
-                android:includeFontPadding="false"
-                android:maxLines="1" />
-        </LinearLayout>
+                <ImageView
+                    android:id="@+id/bus_bar_2"
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:layout_marginEnd="6dp"
+                    android:scaleType="fitXY"
+                    android:contentDescription="@null"
+                    android:src="@drawable/widget_bar" />
 
+                <TextView
+                    android:id="@+id/bus_label_2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="518"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#000000"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+
+                <TextView
+                    android:id="@+id/bus_times_2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="14:25  15:15"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#555555"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+
+                <TextView
+                    android:id="@+id/bus_eta_2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:text="4분 뒤"
+                    android:textSize="11sp"
+                    android:textColor="#999999"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/bus_bar_3"
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:layout_marginEnd="6dp"
+                    android:scaleType="fitXY"
+                    android:contentDescription="@null"
+                    android:src="@drawable/widget_bar" />
+
+                <TextView
+                    android:id="@+id/bus_label_3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="913 평동행"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#000000"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+
+                <TextView
+                    android:id="@+id/bus_times_3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="15:18  16:44"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#555555"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+
+                <TextView
+                    android:id="@+id/bus_eta_3"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:text="57분 뒤"
+                    android:textSize="11sp"
+                    android:textColor="#999999"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/bus_bar_4"
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:layout_marginEnd="6dp"
+                    android:scaleType="fitXY"
+                    android:contentDescription="@null"
+                    android:src="@drawable/widget_bar" />
+
+                <TextView
+                    android:id="@+id/bus_label_4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="913 미호행"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#000000"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+
+                <TextView
+                    android:id="@+id/bus_times_4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="14:50  16:15"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#555555"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+
+                <TextView
+                    android:id="@+id/bus_eta_4"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:text="29분 뒤"
+                    android:textSize="11sp"
+                    android:textColor="#999999"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1" />
+            </LinearLayout>
+
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
+
 </FrameLayout>

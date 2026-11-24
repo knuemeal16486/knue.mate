@@ -240,6 +240,12 @@ void main() {
       expect(read('$iosDir/MealWidget.swift'), contains('BusWidget()'));
     });
 
+    test('iOS 버스 "곧 떠나는 차" 위젯 kind가 Dart와 같고 번들에 들어 있다', () {
+      expect(read('$iosDir/BusWidget.swift'),
+          contains('kind: String = "$kIosBusNextWidgetKind"'));
+      expect(read('$iosDir/MealWidget.swift'), contains('BusNextWidget()'));
+    });
+
     test('iOS 공지 위젯 kind·키가 Dart와 같고 번들에 들어 있다', () {
       final notice = read('$iosDir/NoticeWidget.swift');
       expect(notice, contains('kind: String = "$kIosNoticeWidgetKind"'));
@@ -278,6 +284,24 @@ void main() {
       expect(kAndroidBusWidget, 'com.knue.knuemate.BusWidgetProvider');
       expect(read('$ktDir/BusWidgetProvider.kt'),
           contains('"$kWidgetBusTimetableKey"'));
+    });
+
+    test('Android 버스 "곧 떠나는 차" 위젯이 Manifest에 있다', () {
+      expect(androidManifest, contains('android:name=".BusNextWidgetProvider"'));
+      expect(androidManifest, contains('@xml/bus_next_widget_info'));
+      expect(kAndroidBusNextWidget, 'com.knue.knuemate.BusNextWidgetProvider');
+      expect(read('$ktDir/BusNextWidgetProvider.kt'),
+          contains('class BusNextWidgetProvider : BusWidgetProvider()'));
+    });
+
+    // 노선 막대 색 — iOS kBusRouteColorIndex와 Kotlin ROUTE_COLOR_INDEX가 같아야 한다.
+    test('버스 노선 색 순서가 iOS·Android에서 같다', () {
+      final swift = RegExp(r'kBusRouteColorIndex = \[([0-9, ]+)\]')
+          .firstMatch(read('$iosDir/BusWidget.swift'))?[1];
+      final kotlin = RegExp(r'ROUTE_COLOR_INDEX = intArrayOf\(([0-9, ]+)\)')
+          .firstMatch(read('$ktDir/BusWidgetProvider.kt'))?[1];
+      expect(swift, isNotNull);
+      expect(kotlin?.replaceAll(' ', ''), swift?.replaceAll(' ', ''));
     });
 
     test('Android 공지 위젯이 Manifest에 있고 키가 Dart와 같다', () {

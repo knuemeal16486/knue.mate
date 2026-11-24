@@ -109,6 +109,21 @@ func mealMenuFlowLines(_ items: [String], rows: Int, maxWidth: CGFloat,
         + [(last + ["외 \(rest)개"]).joined(separator: kMealMenuSeparator)]
 }
 
+/// 큰 머리글로 쓸 끼니와 보조 줄로 쓸 날. "오늘 점심" → ("점심", "오늘").
+/// 띄어쓰기가 없으면 통째로 끼니, 비었으면 "식단".
+func mealHeaderParts(_ time: String) -> (meal: String, day: String) {
+    let t = time.trimmingCharacters(in: .whitespaces)
+    guard !t.isEmpty else { return ("식단", "") }
+    guard let sp = t.lastIndex(of: " ") else { return (t, "") }
+    return (String(t[t.index(after: sp)...]), String(t[..<sp]).trimmingCharacters(in: .whitespaces))
+}
+
+/// 메뉴가 아니라 안내 문구인지("앱을 한 번 열면…", "내일은 식당을 운영하지 않아요").
+/// 앱은 메뉴 줄마다 "· "를 붙여 넣는다.
+func mealMenuIsMessage(_ menu: String) -> Bool {
+    !menu.split(separator: "\n").contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix("·") }
+}
+
 /// 메뉴 본문을 한 줄에 하나씩 나눈다. 앱이 붙인 "· " 머리는 뗀다.
 func mealMenuItems(_ menu: String) -> [String] {
     menu.split(separator: "\n").map { line -> String in
@@ -205,51 +220,77 @@ struct MealWidgetEntryView: View {
     private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // 끼니를 식당 이름 위에 둔다 — 한 줄에 나란히 두면 small에서
-            // 이름이 "기숙…"처럼 잘린다(Android 2×2에서 실제로 났다).
-            VStack(alignment: .leading, spacing: 1) {
-                Text(entry.time)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(palette.accent)
-                    .lineLimit(1)
-                Text(entry.title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(palette.title)
-                    .lineLimit(1)
-            }
-
-            GeometryReader { geo in
-                let items = mealMenuItems(entry.menu)
-                if family == .systemSmall {
-                    // small: 메뉴를 줄 폭에 맞춰 묶는다(줄 끝에서 메뉴가 끊기지 않게).
-                    let fit = mealMenuFitSmall(items, height: geo.size.height,
-                                               maxWidth: geo.size.width,
-                                               width: { mealMenuTextWidth($0, size: $1) })
-                    VStack(alignment: .leading, spacing: fit.gap) {
-                        ForEach(Array(fit.lines.enumerated()), id: \.offset) { _, line in
-                            menuLine(line, size: fit.size)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                } else {
-                    // medium: 메뉴 하나에 한 줄, 넘치면 두 열.
-                    let fit = mealMenuFitMedium(items, height: geo.size.height)
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(Array(fit.columns.enumerated()), id: \.offset) { _, column in
-                            VStack(alignment: .leading, spacing: fit.gap) {
-                                ForEach(Array(column.enumerated()), id: \.offset) { _, item in
-                                    menuLine(item.hasPrefix("외 ") ? item : "· " + item, size: fit.size)
+        let header = mealHeaderParts(entry.time)
+        let items = mealMenuItems(entry.menu)
+        let isMessage = mealMenuIsMessage(entry.menu)
+        Group {
+            if family == .systemSmall {
+                // small: 큰 끼니 머리글 + 식당·날 한 줄, 아래에 막대 하나와 메뉴 묶음.
+                VStack(alignment: .leading, spacing: 8) {
+                    WidgetBigHeader(title: header.meal,
+                                    subs: [[entry.title, header.day].filter { !$0.isEmpty }
+                                        .joined(separator: " · ")],
+                                    palette: palette, size: 22)
+                    GeometryReader { geo in
+                        if isMessage {
+                            messageText
+                        } else {
+                            // 줄 폭에서 막대(3)와 사이(7)를 뺀다.
+                            let fit = mealMenuFitSmall(items, height: geo.size.height,
+                                                       maxWidth: geo.size.width - kMealBarInset,
+                                                       width: { mealMenuTextWidth($0, size: $1) })
+                            HStack(alignment: .top, spacing: kMealBarInset - 3) {
+                                WidgetBar(color: palette.accent)
+                                VStack(alignment: .leading, spacing: fit.gap) {
+                                    ForEach(Array(fit.lines.enumerated()), id: \.offset) { _, line in
+                                        menuLine(line, size: fit.size)
+                                    }
                                 }
                             }
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+            } else {
+                // medium: 왼쪽에 큰 끼니·식당·날, 오른쪽에 메뉴(하나에 한 줄, 넘치면 두 열).
+                HStack(alignment: .top, spacing: 12) {
+                    WidgetBigHeader(title: header.meal,
+                                    subs: [entry.title, header.day].filter { !$0.isEmpty },
+                                    palette: palette)
+                        .frame(width: 84, alignment: .leading)
+                    GeometryReader { geo in
+                        if isMessage {
+                            messageText
+                        } else {
+                            let fit = mealMenuFitMedium(items, height: geo.size.height)
+                            HStack(alignment: .top, spacing: 10) {
+                                ForEach(Array(fit.columns.enumerated()), id: \.offset) { _, column in
+                                    VStack(alignment: .leading, spacing: fit.gap) {
+                                        ForEach(Array(column.enumerated()), id: \.offset) { _, item in
+                                            HStack(spacing: kMealBarInset - 3) {
+                                                // "외 N개"는 막대 없이 흐리게.
+                                                if isMoreLabel(item) {
+                                                    Color.clear.frame(width: 3)
+                                                } else {
+                                                    WidgetBar(color: palette.accent)
+                                                }
+                                                menuLine(item, size: fit.size)
+                                            }
+                                            .frame(height: mealMenuLineHeight(fit.size))
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        }
+                    }
+                    .padding(.top, 4)
                 }
             }
-
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
         .widgetBackground(palette.background)
         // 위젯을 누르면 앱이 이 URL로 열린다. Flutter 쪽(main.dart)이
@@ -257,7 +298,20 @@ struct MealWidgetEntryView: View {
         // 이동한다. 스킴은 Runner Info.plist의 CFBundleURLSchemes와 같아야 한다.
         .widgetURL(URL(string: "knuemate://meal?homeWidget"))
     }
+
+    /// 메뉴 대신 안내 문구(앱을 열어야 함·운영 안 함).
+    private var messageText: some View {
+        Text(entry.menu)
+            .font(.system(size: 13))
+            .foregroundColor(palette.body)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func isMoreLabel(_ s: String) -> Bool { s.hasPrefix("외 ") && s.hasSuffix("개") }
 }
+
+/// 메뉴 막대(3pt)와 글자 사이를 합친 왼쪽 들여쓰기.
+let kMealBarInset: CGFloat = 10
 
 extension MealWidgetEntryView {
     /// 한 줄. 끝의 "외 N개"는 흐리게, 구분점도 흐리게.
@@ -268,21 +322,21 @@ extension MealWidgetEntryView {
             let (i, part) = p
             let sep = i == 0 ? Text("") : Text(kMealMenuSeparator).foregroundColor(palette.muted)
             let more = part.hasPrefix("외 ") && i == parts.count - 1 && part.hasSuffix("개")
-            return acc + sep + Text(part).foregroundColor(more ? palette.muted : palette.body)
+            return acc + sep + Text(part).foregroundColor(more ? palette.muted : palette.title)
         }
-        .font(.system(size: size))
+        .font(.system(size: size, weight: .medium))
         .lineLimit(1)
         .minimumScaleFactor(0.8)
         .frame(height: mealMenuLineHeight(size), alignment: .leading)
     }
 }
 
-/// [size]pt 시스템 글꼴로 잰 글자 폭(pt). 조금 여유를 둬서 실제 그릴 때 넘치지 않게.
+/// [size]pt 시스템 글꼴(medium)로 잰 글자 폭(pt). 조금 여유를 둬서 실제 그릴 때 넘치지 않게.
 func mealMenuTextWidth(_ s: String, size: CGFloat) -> CGFloat {
     #if canImport(UIKit)
-    let font = UIFont.systemFont(ofSize: size)
+    let font = UIFont.systemFont(ofSize: size, weight: .medium)
     #else
-    let font = NSFont.systemFont(ofSize: size)
+    let font = NSFont.systemFont(ofSize: size, weight: .medium)
     #endif
     return ceil((s as NSString).size(withAttributes: [.font: font]).width) + 2
 }
@@ -308,6 +362,7 @@ struct MealWidgetBundle: WidgetBundle {
     var body: some Widget {
         MealWidget()
         BusWidget()
+        BusNextWidget()
         NoticeWidget()
     }
 }

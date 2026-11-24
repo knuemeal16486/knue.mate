@@ -5,13 +5,8 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
-import android.text.style.StyleSpan
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
@@ -35,7 +30,7 @@ class NoticeWidgetProvider : HomeWidgetProvider() {
 
         // 레이아웃(notice_widget_layout.xml) 치수(dp, 글꼴 배율 1 기준).
         private const val PADDING_DP = 14f * 2
-        private const val HEADER_DP = 18f
+        private const val HEADER_DP = 30f  // "공지" 20sp + 아래 여백
         // 한 줄에 필요한 최소 높이(13sp 한 줄 + 여유). 보이는 줄은 레이아웃의
         // layout_weight로 남는 높이를 나눠 가져 아래까지 찬다.
         private const val ROW_DP = 22f
@@ -51,6 +46,16 @@ class NoticeWidgetProvider : HomeWidgetProvider() {
             R.id.notice_title_4, R.id.notice_title_5, R.id.notice_title_6, R.id.notice_title_7,
             R.id.notice_title_8, R.id.notice_title_9,
         )
+        private val BAR_IDS = intArrayOf(
+            R.id.notice_bar_0, R.id.notice_bar_1, R.id.notice_bar_2, R.id.notice_bar_3,
+            R.id.notice_bar_4, R.id.notice_bar_5, R.id.notice_bar_6, R.id.notice_bar_7,
+            R.id.notice_bar_8, R.id.notice_bar_9,
+        )
+        private val BOARD_IDS = intArrayOf(
+            R.id.notice_board_0, R.id.notice_board_1, R.id.notice_board_2, R.id.notice_board_3,
+            R.id.notice_board_4, R.id.notice_board_5, R.id.notice_board_6, R.id.notice_board_7,
+            R.id.notice_board_8, R.id.notice_board_9,
+        )
         private val DATE_IDS = intArrayOf(
             R.id.notice_date_0, R.id.notice_date_1, R.id.notice_date_2, R.id.notice_date_3,
             R.id.notice_date_4, R.id.notice_date_5, R.id.notice_date_6, R.id.notice_date_7,
@@ -58,10 +63,10 @@ class NoticeWidgetProvider : HomeWidgetProvider() {
         )
 
         /**
-         * 게시판 이름 색 (라이트, 다크). iOS NoticeWidget.swift의 kNoticeBoardColors와
+         * 게시판 색 (라이트, 다크) — 막대와 게시판 이름. 버스 노선 막대도 여기서 고른다. iOS NoticeWidget.swift의 kNoticeBoardColors와
          * 같은 순서·값이어야 한다(test/native_id_consistency_test.dart가 확인).
          */
-        private val BOARD_COLORS = arrayOf(
+        val BOARD_COLORS = arrayOf(
             0x1A73E8 to 0x8AB4F8, // 파랑
             0x188038 to 0x81C995, // 초록
             0xE8710A to 0xFCAD70, // 주황
@@ -156,7 +161,7 @@ class NoticeWidgetProvider : HomeWidgetProvider() {
             try {
                 val views = RemoteViews(context.packageName, R.layout.notice_widget_layout)
                 colors.applyBackground(views, R.id.notice_bg)
-                views.setTextColor(R.id.notice_header, colors.accent)
+                views.setTextColor(R.id.notice_header, colors.title)
 
                 val openNotice = HomeWidgetLaunchIntent.getActivity(
                     context, MainActivity::class.java, Uri.parse("knuemate://notice"),
@@ -185,16 +190,13 @@ class NoticeWidgetProvider : HomeWidgetProvider() {
                             continue
                         }
                         views.setViewVisibility(ROW_IDS[i], View.VISIBLE)
-                        val head = "[${row.board}] "
-                        val text = SpannableStringBuilder(head + row.title).apply {
-                            setSpan(
-                                ForegroundColorSpan(boardColor(row.board, boards, colors.isDark)),
-                                0, head.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                            )
-                            setSpan(StyleSpan(Typeface.BOLD), 0, head.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        }
-                        views.setTextViewText(TITLE_IDS[i], text)
+                        // 게시판 색 막대 + 굵은 제목, 오른쪽에 게시판 이름(그 색)·날짜.
+                        val boardColor = boardColor(row.board, boards, colors.isDark)
+                        colors.applyBar(views, BAR_IDS[i], boardColor)
+                        views.setTextViewText(TITLE_IDS[i], row.title)
                         views.setTextColor(TITLE_IDS[i], colors.title)
+                        views.setTextViewText(BOARD_IDS[i], row.board)
+                        views.setTextColor(BOARD_IDS[i], boardColor)
                         views.setTextViewText(DATE_IDS[i], shortDate(row.date))
                         views.setTextColor(DATE_IDS[i], colors.muted)
                         // 학교 링크만 브라우저로 연다. 아니면 앱 공지로.

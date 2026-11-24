@@ -42,9 +42,12 @@ const kWidgetAccentLightKey = 'accent_light';
 const kWidgetAccentDarkKey = 'accent_dark';
 
 const kIosBusWidgetKind = 'BusWidget';
+/// 버스 위젯 "곧 떠나는 차" 모양 — 같은 시간표를 읽는다.
+const kIosBusNextWidgetKind = 'BusNextWidget';
 const kIosNoticeWidgetKind = 'NoticeWidget';
 const kAndroidMealWidget = 'com.knue.knuemate.MealWidgetProvider';
 const kAndroidBusWidget = 'com.knue.knuemate.BusWidgetProvider';
+const kAndroidBusNextWidget = 'com.knue.knuemate.BusNextWidgetProvider';
 const kAndroidNoticeWidget = 'com.knue.knuemate.NoticeWidgetProvider';
 
 int? _minutes(String hhmm) {
@@ -261,10 +264,7 @@ Future<void> pushBusWidgetTimetable() async {
     final cur = await HomeWidget.getWidgetData<String>(kWidgetBusTimetableKey);
     if (cur == json) return;
     await HomeWidget.saveWidgetData<String>(kWidgetBusTimetableKey, json);
-    await HomeWidget.updateWidget(
-      iOSName: kIosBusWidgetKind,
-      qualifiedAndroidName: kAndroidBusWidget,
-    );
+    await _updateBusWidgets();
   } catch (e) {
     debugPrint('버스 위젯 갱신 실패: $e');
   }
@@ -328,13 +328,22 @@ Future<void> pushWidgetAccent(Color color) async {
   }
 }
 
+/// 버스 위젯 두 모양(노선별·곧 떠나는 차)을 다시 그린다.
+Future<void> _updateBusWidgets() async {
+  await HomeWidget.updateWidget(
+    iOSName: kIosBusWidgetKind,
+    qualifiedAndroidName: kAndroidBusWidget,
+  );
+  await HomeWidget.updateWidget(
+    iOSName: kIosBusNextWidgetKind,
+    qualifiedAndroidName: kAndroidBusNextWidget,
+  );
+}
+
 /// 테마·투명도가 바뀌었을 때 버스·공지 위젯도 다시 그린다.
 Future<void> redrawBusNoticeWidgets() async {
   try {
-    await HomeWidget.updateWidget(
-      iOSName: kIosBusWidgetKind,
-      qualifiedAndroidName: kAndroidBusWidget,
-    );
+    await _updateBusWidgets();
     await HomeWidget.updateWidget(
       iOSName: kIosNoticeWidgetKind,
       qualifiedAndroidName: kAndroidNoticeWidget,

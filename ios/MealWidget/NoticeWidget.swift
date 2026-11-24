@@ -320,25 +320,28 @@ struct NoticeWidgetEntryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 에브리타임식 큰 머리글. medium은 높이가 낮아 한 줄(제목 + 오른쪽 기준
+            // 시각), large는 큰 제목 아래에 기준 시각.
             Link(destination: URL(string: "knuemate://notice?homeWidget")!) {
-                HStack(spacing: 4) {
-                    Text("공지")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(palette.accent)
-                    Spacer(minLength: 0)
-                    if isStale {
-                        Text("갱신이 늦어지고 있어요")
-                            .font(.system(size: 11))
-                            .foregroundColor(.orange)
-                    } else if let at = entry.collectedAt {
-                        Text(Self.timeFormatter.string(from: at) + " 기준")
-                            .font(.system(size: 11))
-                            .foregroundColor(palette.muted)
+                if family == .systemLarge {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("공지")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(palette.title)
+                        statusText.font(.system(size: 12))
+                    }
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("공지")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(palette.title)
+                        Spacer(minLength: 0)
+                        statusText.font(.system(size: 11))
                     }
                 }
-                .lineLimit(1)
             }
-            .padding(.bottom, 6)
+            .lineLimit(1)
+            .padding(.bottom, family == .systemLarge ? 10 : 6)
 
             if let rows = entry.rows {
                 if rows.isEmpty {
@@ -363,6 +366,15 @@ struct NoticeWidgetEntryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .widgetBackground(palette.background)
         .widgetURL(URL(string: "knuemate://notice?homeWidget"))
+    }
+
+    /// 기준 시각(늦어지면 주황 안내). large는 앞에 "즐겨찾기 게시판".
+    private var statusText: Text {
+        if isStale { return Text("갱신이 늦어지고 있어요").foregroundColor(palette.highlight) }
+        let lead = family == .systemLarge ? "즐겨찾기 게시판" : ""
+        guard let at = entry.collectedAt else { return Text(lead).foregroundColor(palette.muted) }
+        let time = Self.timeFormatter.string(from: at) + " 기준"
+        return Text(lead.isEmpty ? time : lead + " · " + time).foregroundColor(palette.muted)
     }
 
     /// 높이 [height]에 들어가는 줄 수.
@@ -395,14 +407,23 @@ struct NoticeWidgetEntryView: View {
     @ViewBuilder
     private func rowView(_ row: NoticeRow) -> some View {
         let boardColor = noticeBoardColor(row.b, boards: entry.boards, isDark: palette.isDark)
-        let content = HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text("\(Text("[\(row.b)] ").foregroundColor(boardColor).fontWeight(.semibold))\(Text(row.t).foregroundColor(palette.title))")
-                .font(.system(size: 13))
+        // 게시판 색 막대 + 굵은 제목, 오른쪽 끝에 게시판 이름(그 색)·날짜.
+        let content = HStack(alignment: .center, spacing: 6) {
+            WidgetBar(color: boardColor).frame(height: Self.rowHeight - 2)
+            Text(row.t)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(palette.title)
                 .lineLimit(1)
-            Spacer(minLength: 0)
+            Spacer(minLength: 2)
+            Text(row.b)
+                .font(.system(size: 11))
+                .foregroundColor(boardColor)
+                .lineLimit(1)
+                .fixedSize()
             Text(Self.shortDate(row.d))
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundColor(palette.muted)
+                .fixedSize()
         }
         if let url = Self.openURL(row.l) {
             Link(destination: url) { content }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 위젯 항목 왼쪽의 옅은 세로 막대. 색·투명도는 코드가 setColorFilter·setImageAlpha로 입힌다. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="1.5dp" />
+    <solid android:color="#FFFFFFFF" />
+</shape>
