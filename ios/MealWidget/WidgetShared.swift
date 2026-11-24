@@ -48,6 +48,9 @@ func widgetHexColor(_ hex: String?) -> Color? {
                  blue: Double(v & 0xFF) / 255)
 }
 
+/// 투명도가 이 값 이상이면 배경화면 위 글씨로 보고 진하게 쓴다. Android WidgetColors와 같다.
+let kWidgetOnWallpaperTransparency = 0.7
+
 /// 앱 설정의 위젯 테마를 우선하고, "시스템"이면 기기 설정을 따른다.
 struct WidgetPalette {
     let isDark: Bool
@@ -75,8 +78,15 @@ struct WidgetPalette {
     var body: Color {
         isDark ? Color.white.opacity(0.8) : Color(red: 0.2, green: 0.2, blue: 0.2)
     }
+    /// 배경이 거의 투명해 배경화면 위에 글씨가 바로 놓이는지. 이때는 흐린 글씨·주황을
+    /// 진하게 한다 — 밝은 배경화면에서 회색·연주황이 묻혀 안 읽혔다.
+    var onWallpaper: Bool { transparency >= kWidgetOnWallpaperTransparency }
+
     var muted: Color {
-        isDark ? Color.white.opacity(0.5) : Color(red: 0.55, green: 0.55, blue: 0.55)
+        if onWallpaper {
+            return isDark ? Color.white.opacity(0.8) : Color(red: 0.22, green: 0.22, blue: 0.22)
+        }
+        return isDark ? Color.white.opacity(0.5) : Color(red: 0.55, green: 0.55, blue: 0.55)
     }
     /// 머리글 강조색 — 앱 테마 색(없으면 기본 파랑, Android와 같은 값).
     var accent: Color {
@@ -84,7 +94,8 @@ struct WidgetPalette {
     }
     /// 가장 먼저 오는 버스처럼 눈에 띄어야 하는 것. 공지 게시판 주황과 같은 값.
     var highlight: Color {
-        isDark ? Color(red: 0.99, green: 0.68, blue: 0.44) : Color(red: 0.91, green: 0.44, blue: 0.04)
+        if onWallpaper && !isDark { return Color(red: 0.72, green: 0.30, blue: 0.0) }  // #B84D00
+        return isDark ? Color(red: 0.99, green: 0.68, blue: 0.44) : Color(red: 0.91, green: 0.44, blue: 0.04)
     }
 }
 

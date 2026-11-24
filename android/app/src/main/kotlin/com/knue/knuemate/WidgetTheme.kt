@@ -38,6 +38,12 @@ data class WidgetColors(
     }
 
     companion object {
+        /**
+         * 투명도가 이 값 이상이면 배경화면 위 글씨로 보고 흐린 글씨·주황을 진하게 한다
+         * (밝은 배경화면에서 회색·연주황이 묻혔다). iOS kWidgetOnWallpaperTransparency와 같다.
+         */
+        const val ON_WALLPAPER_TRANSPARENCY = 0.7f
+
         /** "#RRGGBB" → 색. 형식이 틀리면 null. */
         fun parseHex(hex: String?): Int? {
             if (hex == null || !Regex("^#[0-9A-Fa-f]{6}$").matches(hex)) return null
@@ -54,17 +60,30 @@ data class WidgetColors(
                 2 -> true
                 else -> isSystemDark
             }
+            val onWallpaper = transparency >= ON_WALLPAPER_TRANSPARENCY
             return WidgetColors(
                 isDark = isDark,
                 background = Color.parseColor(if (isDark) "#1E1E1E" else "#FFFFFF"),
                 alpha = ((1.0f - transparency) * 255).toInt().coerceIn(0, 255),
                 title = Color.parseColor(if (isDark) "#FFFFFF" else "#000000"),
                 body = Color.parseColor(if (isDark) "#BBBBBB" else "#555555"),
-                muted = Color.parseColor(if (isDark) "#888888" else "#999999"),
+                muted = Color.parseColor(
+                    when {
+                        onWallpaper -> if (isDark) "#CCCCCC" else "#383838"
+                        isDark -> "#888888"
+                        else -> "#999999"
+                    },
+                ),
                 // 앱 테마 색(lib/home_widgets.dart pushWidgetAccent). 없거나 틀리면 기본 파랑.
                 accent = parseHex(prefs.getString(if (isDark) "accent_dark" else "accent_light", null))
                     ?: Color.parseColor("#4285F4"),
-                highlight = Color.parseColor(if (isDark) "#FCAD70" else "#E8710A"),
+                highlight = Color.parseColor(
+                    when {
+                        isDark -> "#FCAD70"
+                        onWallpaper -> "#B84D00"
+                        else -> "#E8710A"
+                    },
+                ),
             )
         }
     }

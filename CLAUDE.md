@@ -397,7 +397,8 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   (`ios/MealWidget/`)·Kotlin(`BusWidgetProvider.kt`·`NoticeWidgetProvider.kt`).
   다음 차 규칙(같은 분은 지난 차)·링크 허용(https + knue.ac.kr 계열)을 바꾸면 셋 다.
   키 이름·kind·Manifest는 `test/native_id_consistency_test.dart`가 확인한다.
-- 테마·투명도(`themeMode`·`transparency`)는 식단 위젯 설정 하나로 세 위젯에 같이.
+- 테마·투명도(`themeMode`·`transparency`)는 식단 위젯 설정 하나로 세 위젯에 같이. 투명도 0.7 이상이면
+  배경화면 위 글씨로 보고 흐린 글씨·주황을 진하게 쓴다(`onWallpaper`, 기준값은 일관성 테스트).
 - **모양(2026-11-24, 에브리타임식)**: 크고 굵은 머리글("점심"·"버스"·"공지", 제목색) + 흐린 보조 줄,
   항목 왼쪽에 옅은 색 막대(iOS `WidgetBar`·`WidgetBigHeader`, Android `drawable/widget_bar` +
   `WidgetColors.applyBar`). 식단은 세로 막대 대신 "점심" 밑에 가로 막대(앱 테마 색, small 48·medium 72, iOS

@@ -294,6 +294,16 @@ void main() {
           contains('class BusNextWidgetProvider : BusWidgetProvider()'));
     });
 
+    // 투명 위젯에서 글씨를 진하게 바꾸는 기준 — 두 기기에서 같아야 한다.
+    test('위젯 "배경화면 위 글씨" 투명도 기준이 iOS·Android에서 같다', () {
+      final swift = RegExp(r'kWidgetOnWallpaperTransparency = ([0-9.]+)')
+          .firstMatch(read('ios/MealWidget/WidgetShared.swift'))?[1];
+      final kotlin = RegExp(r'ON_WALLPAPER_TRANSPARENCY = ([0-9.]+)f')
+          .firstMatch(read('$ktDir/WidgetTheme.kt'))?[1];
+      expect(swift, isNotNull);
+      expect(kotlin, swift);
+    });
+
     // 노선 막대 색 — iOS kBusRouteColorIndex와 Kotlin ROUTE_COLOR_INDEX가 같아야 한다.
     test('버스 노선 색 순서가 iOS·Android에서 같다', () {
       final swift = RegExp(r'kBusRouteColorIndex = \[([0-9, ]+)\]')
