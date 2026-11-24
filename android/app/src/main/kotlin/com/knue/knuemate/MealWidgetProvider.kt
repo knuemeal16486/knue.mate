@@ -87,7 +87,7 @@ class MealWidgetProvider : HomeWidgetProvider() {
                 views.setTextViewText(R.id.widget_title, title)
                 views.setTextColor(R.id.widget_title, textColor)
                 views.setTextViewText(R.id.widget_time, time)
-                views.setTextColor(R.id.widget_time, subColor)
+                views.setTextColor(R.id.widget_time, colors.accent)
                 // 세로 화면 기준 높이(MAX_HEIGHT). 값이 없으면 2×2 정도로 본다.
                 val options = appWidgetManager.getAppWidgetOptions(widgetId)
                 val heightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)

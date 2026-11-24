@@ -39,6 +39,13 @@ func busMinutes(_ hhmm: String) -> Int? {
     return h * 60 + m
 }
 
+/// 다음 차가 가장 먼저 오는 노선(같은 분이면 여럿). [firstMinutes]는 노선마다
+/// 다음 차 출발 분(없으면 nil). Kotlin BusWidgetProvider.soonestRoutes와 같다.
+func soonestRoutes(_ firstMinutes: [Int?]) -> Set<Int> {
+    guard let best = firstMinutes.compactMap({ $0 }).min() else { return [] }
+    return Set(firstMinutes.indices.filter { firstMinutes[$0] == best })
+}
+
 /// 앱 버스 화면과 같다: 토·일이면 주말 시간표.
 func isBusHoliday(_ date: Date) -> Bool {
     let wd = Calendar.current.component(.weekday, from: date)  // 1 = 일, 7 = 토
@@ -135,8 +142,11 @@ struct BusWidgetEntryView: View {
 
             if let routes = entry.routes, !routes.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
+                    let soonest = soonestRoutes(routes.map { r in
+                        nextDepartures(r.times(on: entry.date), now: entry.date, n: 1).first.flatMap(busMinutes)
+                    })
                     ForEach(routes.indices, id: \.self) { i in
-                        row(routes[i])
+                        row(routes[i], soonest: !isSmall && soonest.contains(i))
                         Spacer(minLength: 0)
                     }
                 }
@@ -154,27 +164,33 @@ struct BusWidgetEntryView: View {
     }
 
     @ViewBuilder
-    private func row(_ route: BusRoute) -> some View {
+    private func row(_ route: BusRoute, soonest: Bool) -> some View {
         let next = nextDepartures(route.times(on: entry.date), now: entry.date, n: isSmall ? 1 : 2)
         HStack(alignment: .firstTextBaseline, spacing: 6) {
+            // small은 폭이 좁아 노선 이름이 시각을 밀어내지 않게 — 이름이 줄고 시각은 그대로.
             Text(route.label)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundColor(palette.title)
-                .frame(width: isSmall ? 66 : 72, alignment: .leading)
+                .minimumScaleFactor(0.75)
+                .frame(width: isSmall ? nil : 72, alignment: .leading)
+            if isSmall { Spacer(minLength: 4) }
             if next.isEmpty {
-                Text("오늘 운행 끝")
+                Text(isSmall ? "운행 끝" : "오늘 운행 끝")
                     .font(.system(size: 13))
                     .foregroundColor(palette.muted)
+                    .fixedSize()
             } else {
-                Text(next.joined(separator: "  "))
+                // 가장 먼저 오는 차(medium)는 주황으로 눈에 띄게.
+                let first = Text(next[0]).foregroundColor(soonest ? palette.highlight : palette.body)
+                (next.count > 1 ? first + Text("  " + next[1]).foregroundColor(palette.body) : first)
                     .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                    .foregroundColor(palette.body)
+                    .fixedSize()
                 if !isSmall, let d = departureDate(next[0]) {
                     Spacer(minLength: 4)
                     // 다음 엔트리를 기다리지 않고 분 단위로 저절로 줄어든다.
                     Text("\(Text(d, style: .relative)) 뒤")
-                        .font(.system(size: 11))
-                        .foregroundColor(palette.accent)
+                        .font(.system(size: 11, weight: soonest ? .bold : .regular))
+                        .foregroundColor(soonest ? palette.highlight : palette.accent)
                 }
             }
         }

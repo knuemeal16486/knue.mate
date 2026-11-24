@@ -9,6 +9,9 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
@@ -66,6 +69,12 @@ class BusWidgetProvider : HomeWidgetProvider() {
          */
         fun nextDepartures(times: List<String>, nowMinutes: Int, n: Int): List<String> =
             times.filter { (minutesOf(it) ?: -1) > nowMinutes }.take(n)
+
+        /** 다음 차가 가장 먼저 오는 노선(같은 분이면 여럿). iOS soonestRoutes와 같다. */
+        fun soonestRoutes(firstMinutes: List<Int?>): Set<Int> {
+            val best = firstMinutes.filterNotNull().minOrNull() ?: return emptySet()
+            return firstMinutes.indices.filter { firstMinutes[it] == best }.toSet()
+        }
 
         /** 앱 버스 화면과 같다: 토·일이면 주말 시간표. */
         fun isBusHoliday(cal: Calendar): Boolean {
@@ -159,6 +168,11 @@ class BusWidgetProvider : HomeWidgetProvider() {
                 } else {
                     views.setViewVisibility(R.id.bus_rows, View.VISIBLE)
                     views.setViewVisibility(R.id.bus_empty, View.GONE)
+                    // 넓은 위젯에서 가장 먼저 오는 차는 주황으로 눈에 띄게.
+                    val soonest = if (wide) soonestRoutes(routes.map { r ->
+                        nextDepartures(if (holiday) r.holiday else r.weekday, nowMin, 1)
+                            .firstOrNull()?.let { minutesOf(it) }
+                    }) else emptySet()
                     for (i in LABEL_IDS.indices) {
                         val route = routes.getOrNull(i)
                         if (route == null) {
@@ -177,11 +191,19 @@ class BusWidgetProvider : HomeWidgetProvider() {
                             views.setTextColor(TIMES_IDS[i], colors.muted)
                             views.setTextViewText(ETA_IDS[i], "")
                         } else {
-                            views.setTextViewText(TIMES_IDS[i], next.joinToString("  "))
+                            val hot = i in soonest
+                            val times = SpannableStringBuilder(next.joinToString("  "))
+                            if (hot) {
+                                times.setSpan(
+                                    ForegroundColorSpan(colors.highlight),
+                                    0, next[0].length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                                )
+                            }
+                            views.setTextViewText(TIMES_IDS[i], times)
                             views.setTextColor(TIMES_IDS[i], colors.body)
                             val eta = (minutesOf(next[0]) ?: nowMin) - nowMin
                             views.setTextViewText(ETA_IDS[i], if (wide) etaText(eta) else "")
-                            views.setTextColor(ETA_IDS[i], colors.accent)
+                            views.setTextColor(ETA_IDS[i], if (hot) colors.highlight else colors.accent)
                         }
                     }
                 }

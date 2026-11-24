@@ -21,11 +21,12 @@ library;
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show Color;
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'bus_timetable_data.dart';
-import 'constants.dart' show AppTab, PreferencesService;
+import 'constants.dart' show AppTab, PreferencesService, kIosMealWidgetKind;
 import 'notice_feed.dart' show NoticeFeedSettings;
 import 'notice_model.dart';
 import 'notice_service.dart' show NoticeCache, kDefaultFavoriteBoards;
@@ -36,8 +37,13 @@ const kWidgetNoticeBoardsKey = 'notice_boards_json';
 const kWidgetNoticeFeedBaseKey = 'notice_feed_base';
 const kWidgetNoticeDirectKey = 'notice_feed_direct';
 
+/// 위젯 강조색(앱 테마 색). "#RRGGBB" 문자열 — Android·iOS 모두 문자열로 읽는다.
+const kWidgetAccentLightKey = 'accent_light';
+const kWidgetAccentDarkKey = 'accent_dark';
+
 const kIosBusWidgetKind = 'BusWidget';
 const kIosNoticeWidgetKind = 'NoticeWidget';
+const kAndroidMealWidget = 'com.knue.knuemate.MealWidgetProvider';
 const kAndroidBusWidget = 'com.knue.knuemate.BusWidgetProvider';
 const kAndroidNoticeWidget = 'com.knue.knuemate.NoticeWidgetProvider';
 
@@ -227,6 +233,24 @@ String? noticeLinkFromWidgetUri(Uri? uri) {
   return link;
 }
 
+String _hex(Color c) =>
+    '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
+/// 앱 테마 색을 위젯 강조색(라이트·다크 배경용)으로. 흰 배경에서 너무 밝은 색
+/// (노랑 등)은 어둡게, 검은 배경에서 너무 어두운 색(남색 등)은 밝게 — 글씨가
+/// 읽히게 한다. 보통 색은 그대로.
+({String light, String dark}) widgetAccentHex(Color c) {
+  const black = Color(0xFF000000), white = Color(0xFFFFFFFF);
+  var light = c, dark = c;
+  for (var t = 0.1; light.computeLuminance() > 0.4 && t <= 1; t += 0.1) {
+    light = Color.lerp(c, black, t)!;
+  }
+  for (var t = 0.1; dark.computeLuminance() < 0.15 && t <= 1; t += 0.1) {
+    dark = Color.lerp(c, white, t)!;
+  }
+  return (light: _hex(light), dark: _hex(dark));
+}
+
 const _kAppGroupId = 'group.knue.meal';
 
 /// 시간표를 위젯 저장소에 넣는다. 같은 값이면 건너뛴다.
@@ -280,6 +304,27 @@ Future<void> pushNoticeWidget() async {
     );
   } catch (e) {
     debugPrint('공지 위젯 갱신 실패: $e');
+  }
+}
+
+/// 앱 테마 색이 바뀌면 위젯 강조색(식당 끼니·"학교 출발 버스"·"공지" 머리글)도
+/// 바꾼다. 같은 값이면 건너뛴다.
+Future<void> pushWidgetAccent(Color color) async {
+  try {
+    final a = widgetAccentHex(color);
+    await HomeWidget.setAppGroupId(_kAppGroupId);
+    final cur = await HomeWidget.getWidgetData<String>(kWidgetAccentLightKey);
+    final curDark = await HomeWidget.getWidgetData<String>(kWidgetAccentDarkKey);
+    if (cur == a.light && curDark == a.dark) return;
+    await HomeWidget.saveWidgetData<String>(kWidgetAccentLightKey, a.light);
+    await HomeWidget.saveWidgetData<String>(kWidgetAccentDarkKey, a.dark);
+    await HomeWidget.updateWidget(
+      iOSName: kIosMealWidgetKind,
+      qualifiedAndroidName: kAndroidMealWidget,
+    );
+    await redrawBusNoticeWidgets();
+  } catch (e) {
+    debugPrint('위젯 강조색 갱신 실패: $e');
   }
 }
 

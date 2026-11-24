@@ -21,6 +21,8 @@ data class WidgetColors(
     val body: Int,
     val muted: Int,
     val accent: Int,
+    /** 가장 먼저 오는 버스처럼 눈에 띄어야 하는 것(iOS WidgetPalette.highlight와 같은 값). */
+    val highlight: Int,
 ) {
     /** 배경: 모양(둥근 모서리)은 drawable이 유지하고 색·투명도만 입힌다.
      *  setBackgroundColor를 쓰면 drawable이 단색으로 갈아끼워져 모서리가 사라진다. */
@@ -30,6 +32,12 @@ data class WidgetColors(
     }
 
     companion object {
+        /** "#RRGGBB" → 색. 형식이 틀리면 null. */
+        fun parseHex(hex: String?): Int? {
+            if (hex == null || !Regex("^#[0-9A-Fa-f]{6}$").matches(hex)) return null
+            return Color.parseColor(hex)
+        }
+
         fun read(context: Context, prefs: SharedPreferences): WidgetColors {
             val themeMode = prefs.getInt("themeMode", 0)
             val transparency = prefs.getString("transparency", "0.0")?.toFloatOrNull() ?: 0f
@@ -47,7 +55,10 @@ data class WidgetColors(
                 title = Color.parseColor(if (isDark) "#FFFFFF" else "#000000"),
                 body = Color.parseColor(if (isDark) "#BBBBBB" else "#555555"),
                 muted = Color.parseColor(if (isDark) "#888888" else "#999999"),
-                accent = Color.parseColor("#4285F4"),
+                // 앱 테마 색(lib/home_widgets.dart pushWidgetAccent). 없거나 틀리면 기본 파랑.
+                accent = parseHex(prefs.getString(if (isDark) "accent_dark" else "accent_light", null))
+                    ?: Color.parseColor("#4285F4"),
+                highlight = Color.parseColor(if (isDark) "#FCAD70" else "#E8710A"),
             )
         }
     }

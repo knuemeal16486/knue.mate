@@ -443,6 +443,9 @@ Future<void> _initializeHomeWidget() async {
     await HomeWidget.setAppGroupId('group.knue.meal');
     unawaited(pushBusWidgetTimetable());
     unawaited(pushNoticeWidget());
+    // 위젯 머리글 색은 앱 테마 색을 따른다(무지개 모드의 날마다 바뀌는 색 포함).
+    unawaited(pushWidgetAccent(themeColor.value));
+    themeColor.addListener(() => unawaited(pushWidgetAccent(themeColor.value)));
     // 앱이 꺼져 있다가 위젯 탭으로 열린 경우.
     _handleWidgetUri(await HomeWidget.initiallyLaunchedFromHomeWidget());
     // 앱이 백그라운드에 있다가 위젯 탭으로 돌아온 경우.

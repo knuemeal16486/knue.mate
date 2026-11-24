@@ -398,6 +398,12 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   다음 차 규칙(같은 분은 지난 차)·링크 허용(https + knue.ac.kr 계열)을 바꾸면 셋 다.
   키 이름·kind·Manifest는 `test/native_id_consistency_test.dart`가 확인한다.
 - 테마·투명도(`themeMode`·`transparency`)는 식단 위젯 설정 하나로 세 위젯에 같이.
+- 머리글 강조색("오늘 점심"·"학교 출발 버스"·"공지")은 앱 테마 색을 따른다. 앱이 켜질 때와
+  `themeColor`가 바뀔 때 `pushWidgetAccent`가 `accent_light`·`accent_dark`("#RRGGBB")를 넣는다
+  (`widgetAccentHex` — 흰 배경엔 너무 밝은 색을 어둡게, 검은 배경엔 너무 어두운 색을 밝게).
+  무지개 모드의 날마다 바뀌는 색은 앱을 열어야 위젯에 반영된다.
+- 버스 medium은 다음 차가 가장 먼저 오는 노선의 첫 시각·"N분 뒤"를 주황(`highlight`)으로
+  (`soonestRoutes`, Swift·Kotlin). small은 노선 이름이 줄고 시각은 안 잘린다.
 - iOS 17부터 시스템이 위젯 가장자리에 여백을 자동으로 넣는다. 각 위젯이 `.padding(14)`를 직접
   주므로 위젯 구성에 `.ownContentMargins()`(WidgetShared.swift)를 붙여 시스템 여백을 끈다 —
   새 위젯도 붙인다. 안 붙이면 여백이 두 번 들어가 small 식단 위젯에 메뉴가 3줄만 보였다.

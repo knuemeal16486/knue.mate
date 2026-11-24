@@ -311,5 +311,12 @@ void main() {
       expect(read('$ktDir/NoticeWidgetProvider.kt'),
           contains('"$kWidgetNoticeBoardsKey"'));
     });
+
+    test('위젯 강조색 키를 iOS·Android가 Dart와 같은 이름으로 읽는다', () {
+      for (final key in [kWidgetAccentLightKey, kWidgetAccentDarkKey]) {
+        expect(read('$iosDir/WidgetShared.swift'), contains('"$key"'));
+        expect(read('$ktDir/WidgetTheme.kt'), contains('"$key"'));
+      }
+    });
   });
 }

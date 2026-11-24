@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart' show Color;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -157,6 +158,27 @@ void main() {
     // '기숙사' 코드 합 143,605 → 5
     expect(noticeBoardColorIndex('기숙사', boards), 5);
     expect(kNoticeBoardColorCount, 8);
+  });
+
+  group('widgetAccentHex', () {
+    test('보통 색은 그대로', () {
+      final a = widgetAccentHex(const Color(0xFF2563EB));
+      expect(a.light, '#2563EB');
+      expect(a.dark, '#2563EB');
+    });
+    test('밝은 색(노랑)은 흰 배경에서 읽히게 어둡게', () {
+      final a = widgetAccentHex(const Color(0xFFFFEB3B));
+      expect(a.light, isNot('#FFEB3B'));
+      expect(Color(int.parse('FF${a.light.substring(1)}', radix: 16))
+          .computeLuminance(), lessThanOrEqualTo(0.4));
+      expect(a.dark, '#FFEB3B');
+    });
+    test('어두운 색(남색)은 검은 배경에서 읽히게 밝게', () {
+      final a = widgetAccentHex(const Color(0xFF1A237E));
+      expect(a.light, '#1A237E');
+      expect(Color(int.parse('FF${a.dark.substring(1)}', radix: 16))
+          .computeLuminance(), greaterThanOrEqualTo(0.15));
+    });
   });
 
   test('widgetLinkAllowed', () {
