@@ -31,10 +31,10 @@ data class WidgetColors(
         views.setInt(bgId, "setImageAlpha", alpha)
     }
 
-    /** 항목 왼쪽 옅은 막대(drawable/widget_bar)에 색을 입힌다. iOS WidgetBar와 같은 0.4 불투명도. */
-    fun applyBar(views: RemoteViews, barId: Int, color: Int) {
+    /** 막대(drawable/widget_bar)에 색을 입힌다. 기본은 iOS WidgetBar와 같은 0.4 불투명도. */
+    fun applyBar(views: RemoteViews, barId: Int, color: Int, alpha: Int = 102) {
         views.setInt(barId, "setColorFilter", color)
-        views.setInt(barId, "setImageAlpha", 102)
+        views.setInt(barId, "setImageAlpha", alpha)
     }
 
     companion object {

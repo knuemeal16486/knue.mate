@@ -225,29 +225,24 @@ struct MealWidgetEntryView: View {
         let isMessage = mealMenuIsMessage(entry.menu)
         Group {
             if family == .systemSmall {
-                // small: 큰 끼니 머리글 + 식당·날 한 줄, 아래에 막대 하나와 메뉴 묶음.
-                VStack(alignment: .leading, spacing: 8) {
+                // small: 큰 끼니 머리글(밑에 테마 색 가로 막대) + 식당·날 한 줄, 아래에 메뉴 묶음.
+                VStack(alignment: .leading, spacing: 6) {
                     WidgetBigHeader(title: header.meal,
                                     subs: [[entry.title, header.day].filter { !$0.isEmpty }
                                         .joined(separator: " · ")],
-                                    palette: palette, size: 22)
+                                    palette: palette, size: 22, underline: palette.accent)
                     GeometryReader { geo in
                         if isMessage {
                             messageText
                         } else {
-                            // 줄 폭에서 막대(3)와 사이(7)를 뺀다.
                             let fit = mealMenuFitSmall(items, height: geo.size.height,
-                                                       maxWidth: geo.size.width - kMealBarInset,
+                                                       maxWidth: geo.size.width,
                                                        width: { mealMenuTextWidth($0, size: $1) })
-                            HStack(alignment: .top, spacing: kMealBarInset - 3) {
-                                WidgetBar(color: palette.accent)
-                                VStack(alignment: .leading, spacing: fit.gap) {
-                                    ForEach(Array(fit.lines.enumerated()), id: \.offset) { _, line in
-                                        menuLine(line, size: fit.size)
-                                    }
+                            VStack(alignment: .leading, spacing: fit.gap) {
+                                ForEach(Array(fit.lines.enumerated()), id: \.offset) { _, line in
+                                    menuLine(line, size: fit.size)
                                 }
                             }
-                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         }
                     }
@@ -257,7 +252,7 @@ struct MealWidgetEntryView: View {
                 HStack(alignment: .top, spacing: 12) {
                     WidgetBigHeader(title: header.meal,
                                     subs: [entry.title, header.day].filter { !$0.isEmpty },
-                                    palette: palette)
+                                    palette: palette, underline: palette.accent)
                         .frame(width: 84, alignment: .leading)
                     GeometryReader { geo in
                         if isMessage {
@@ -268,16 +263,7 @@ struct MealWidgetEntryView: View {
                                 ForEach(Array(fit.columns.enumerated()), id: \.offset) { _, column in
                                     VStack(alignment: .leading, spacing: fit.gap) {
                                         ForEach(Array(column.enumerated()), id: \.offset) { _, item in
-                                            HStack(spacing: kMealBarInset - 3) {
-                                                // "외 N개"는 막대 없이 흐리게.
-                                                if isMoreLabel(item) {
-                                                    Color.clear.frame(width: 3)
-                                                } else {
-                                                    WidgetBar(color: palette.accent)
-                                                }
-                                                menuLine(item, size: fit.size)
-                                            }
-                                            .frame(height: mealMenuLineHeight(fit.size))
+                                            menuLine(item, size: fit.size)
                                         }
                                     }
                                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -306,12 +292,7 @@ struct MealWidgetEntryView: View {
             .foregroundColor(palette.body)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
-
-    private func isMoreLabel(_ s: String) -> Bool { s.hasPrefix("외 ") && s.hasSuffix("개") }
 }
-
-/// 메뉴 막대(3pt)와 글자 사이를 합친 왼쪽 들여쓰기.
-let kMealBarInset: CGFloat = 10
 
 extension MealWidgetEntryView {
     /// 한 줄. 끝의 "외 N개"는 흐리게, 구분점도 흐리게.

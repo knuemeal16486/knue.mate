@@ -23,7 +23,7 @@ class MealWidgetProvider : HomeWidgetProvider() {
         // 줄 높이가 글자 크기의 1.4배쯤이라 13sp 한 줄이 실제로 약 22dp를 먹는다.
         // 작게 잡으면 마지막 줄이 말줄임표 없이 반쯤 잘려 보인다.
         private const val PADDING_DP = 14f * 2
-        private const val HEADER_DP = 54f      // 큰 끼니(20sp) + 식당·날 + 아래 여백(좁은 위젯만)
+        private const val HEADER_DP = 63f      // 큰 끼니(20sp) + 가로 막대 + 식당·날 + 아래 여백(좁은 위젯만)
         private const val MENU_LINE_DP = 22f   // 13sp 한 줄 + lineSpacingExtra 3dp
 
         /**
@@ -122,10 +122,10 @@ class MealWidgetProvider : HomeWidgetProvider() {
                     views.setTextColor(R.id.widget_title, colors.muted)
                 }
 
-                // 안내 문구(앱을 열어야 함·운영 안 함)면 막대 없이 그대로.
+                // 끼니 밑 짧은 가로 막대 — 앱 테마 색.
+                colors.applyBar(views, if (wide) R.id.meal_side_line else R.id.meal_top_line, colors.accent, 255)
+                // 안내 문구(앱을 열어야 함·운영 안 함)면 흐리게 그대로.
                 val message = isMessage(menu)
-                views.setViewVisibility(R.id.meal_bar, if (message) View.GONE else View.VISIBLE)
-                colors.applyBar(views, R.id.meal_bar, colors.accent)
                 // 세로 화면 기준 높이(MAX_HEIGHT). 값이 없으면 2×2 정도로 본다.
                 val heightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)
                     .takeIf { it > 0 }?.toFloat() ?: 150f
