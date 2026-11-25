@@ -132,7 +132,7 @@ class _HousingReportSheetState extends State<HousingReportSheet> {
         color: isDark ? const Color(0xFF161618) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: SafeArea(
+      child: Material(type: MaterialType.transparency, child: SafeArea(
         top: false,
         child: Padding(
           padding: EdgeInsets.fromLTRB(22, 12, 22, MediaQuery.of(context).viewInsets.bottom + 16),
@@ -288,7 +288,7 @@ class _HousingReportSheetState extends State<HousingReportSheet> {
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 }

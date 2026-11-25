@@ -1958,7 +1958,10 @@ class _HousingScreenState extends State<HousingScreen>
                 width: 0.8,
               ),
             ),
-            child: ListView(
+            // 색 상자 바로 안의 ListTile은 누를 때 물결이 가려진다 — 투명 Material을 사이에.
+            child: Material(
+              type: MaterialType.transparency,
+              child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 4),
               shrinkWrap: true,
               children: _getMatchingSearchResults().map((item) {
@@ -2019,6 +2022,7 @@ class _HousingScreenState extends State<HousingScreen>
                   },
                 );
               }).toList(),
+              ),
             ),
           ),
 
@@ -5702,7 +5706,7 @@ class _HousingScreenState extends State<HousingScreen>
             color: isDark ? const Color(0xFF161618) : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: ListView(
+          child: Material(type: MaterialType.transparency, child: ListView(
             controller: controller,
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
             children: [
@@ -5806,7 +5810,7 @@ class _HousingScreenState extends State<HousingScreen>
                   ),
               ],
             ],
-          ),
+          )),
         ),
       ),
     );
@@ -6003,7 +6007,7 @@ class _HousingScreenState extends State<HousingScreen>
           color: isDark ? const Color(0xFF161618) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        child: SafeArea(
+        child: Material(type: MaterialType.transparency, child: SafeArea(
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
@@ -6034,7 +6038,7 @@ class _HousingScreenState extends State<HousingScreen>
               ],
             ),
           ),
-        ),
+        )),
       ),
     );
   }

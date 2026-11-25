@@ -32,6 +32,10 @@ Android 12+는 가운데 원만 보여서 `splash_android12*.png`는 글자를 �
 들고 있어 "cannot find symbol"이 나는데, `flutter clean && flutter pub get`이면
 풀린다(실제 의존성 문제가 아니다).
 
+색을 칠한 상자(`Container(decoration: BoxDecoration(color: …))`) 바로 안의 `ListTile`·`ExpansionTile`은
+누를 때 물결이 상자에 가려 안 보인다. Flutter 새 버전(3.50에서 확인)은 이를 assert로 잡아 테스트가 깨진다 —
+상자와 타일 사이에 `Material(type: MaterialType.transparency)`를 둔다(자취방 시트들·`_infoCard`·공지 알림 설정).
+
 ## 순수 함수 + 테스트
 
 로직은 화면에서 떼어내 순수 함수로 두고 테스트를 붙이는 게 이 저장소의 관행이다
@@ -476,6 +480,9 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   빼면 iOS 17에서 빈 위젯). 버스 "N분 뒤"는 기존 매 분 엔트리를 그대로 탄다. Android엔 잠금화면 위젯이 없다.
 - iOS 위젯은 모두 `MealWidget` 확장 하나(`MealWidgetBundle`)에 들어 있다 — 새 파일은
   MealWidget 타깃 Sources에도 넣는다.
+  번들 id `com.knue.knuemate.MealWidget`, 구성 `Flutter/Generated.xcconfig`라 버전·빌드 번호가 앱과 같다.
+  App Group `group.knue.meal`(Runner·위젯 둘 다 entitlements). Codemagic이 위젯용 배포 프로파일도 받아
+  업로드까지 된다(2026-11-25 확인).
 - Android 위젯 확인: 에뮬레이터 `HomeWidgetPreferences.xml`을 `run-as`로 덮고
   `adb install -r`이면 다시 그린다.
 
@@ -591,13 +598,6 @@ flutter test test/bus_preview.dart         # 버스 탭 화면 → build/bus_pre
   콘솔에서 정리해도 된다.
 - **Firebase Storage가 활성화돼 있지 않다.** 행사 포스터·제휴 이미지 업로드가
   전부 실패한다. Blaze 요금제가 필요할 수 있다.
-- iOS 식단 위젯: `MealWidget` 타깃은 등록했다(2026-11-23, 번들 id
-  `com.knue.knuemate.MealWidget`, 기본 구성 `Flutter/Generated.xcconfig`라 버전·빌드
-  번호가 앱과 같다). 이때 Runner에도 `Runner.entitlements`(App Group·푸시)를 처음
-  연결했다. Apple Developer의 App Group `group.knue.meal`과 두 App ID도 끝냈다
-  (개발 프로파일에 그룹·푸시가 들어간 것 확인). 남은 건 Codemagic이 위젯용 배포
-  프로비저닝 프로파일도 받게 하는 것.
-
 **알려진 한계**
 - 체육관/제2체육관 경계는 두 이름표의 중간에 생겨 실제 칸막이 자리와 다르다
   (체육관 910㎡ / 제2체육관 2202㎡, 실제로는 본관이 더 크다).

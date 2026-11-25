@@ -59,7 +59,7 @@ class HousingCompareSheet extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.all(24),
-        child: Center(
+        child: Material(type: MaterialType.transparency, child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -71,7 +71,7 @@ class HousingCompareSheet extends StatelessWidget {
               ),
             ],
           ),
-        ),
+        )),
       );
     }
 
@@ -82,7 +82,7 @@ class HousingCompareSheet extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: Column(
+      child: Material(type: MaterialType.transparency, child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Center(
@@ -163,7 +163,7 @@ class HousingCompareSheet extends StatelessWidget {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 
