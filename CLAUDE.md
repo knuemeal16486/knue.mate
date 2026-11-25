@@ -426,7 +426,8 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   무지개 모드의 날마다 바뀌는 색은 앱을 열어야 위젯에 반영된다.
 - 버스 위젯은 **두 종류**를 위젯 고르는 화면에서 사용자가 고른다: 노선별(`BusWidget` /
   `BusWidgetProvider`)과 곧 떠나는 차(`BusNextWidget` / `BusNextWidgetProvider`, 모든 노선을 합쳐 시각 순
-  `upcomingDepartures`). 같은 시간표·레이아웃을 쓰고, Dart는 둘 다 다시 그린다(`_updateBusWidgets`).
+  `upcomingDepartures`). 곧 떠나는 차는 **small·잠금화면만**(medium은 노선별과 겹쳐 뺐다, 2026-11-25 사용자 결정 —
+  Android는 가로로 못 늘리고, 이미 넓힌 것도 small 모양으로 그린다). 같은 시간표·레이아웃을 쓰고, Dart는 둘 다 다시 그린다(`_updateBusWidgets`).
   가장 먼저 오는 차는 주황(`highlight`, `soonestRoutes`).
 - Android 위젯 레이아웃에 맨 `View`를 쓰면 "Can't load widget"이 난다(RemoteViews 허용 목록) —
   빈 칸은 `FrameLayout`으로.

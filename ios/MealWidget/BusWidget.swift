@@ -176,7 +176,8 @@ struct BusProvider: TimelineProvider {
 enum BusWidgetStyle {
     /// 노선마다 다음 차(노선 목록).
     case routes
-    /// 가장 먼저 떠나는 차를 크게, 그다음 차들을 시각 순으로.
+    /// 가장 먼저 떠나는 차를 크게, 그다음 차들을 시각 순으로. small·잠금화면만
+    /// (medium은 노선별과 겹쳐 뺐다 — 2026-11-25 사용자 결정).
     case next
 }
 
@@ -216,7 +217,7 @@ struct BusWidgetEntryView: View {
                         WidgetBigHeader(title: "버스", subs: ["학교 출발", dayLabel], palette: palette)
                             .frame(width: 62, alignment: .leading)
                         Group {
-                            if style == .next { nextRows(routes) } else { routeRows(routes) }
+                            routeRows(routes)  // 곧 떠나는 차는 small·잠금화면만 있다
                         }
                         .padding(.top, 3)
                     }
@@ -327,39 +328,6 @@ struct BusWidgetEntryView: View {
             Text("오늘 운행 끝")
                 .font(.system(size: WidgetType.body))
                 .foregroundColor(palette.muted)
-        }
-    }
-
-    @ViewBuilder
-    private func nextRows(_ routes: [BusRoute]) -> some View {
-        let up = upcomingDepartures(routes.map { $0.times(on: entry.date) }, now: entry.date, n: 5)
-        if up.isEmpty {
-            Text("오늘 운행 끝")
-                .font(.system(size: WidgetType.body))
-                .foregroundColor(palette.muted)
-        } else {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(up.enumerated()), id: \.offset) { i, d in
-                    if i > 0 { Spacer(minLength: 2) }
-                    HStack(alignment: .center, spacing: 6) {
-                        WidgetBar(color: busRouteColor(d.route, isDark: palette.isDark), env: env).frame(height: 14)
-                        Text(routes[d.route].label)
-                            .font(.system(size: WidgetType.body, weight: .bold))
-                            .foregroundColor(palette.title)
-                            .minimumScaleFactor(0.75)
-                            .frame(width: 72, alignment: .leading)
-                        Text(d.time)
-                            .font(.system(size: WidgetType.body, weight: .semibold).monospacedDigit())
-                            .foregroundColor(i == 0 ? palette.highlight : palette.body)
-                            .widgetAccentableCompat(i == 0)
-                            .fixedSize()
-                        Spacer(minLength: 2)
-                        eta(d.time, strong: i == 0)
-                    }
-                    .lineLimit(1)
-                }
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -498,7 +466,7 @@ struct BusNextWidget: Widget {
         }
         .configurationDisplayName("학교 출발 버스 · 곧 떠나는 차")
         .description("교원대에서 가장 먼저 떠나는 버스와 그다음 차들. 잠금화면에도 둘 수 있습니다.")
-        .supportedFamilies(widgetFamilies(home: [.systemSmall, .systemMedium],
+        .supportedFamilies(widgetFamilies(home: [.systemSmall],
                                           lock: [.inline, .circular, .rectangular]))
         .ownContentMargins()
     }
