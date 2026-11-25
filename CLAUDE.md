@@ -286,10 +286,10 @@ App Store에서 **승인된 버전 이름(pubspec의 1.6.x)은 다시 못 올린
 (90186)·"must contain a higher version"(90062)으로 거부된다. 한 버전이 승인되면 다음 업로드
 전에 이름도 올린다(1.6.5 → 1.6.6). 빌드 번호만 올리면 같은 이름 안에서 TestFlight용으로만 된다.
 
-**iOS 빌드 번호는 Codemagic이 정한다**(`codemagic.yaml`, 2026-11-25): TestFlight·App Store 최신 번호와
-pubspec 번호 중 큰 것 + 1. 같은 번호를 다시 올리면 409(-19232)로 거부된다. 버전 이름은 여전히 pubspec에서
-올린다. 이 파일은 Codemagic 앱 설정을 codemagic.yaml 방식으로 바꿔야 쓰이고, 환경변수 그룹
-`app_store_credentials`·`app_secrets`가 있어야 한다(파일 머리 주석). `.env`는 빌드 전에 `app_secrets`로 만든다.
+**iOS 빌드 번호는 Codemagic이 정한다**(2026-11-25): Workflow Editor의 iOS Build arguments에
+`--build-number=$(($(app-store-connect get-latest-testflight-build-number 6757637319 …) + 1))`
+(TestFlight 최신 + 1). 같은 번호를 다시 올리면 409(-19232)로 거부된다. 버전 이름은 여전히 pubspec에서
+올린다. codemagic.yaml 방식은 쓰지 않기로 했다(사용자 결정 — 환경변수 그룹을 새로 꾸려야 해서).
 
 관리자 인증: 비밀번호를 앱이 들고 있지 않다. `admin_grants/{uid}` 문서를 만들 때
 **보안 규칙이 서버에서** `app_config/admin`과 대조한다.
