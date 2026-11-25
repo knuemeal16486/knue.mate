@@ -22,6 +22,12 @@ Android 리소스 축소: `android.r8.optimizedResourceShrinking=true`(gradle.pr
 스플래시 `styles.xml`의 `windowLayoutInDisplayCutoutMode shortEdges`는 Android 15에서
 지원 중단이라 뺐다. `flutter_native_splash:create`를 다시 돌리면 도로 생기니 또 지운다.
 
+스플래시 로고는 원본(`knue_icon.png`, 흰 정사각형)이 아니라 바탕을 투명하게 뺀
+`splash_*.png`다 — 원본을 다크 모드 검은 바탕에 올리면 흰 네모가 떴다(2026-11-25).
+로고를 바꾸면 `python tool/make_splash_images.py` → `dart run flutter_native_splash:create`.
+Android 12+는 가운데 원만 보여서 `splash_android12*.png`는 글자를 원 안으로 줄여 둔다.
+앱 로딩 화면(`_buildLoadingScreen`)도 다크 모드면 같은 바탕색(#0D0D0F)·`knue_icon_dark.png`.
+
 `flutter clean` 뒤 처음 빌드는 느리다. 플러그인을 추가하면 Gradle이 옛 상태를
 들고 있어 "cannot find symbol"이 나는데, `flutter clean && flutter pub get`이면
 풀린다(실제 의존성 문제가 아니다).

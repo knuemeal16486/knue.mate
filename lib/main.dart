@@ -278,8 +278,11 @@ void main() async {
 }
 
 Widget _buildLoadingScreen(BuildContext context, Widget? child) {
+  // 네이티브 스플래시와 이어지게 기기 다크 모드를 따른다(색은 pubspec의
+  // flutter_native_splash와 같다). 예전엔 늘 흰 바탕에 흰 네모 로고였다.
+  final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
   return Scaffold(
-    backgroundColor: Colors.white,
+    backgroundColor: dark ? const Color(0xFF0D0D0F) : Colors.white,
     body: Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -287,7 +290,7 @@ Widget _buildLoadingScreen(BuildContext context, Widget? child) {
           // 원본이 2048×2048이라 그냥 그리면 100×100으로 보여주면서도
           // 디코드는 원본 크기로 한다 — 한 장에 램 16MB. cacheWidth를 주면
           // 디코드 단계에서 줄여 받는다(화면 배율을 고려해 넉넉히 300).
-          Image.asset('assets/icons/knue_icon.png', width: 100, height: 100, cacheWidth: 300, cacheHeight: 300, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
+          Image.asset(dark ? 'assets/icons/knue_icon_dark.png' : 'assets/icons/knue_icon.png', width: 100, height: 100, cacheWidth: 300, cacheHeight: 300, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
           const SizedBox(height: 24),
           const CircularProgressIndicator(strokeWidth: 3),
           const SizedBox(height: 16),
