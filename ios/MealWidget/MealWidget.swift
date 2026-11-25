@@ -364,6 +364,7 @@ struct MealWidgetEntryView: View {
         }
     }
 
+    @ViewBuilder
     private var homeBody: some View {
         let header = mealHeaderParts(entry.time)
         let items = mealMenuItems(entry.menu)

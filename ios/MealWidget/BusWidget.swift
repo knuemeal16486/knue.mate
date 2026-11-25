@@ -201,6 +201,7 @@ struct BusWidgetEntryView: View {
         }
     }
 
+    @ViewBuilder
     private var homeBody: some View {
         Group {
             if let routes = entry.routes, !routes.isEmpty {
