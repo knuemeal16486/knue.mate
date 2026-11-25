@@ -355,6 +355,16 @@ struct MealWidgetEntryView: View {
     private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme, env: env) }
 
     var body: some View {
+        if #available(iOSApplicationExtension 16.0, *), family.isAccessory {
+            MealLockView(entry: entry, family: family)
+                .widgetBackground(Color.clear)
+                .widgetURL(URL(string: "knuemate://meal?homeWidget"))
+        } else {
+            homeBody
+        }
+    }
+
+    private var homeBody: some View {
         let header = mealHeaderParts(entry.time)
         let items = mealMenuItems(entry.menu)
         let isMessage = mealMenuIsMessage(entry.menu)
@@ -470,6 +480,62 @@ extension MealWidgetEntryView {
     }
 }
 
+/// 잠금화면 식단. 시스템이 한 색으로 칠하므로 글자만 쓴다.
+///
+/// | 크기 | 모양 |
+/// |---|---|
+/// | inline | 🍴 점심 · 비빔밥 외 3 |
+/// | rectangular | 점심 · 기숙사 식당 / 메뉴 두 줄(넘치면 "외 N개", mealMenuFlowLines) |
+@available(iOSApplicationExtension 16.0, *)
+struct MealLockView: View {
+    let entry: MealEntry
+    let family: WidgetFamily
+
+    private var header: (meal: String, day: String) { mealHeaderParts(entry.time) }
+    private var items: [String] { mealMenuItems(entry.menu) }
+    private var isMessage: Bool { mealMenuIsMessage(entry.menu) }
+
+    var body: some View {
+        if family == .accessoryInline { inline } else { rectangular }
+    }
+
+    /// 한 줄. 메뉴면 첫 메뉴 + 나머지 개수, 안내 문구면 그 첫 줄.
+    private var inline: some View {
+        let rest = isMessage
+            ? (entry.menu.split(separator: "\n").first.map(String.init) ?? "")
+            : (items.first.map { items.count > 1 ? "\($0) 외 \(items.count - 1)" : $0 } ?? kMealWidgetNoMenu)
+        return Text("\(Image(systemName: "fork.knife")) \(header.meal) · \(rest)")
+    }
+
+    private var rectangular: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text([header.meal, entry.title].filter { !$0.isEmpty }.joined(separator: " · "))
+                .font(.system(size: WidgetType.body, weight: .bold))
+                .widgetAccentable()
+                .lineLimit(1)
+            if isMessage {
+                Text(entry.menu.replacingOccurrences(of: "\n", with: " "))
+                    .font(.system(size: WidgetType.body))
+                    .lineLimit(2)
+            } else {
+                GeometryReader { geo in
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(mealMenuFlowLines(items, rows: 2, maxWidth: geo.size.width,
+                                                        width: { mealMenuTextWidth($0, size: WidgetType.body) })
+                            .enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(.system(size: WidgetType.body))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
 /// [size]pt 시스템 글꼴(medium)로 잰 글자 폭(pt). 조금 여유를 둬서 실제 그릴 때 넘치지 않게.
 func mealMenuTextWidth(_ s: String, size: CGFloat) -> CGFloat {
     #if canImport(UIKit)
@@ -490,8 +556,9 @@ struct MealWidget: Widget {
             WidgetEnvReader { env in MealWidgetEntryView(entry: entry, env: env) }
         }
         .configurationDisplayName("청람 밥상")
-        .description("오늘의 학식 메뉴를 홈 화면에서 바로 봅니다.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .description("오늘의 학식 메뉴를 홈 화면·잠금화면에서 바로 봅니다.")
+        .supportedFamilies(widgetFamilies(home: [.systemSmall, .systemMedium],
+                                          lock: [.inline, .rectangular]))
         .ownContentMargins()
     }
 }

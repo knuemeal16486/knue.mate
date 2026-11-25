@@ -192,6 +192,16 @@ struct BusWidgetEntryView: View {
     private var dayLabel: String { isBusHoliday(entry.date) ? "주말" : "평일" }
 
     var body: some View {
+        if #available(iOSApplicationExtension 16.0, *), family.isAccessory {
+            BusLockView(entry: entry, family: family)
+                .widgetBackground(Color.clear)
+                .widgetURL(URL(string: "knuemate://bus?homeWidget"))
+        } else {
+            homeBody
+        }
+    }
+
+    private var homeBody: some View {
         Group {
             if let routes = entry.routes, !routes.isEmpty {
                 if isSmall {
@@ -357,17 +367,108 @@ struct BusWidgetEntryView: View {
     /// 위젯(노선별 medium·곧 떠나는 차 둘 다)만 iPad에서 통째로 흰 화면이었다.
     @ViewBuilder
     private func eta(_ hhmm: String, strong: Bool) -> some View {
-        if let d = departureDate(hhmm) {
-            Text(busEtaLabel(Int((d.timeIntervalSince(entry.date) / 60).rounded(.up))))
+        if let m = busMinutesUntil(hhmm, now: entry.date) {
+            Text(busEtaLabel(m))
                 .font(.system(size: WidgetType.caption, weight: strong ? .bold : .regular).monospacedDigit())
                 .foregroundColor(strong ? palette.highlight : palette.muted)
                 .fixedSize()
         }
     }
+}
 
-    private func departureDate(_ hhmm: String) -> Date? {
-        guard let m = busMinutes(hhmm) else { return nil }
-        return Calendar.current.date(byAdding: .minute, value: m, to: Calendar.current.startOfDay(for: entry.date))
+/// [now]부터 오늘 "HH:mm" 출발까지 남은 분(올림). 엔트리가 분 경계라 정수로 떨어진다.
+func busMinutesUntil(_ hhmm: String, now: Date, calendar: Calendar = .current) -> Int? {
+    guard let m = busMinutes(hhmm),
+          let d = calendar.date(byAdding: .minute, value: m, to: calendar.startOfDay(for: now)) else { return nil }
+    return Int((d.timeIntervalSince(now) / 60).rounded(.up))
+}
+
+/// 노선 이름의 번호만("913 평동행" → "913") — 잠금화면 동그라미용.
+func busRouteNumber(_ label: String) -> String {
+    String(label.split(separator: " ").first ?? Substring(label))
+}
+
+/// 잠금화면 버스(곧 떠나는 차). 시스템이 한 색으로 칠하므로 글자만 쓴다.
+///
+/// | 크기 | 모양 |
+/// |---|---|
+/// | inline | 🚌 513 14:27 · 7분 뒤 |
+/// | circular | 513 / 7 / 분 (1시간 넘으면 14:27) |
+/// | rectangular | 버스 · 평일 / 다음 차 두 대(노선 시각 N분 뒤) |
+@available(iOSApplicationExtension 16.0, *)
+struct BusLockView: View {
+    let entry: BusEntry
+    let family: WidgetFamily
+
+    private var upcoming: [(route: Int, time: String)] {
+        guard let routes = entry.routes else { return [] }
+        return upcomingDepartures(routes.map { $0.times(on: entry.date) }, now: entry.date, n: 2)
+    }
+
+    private func label(_ i: Int) -> String { entry.routes?[i].label ?? "" }
+
+    var body: some View {
+        switch family {
+        case .accessoryInline: inline
+        case .accessoryCircular: circular
+        default: rectangular
+        }
+    }
+
+    private var inline: some View {
+        if let first = upcoming.first, let m = busMinutesUntil(first.time, now: entry.date) {
+            return Text("\(Image(systemName: "bus.fill")) \(label(first.route)) \(first.time) · \(busEtaLabel(m))")
+        }
+        return Text("\(Image(systemName: "bus.fill")) \(entry.routes == nil ? "앱을 열어 주세요" : "오늘 운행 끝")")
+    }
+
+    private var circular: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            if let first = upcoming.first, let m = busMinutesUntil(first.time, now: entry.date) {
+                VStack(spacing: 0) {
+                    Text(busRouteNumber(label(first.route)))
+                        .font(.system(size: WidgetType.caption, weight: .semibold))
+                        .widgetAccentable()
+                    Text(m < 60 ? "\(m)" : first.time)
+                        .font(.system(size: m < 60 ? WidgetType.headerSmall : WidgetType.body, weight: .bold).monospacedDigit())
+                        .minimumScaleFactor(0.6)
+                    if m < 60 {
+                        Text("분").font(.system(size: WidgetType.caption))
+                    }
+                }
+                .lineLimit(1)
+                .padding(4)
+            } else {
+                Image(systemName: "bus.fill").font(.system(size: WidgetType.headerSmall))
+            }
+        }
+    }
+
+    private var rectangular: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("\(Image(systemName: "bus.fill")) 학교 출발 · \(isBusHoliday(entry.date) ? "주말" : "평일")")
+                .font(.system(size: WidgetType.body, weight: .bold))
+                .widgetAccentable()
+            if entry.routes == nil {
+                Text("앱을 한 번 열면 시간표를 불러옵니다.").font(.system(size: WidgetType.body))
+            } else if upcoming.isEmpty {
+                Text("오늘 운행 끝").font(.system(size: WidgetType.body))
+            } else {
+                ForEach(Array(upcoming.enumerated()), id: \.offset) { _, d in
+                    HStack(spacing: 4) {
+                        Text(label(d.route)).font(.system(size: WidgetType.body, weight: .semibold))
+                        Text(d.time).font(.system(size: WidgetType.body).monospacedDigit())
+                        Spacer(minLength: 2)
+                        if let m = busMinutesUntil(d.time, now: entry.date) {
+                            Text(busEtaLabel(m)).font(.system(size: WidgetType.caption).monospacedDigit())
+                        }
+                    }
+                }
+            }
+        }
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -395,8 +496,9 @@ struct BusNextWidget: Widget {
             WidgetEnvReader { env in BusWidgetEntryView(entry: entry, style: .next, env: env) }
         }
         .configurationDisplayName("학교 출발 버스 · 곧 떠나는 차")
-        .description("교원대에서 가장 먼저 떠나는 버스와 그다음 차들.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .description("교원대에서 가장 먼저 떠나는 버스와 그다음 차들. 잠금화면에도 둘 수 있습니다.")
+        .supportedFamilies(widgetFamilies(home: [.systemSmall, .systemMedium],
+                                          lock: [.inline, .circular, .rectangular]))
         .ownContentMargins()
     }
 }

@@ -460,6 +460,11 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 - **시스템이 칠하는 모드**: 위젯 구성은 `WidgetEnvReader { env in …EntryView(env: env) }`로 감싼다.
   틴트 홈 화면·잠금화면(fullColor 아님)에선 막대를 진하게, 머리글·막대·가장 빠른 차는 `widgetAccentableCompat()`.
   StandBy처럼 배경이 빠지면 앱 테마 대신 기기 설정을 따른다(라이트 고정이면 검은 바탕에 검은 글씨가 됐다).
+- **잠금화면 위젯(2026-11-25, iOS 16+)**: 새 kind가 아니라 같은 위젯에 잠금화면 크기를 더했다
+  (`widgetFamilies(home:lock:)`). 곧 떠나는 차(`BusLockView` — inline·circular·rectangular)와 식단
+  (`MealLockView` — inline·rectangular)만. 노선별 버스·공지는 넣지 않았다. 화면은 `family.isAccessory`로
+  가르고, 시스템이 한 색으로 칠하므로 색 막대·배경 없이 글자만 쓴다(배경은 `.widgetBackground(Color.clear)` —
+  빼면 iOS 17에서 빈 위젯). 버스 "N분 뒤"는 기존 매 분 엔트리를 그대로 탄다. Android엔 잠금화면 위젯이 없다.
 - iOS 위젯은 모두 `MealWidget` 확장 하나(`MealWidgetBundle`)에 들어 있다 — 새 파일은
   MealWidget 타깃 Sources에도 넣는다.
 - Android 위젯 확인: 에뮬레이터 `HomeWidgetPreferences.xml`을 `run-as`로 덮고

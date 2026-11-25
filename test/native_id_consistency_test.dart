@@ -315,6 +315,22 @@ void main() {
           contains('class BusNextWidgetProvider : BusWidgetProvider()'));
     });
 
+    // 잠금화면 위젯(4단계, iOS 16+): 곧 떠나는 차·식단에만 붙인다. 잠금화면 화면도
+    // containerBackground를 거쳐야 iOS 17에서 "배경 API를 쓰라"는 빈 위젯이 안 된다.
+    test('잠금화면 위젯은 곧 떠나는 차·식단에 있고 배경을 비워 둔다', () {
+      final bus = read('$iosDir/BusWidget.swift');
+      final meal = read('$iosDir/MealWidget.swift');
+      expect(bus, contains('lock: [.inline, .circular, .rectangular]'));
+      expect(meal, contains('lock: [.inline, .rectangular]'));
+      for (final src in [bus, meal]) {
+        expect(src, contains('family.isAccessory'));
+        expect(src, contains('.widgetBackground(Color.clear)'));
+      }
+      // 노선별 버스·공지는 잠금화면에 없다(같은 내용이 두 번 뜨지 않게).
+      expect(RegExp(r'lock: \[').allMatches(bus).length, 1);
+      expect(read('$iosDir/NoticeWidget.swift'), isNot(contains('lock: [')));
+    });
+
     // 글자·여백 규칙(2단계 디자인 정리) — iOS WidgetType·WidgetSpace와
     // Android widget_dimens.xml이 같은 값이어야 두 기기 위젯이 같아 보인다.
     test('위젯 글자·여백 규칙이 iOS·Android에서 같다', () {

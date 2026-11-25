@@ -280,3 +280,34 @@ struct WidgetMessage: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
+
+// ── 잠금화면 위젯(iOS 16+) ──
+// 홈 화면 위젯과 같은 kind에 잠금화면 크기를 더한다. 잠금화면은 시스템이 한 색으로
+// 칠하므로 배경·색 막대 없이 글자만, 강조할 것만 widgetAccentable로.
+
+enum WidgetLockFamily { case inline, circular, rectangular }
+
+/// 홈 화면 크기 + (iOS 16 이상이면) 잠금화면 크기.
+func widgetFamilies(home: [WidgetFamily], lock: [WidgetLockFamily]) -> [WidgetFamily] {
+    guard #available(iOSApplicationExtension 16.0, *) else { return home }
+    return home + lock.map { f -> WidgetFamily in
+        switch f {
+        case .inline: return .accessoryInline
+        case .circular: return .accessoryCircular
+        case .rectangular: return .accessoryRectangular
+        }
+    }
+}
+
+extension WidgetFamily {
+    /// 잠금화면(액세서리) 크기인지. iOS 15에는 없다.
+    var isAccessory: Bool {
+        if #available(iOSApplicationExtension 16.0, *) {
+            switch self {
+            case .accessoryInline, .accessoryCircular, .accessoryRectangular: return true
+            default: return false
+            }
+        }
+        return false
+    }
+}
