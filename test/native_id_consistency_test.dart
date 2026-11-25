@@ -288,10 +288,16 @@ void main() {
       String lit(String s) => s.replaceAll('\n', r'\n');
       for (final src in [swift, kotlin]) {
         expect(src, contains('"$kMealWeekJsonKey"'));
+        expect(src, contains('"$kMealWidgetSourceKey"'));
         expect(src, contains('"${lit(kMealWidgetNoMenu)}"'));
         expect(src, contains('"${lit(kMealWidgetNoData)}"'));
         expect(src, contains(mealWidgetClosedText(true).substring(2)));
       }
+      // 식당 바꾸기 버튼(3단계): iOS는 위젯 확장 안 AppIntent, Android는 브로드캐스트.
+      expect(swift, contains('Button(intent: ToggleMealSourceIntent())'));
+      expect(kotlin, contains('ACTION_TOGGLE'));
+      expect(read('android/app/src/main/res/layout/home_widget_layout.xml'),
+          contains('@+id/meal_toggle'));
     });
 
     test('Android 버스 위젯이 Manifest에 있고 키가 Dart와 같다', () {

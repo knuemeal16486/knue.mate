@@ -99,6 +99,15 @@ void main() {
       expect(r(d(25, 18, 30), source: 'b').menu, '· 국수');
       expect(r(d(25, 19), source: 'b').time, '내일 점심');
     });
+    test('위젯 버튼으로 고른 식당', () {
+      // | 지금 고른 값 | 누르면 |
+      expect(nextMealWidgetSource(payload, null), 'b'); // selected a에서 출발
+      expect(nextMealWidgetSource(payload, 'b'), 'a'); // 끝이면 처음
+      expect(nextMealWidgetSource(payload, 'zz'), 'a'); // 모르는 값이면 처음
+      expect(nextMealWidgetSource('{"v":1,"sources":[{"id":"a"}]}', null),
+          isNull); // 하나뿐이면 버튼 없음
+      expect(nextMealWidgetSource('{', null), isNull);
+    });
     test('JSON이 깨졌으면 null(위젯은 옛 키로)', () {
       expect(resolveMealWidget('{', d(25)), isNull);
       expect(resolveMealWidget('{"v":1,"sources":[]}', d(25)), isNull);

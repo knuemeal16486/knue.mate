@@ -15,7 +15,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
 import 'home_widgets.dart' show pushNoticeWidget, redrawBusNoticeWidgets;
-import 'meal_widget.dart' show pushMealWidgetWeek;
+import 'meal_widget.dart'
+    show clearMealWidgetSourceOverride, pushMealWidgetWeek;
 import 'meal_api.dart';
 import 'offline_cache.dart';
 import 'schedule_model.dart';
@@ -1078,6 +1079,8 @@ Future<void> saveWidgetSettingsAndUpdate(
   widgetSource.value = source;
 
   await PreferencesService.saveWidgetSettings(trans, theme, source);
+  // 위젯 버튼으로 골라 둔 식당보다 방금 앱에서 고른 식당이 먼저다.
+  await clearMealWidgetSourceOverride();
 
   try {
     // 예전엔 "불러오는 중..."을 먼저 넣었는데, 캐시로 끝나면 위젯이 그 글자에

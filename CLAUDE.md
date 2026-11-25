@@ -443,6 +443,12 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 - 식단 위젯을 앱에서 고칠 땐 `refreshMealWidgetNow()`를 부른다. `fetchMealApi`는 네트워크로 받았을 때만
   위젯을 쓰고 캐시면 그냥 돌려줘서, "위젯 데이터 즉시 업데이트"가 아무것도 안 바꿨다(2026-11-25).
   위젯 식당은 `widgetSource`다 — 식단 탭에서 다른 식당을 열어도 위젯은 안 바뀐다.
+- **위젯에서 식당 바꾸기(2026-11-25)**: 식단 위젯 오른쪽 위(넓으면 왼쪽 칸 아래) 동그란 버튼. 앱을 열지 않고
+  `meal_widget_source`(Dart `kMealWidgetSourceKey`)에 식당 id를 적는다 — iOS 17+는 위젯 확장 안
+  `ToggleMealSourceIntent`(MealWidget.swift — 새 파일을 만들면 project.pbxproj에 넣어야 해서 같은 파일에 뒀다),
+  iOS 15·16은 버튼이 없다. Android는 `MEAL_TOGGLE_SOURCE` 브로드캐스트. 이 값이 앱 설정(`widgetSource`)보다
+  먼저고, 앱에서 위젯 식당을 바꾸면 지운다(`clearMealWidgetSourceOverride`). 다음 식당 규칙은
+  `nextMealWidgetSource`(Dart·Swift·Kotlin 같다).
 - **글자·여백 규칙(2026-11-25)**: iOS `WidgetType`·`WidgetSpace`(WidgetShared.swift) = Android
   `res/values/widget_dimens.xml`. 머리글 24(넓은 칸)/20(좁은 칸), 강조 16/14, 본문 13, 보조 12, 캡션 11, 여백 14.
   화면 코드·레이아웃에 숫자를 직접 쓰지 않는다(일관성 테스트가 잡는다). 안내 문구는 `WidgetMessage` 하나.

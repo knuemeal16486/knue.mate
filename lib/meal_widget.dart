@@ -31,6 +31,11 @@ import 'constants.dart'
 /// 위젯 저장소 키. Swift·Kotlin 문자열과 같아야 한다(native_id_consistency_test).
 const kMealWeekJsonKey = 'meal_week_json';
 
+/// 위젯에서 식당 바꾸기 버튼으로 고른 식당 id("a"/"b"). 있으면 앱 설정
+/// ([widgetSource], JSON의 `selected`)보다 먼저다. 앱에서 위젯 식당을 바꾸면 지운다
+/// ([clearMealWidgetSourceOverride]) — 마지막에 고른 쪽이 이긴다.
+const kMealWidgetSourceKey = 'meal_widget_source';
+
 /// 오늘부터 며칠치를 싣는지(오늘 포함). 일주일 넘게 앱을 안 열면 위젯이
 /// "앱을 열면 식단을 불러옵니다"로 바뀐다.
 const kMealWidgetDays = 8;
@@ -177,6 +182,35 @@ MealWidgetText? resolveMealWidget(String payload, DateTime now,
     );
   } catch (_) {
     return null;
+  }
+}
+
+/// 식당 바꾸기 버튼을 누르면 갈 식당 id. [current](위젯에서 고른 값, 없으면 null)가
+/// 없으면 `selected`에서 출발해 JSON의 식당 순서대로 다음(끝이면 처음). 식당이
+/// 하나뿐이거나 JSON이 깨졌으면 null(버튼을 안 보인다). Swift
+/// `nextMealWidgetSource`·Kotlin `MealWidgetProvider.nextSource`와 같다.
+String? nextMealWidgetSource(String payload, String? current) {
+  try {
+    final root = jsonDecode(payload) as Map<String, dynamic>;
+    final ids = [
+      for (final s in (root['sources'] as List).cast<Map<String, dynamic>>())
+        s['id'] as String,
+    ];
+    if (ids.length < 2) return null;
+    final from = current ?? root['selected'] as String?;
+    final i = ids.indexOf(from ?? '');
+    return ids[(i + 1) % ids.length];
+  } catch (_) {
+    return null;
+  }
+}
+
+/// 앱에서 위젯 식당을 바꿨을 때 — 위젯 버튼으로 골라 둔 값을 지운다.
+Future<void> clearMealWidgetSourceOverride() async {
+  try {
+    await HomeWidget.saveWidgetData<String>(kMealWidgetSourceKey, null);
+  } catch (e) {
+    debugPrint('clearMealWidgetSourceOverride 건너뜀: $e');
   }
 }
 

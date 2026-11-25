@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 import WidgetKit
 #if canImport(UIKit)
@@ -26,6 +27,8 @@ struct MealEntry: TimelineEntry {
     let time: String
     let menu: String
     let theme: WidgetThemeSettings
+    /// 식당 바꾸기 버튼을 보일지(한 주치에 식당이 둘 이상, iOS 17+).
+    var canToggleSource: Bool = false
 
     static let placeholder = MealEntry(
         date: Date(),
@@ -60,19 +63,17 @@ struct MealProvider: TimelineProvider {
         completion(Timeline(entries: entries, policy: .after(next)))
     }
 
-    private func readMealWeek() -> [String: Any]? {
-        guard let raw = sharedDefaults()?.string(forKey: "meal_week_json"),
-              let data = raw.data(using: .utf8) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    }
+    private func readMealWeek() -> [String: Any]? { readMealWeekJson() }
 
     private func readEntry(at date: Date) -> MealEntry {
         guard let defaults = sharedDefaults() else {
             return MealEntry.placeholder
         }
         let theme = WidgetThemeSettings.read(defaults)
-        if let week = readMealWeek(), let r = resolveMealWidget(week, now: date) {
-            return MealEntry(date: date, title: r.title, time: r.time, menu: r.menu, theme: theme)
+        if let week = readMealWeek(),
+           let r = resolveMealWidget(week, now: date, source: defaults.string(forKey: kMealWidgetSourceKey)) {
+            return MealEntry(date: date, title: r.title, time: r.time, menu: r.menu, theme: theme,
+                             canToggleSource: nextMealWidgetSource(week, current: nil) != nil)
         }
         // 옛 키 — 앱이 아직 한 주치를 넣지 않았을 때(업데이트 직후).
         let title = defaults.string(forKey: "widget_title") ?? "KNUE Mate"
@@ -97,6 +98,43 @@ struct MealProvider: TimelineProvider {
 // | 그 끼니 빈 목록 | — | 등록된 메뉴가 없습니다. |
 
 let kMealWidgetNoMenu = "등록된 메뉴가 없습니다."
+/// 위젯 버튼으로 고른 식당 id. Dart kMealWidgetSourceKey와 같다 — 앱에서 위젯 식당을 바꾸면 지운다.
+let kMealWidgetSourceKey = "meal_widget_source"
+
+func readMealWeekJson() -> [String: Any]? {
+    guard let raw = sharedDefaults()?.string(forKey: "meal_week_json"),
+          let data = raw.data(using: .utf8) else { return nil }
+    return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+}
+
+/// 식당 바꾸기 버튼을 누르면 갈 식당 id. Dart nextMealWidgetSource와 같다:
+/// [current]가 없으면 selected에서 출발, JSON 식당 순서대로 다음(끝이면 처음),
+/// 식당이 하나뿐이면 nil.
+func nextMealWidgetSource(_ week: [String: Any], current: String?) -> String? {
+    guard let sources = week["sources"] as? [[String: Any]] else { return nil }
+    let ids = sources.compactMap { $0["id"] as? String }
+    guard ids.count >= 2 else { return nil }
+    let from = current ?? week["selected"] as? String
+    let i = ids.firstIndex(of: from ?? "") ?? -1
+    return ids[(i + 1) % ids.count]
+}
+
+/// 위젯 안 "식당 바꾸기" 버튼(iOS 17+). 앱을 열지 않고 고른 식당을 App Group에 적는다 —
+/// 끝나면 WidgetKit이 타임라인을 다시 만든다.
+@available(iOSApplicationExtension 17.0, *)
+struct ToggleMealSourceIntent: AppIntent {
+    static let title: LocalizedStringResource = "식당 바꾸기"
+    static let isDiscoverable = false
+
+    func perform() async throws -> some IntentResult {
+        let defaults = sharedDefaults()
+        if let week = readMealWeekJson(),
+           let next = nextMealWidgetSource(week, current: defaults?.string(forKey: kMealWidgetSourceKey)) {
+            defaults?.set(next, forKey: kMealWidgetSourceKey)
+        }
+        return .result()
+    }
+}
 let kMealWidgetNoData = "앱을 한 번 열면\n식단을 불러옵니다."
 
 func mealWidgetClosedText(_ tomorrow: Bool) -> String {
@@ -324,10 +362,14 @@ struct MealWidgetEntryView: View {
             if family == .systemSmall {
                 // small: 큰 끼니 머리글(밑에 테마 색 가로 막대) + 식당·날 한 줄, 아래에 메뉴 묶음.
                 VStack(alignment: .leading, spacing: 6) {
-                    WidgetBigHeader(title: header.meal,
-                                    subs: [[entry.title, header.day].filter { !$0.isEmpty }
-                                        .joined(separator: " · ")],
-                                    palette: palette, size: WidgetType.headerSmall, underline: palette.accent, underlineWidth: 48)
+                    HStack(alignment: .top, spacing: 4) {
+                        WidgetBigHeader(title: header.meal,
+                                        subs: [[entry.title, header.day].filter { !$0.isEmpty }
+                                            .joined(separator: " · ")],
+                                        palette: palette, size: WidgetType.headerSmall, underline: palette.accent, underlineWidth: 48)
+                        Spacer(minLength: 0)
+                        sourceToggle
+                    }
                     GeometryReader { geo in
                         if isMessage {
                             messageText
@@ -347,10 +389,14 @@ struct MealWidgetEntryView: View {
             } else {
                 // medium: 왼쪽에 큰 끼니·식당·날, 오른쪽에 메뉴(하나에 한 줄, 넘치면 두 열).
                 HStack(alignment: .top, spacing: 12) {
-                    WidgetBigHeader(title: header.meal,
-                                    subs: [entry.title, header.day].filter { !$0.isEmpty },
-                                    palette: palette, underline: palette.accent, underlineWidth: 72)
-                        .frame(width: 84, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 0) {
+                        WidgetBigHeader(title: header.meal,
+                                        subs: [entry.title, header.day].filter { !$0.isEmpty },
+                                        palette: palette, underline: palette.accent, underlineWidth: 72)
+                        Spacer(minLength: 0)
+                        sourceToggle
+                    }
+                    .frame(width: 84, alignment: .leading)
                     GeometryReader { geo in
                         if isMessage {
                             messageText
@@ -380,6 +426,23 @@ struct MealWidgetEntryView: View {
         // home_widget의 클릭 스트림에서 이 host("meal")를 보고 식단 탭으로
         // 이동한다. 스킴은 Runner Info.plist의 CFBundleURLSchemes와 같아야 한다.
         .widgetURL(URL(string: "knuemate://meal?homeWidget"))
+    }
+
+    /// 식당 바꾸기 버튼(iOS 17+, 식당이 둘 이상일 때). 그 밖엔 아무것도 없다 —
+    /// 위젯을 누르면 앱이 열리는 것은 그대로.
+    @ViewBuilder
+    private var sourceToggle: some View {
+        if #available(iOSApplicationExtension 17.0, *), entry.canToggleSource {
+            Button(intent: ToggleMealSourceIntent()) {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: WidgetType.caption, weight: .semibold))
+                    .foregroundColor(palette.muted)
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(palette.muted.opacity(0.15)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("식당 바꾸기")
+        }
     }
 
     /// 메뉴 대신 안내 문구(앱을 열어야 함·운영 안 함).

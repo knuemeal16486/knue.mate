@@ -26,6 +26,26 @@ class MealWidgetProvider : HomeWidgetProvider() {
         const val ACTION_TICK = "com.knue.knuemate.MEAL_TICK"
         /** 위젯 저장소 키 — Dart kMealWeekJsonKey와 같다. */
         const val MEAL_WEEK_KEY = "meal_week_json"
+        /** 위젯 버튼으로 고른 식당 id — Dart kMealWidgetSourceKey와 같다. 앱에서 바꾸면 지운다. */
+        const val SOURCE_KEY = "meal_widget_source"
+        const val ACTION_TOGGLE = "com.knue.knuemate.MEAL_TOGGLE_SOURCE"
+
+        /**
+         * 식당 바꾸기 버튼을 누르면 갈 식당 id. Dart nextMealWidgetSource와 같다:
+         * [current]가 없으면 selected에서 출발, JSON 식당 순서대로 다음(끝이면 처음),
+         * 식당이 하나뿐이면 null(버튼을 안 보인다).
+         */
+        fun nextSource(json: String, current: String?): String? = try {
+            val week = JSONObject(json)
+            val sources = week.getJSONArray("sources")
+            val ids = (0 until sources.length()).map { sources.getJSONObject(it).optString("id") }
+            if (ids.size < 2) null else {
+                val i = ids.indexOf(current ?: week.optString("selected"))
+                ids[(i + 1) % ids.size]
+            }
+        } catch (e: Exception) {
+            null
+        }
 
         const val NO_MENU = "등록된 메뉴가 없습니다."
         const val NO_DATA = "앱을 한 번 열면\n식단을 불러옵니다."
@@ -194,8 +214,8 @@ class MealWidgetProvider : HomeWidgetProvider() {
                 // 데이터 읽기
                 // 한 주치가 있으면 지금 시각으로 끼니를 고른다(앱을 안 열어도 넘어간다).
                 // 없으면 옛 키(앱이 고른 끼니 글).
-                val resolved = widgetData.getString(MEAL_WEEK_KEY, null)
-                    ?.let { resolve(it, Calendar.getInstance()) }
+                val week = widgetData.getString(MEAL_WEEK_KEY, null)
+                val resolved = week?.let { resolve(it, Calendar.getInstance(), widgetData.getString(SOURCE_KEY, null)) }
                 val title = resolved?.title
                     ?: (widgetData.getString("widget_title", "기숙사 식당") ?: "기숙사 식당")
                 val time = resolved?.time ?: (widgetData.getString("widget_time", "") ?: "")
@@ -241,6 +261,14 @@ class MealWidgetProvider : HomeWidgetProvider() {
                 views.setInt(R.id.widget_menu, "setMaxLines", maxLines)
                 views.setTextColor(R.id.widget_menu, if (message) subColor else textColor)
 
+                // 식당 바꾸기 버튼 — 식당이 둘 이상일 때만. 앱을 열지 않고 바꾼다.
+                val canToggle = week != null && nextSource(week, null) != null
+                views.setViewVisibility(R.id.meal_toggle, if (canToggle) View.VISIBLE else View.GONE)
+                if (canToggle) {
+                    views.setInt(R.id.meal_toggle, "setColorFilter", colors.muted)
+                    views.setOnClickPendingIntent(R.id.meal_toggle, toggleIntent(context))
+                }
+
                 // 위젯을 누르면 앱이 knuemate://meal 로 열린다.
                 // Flutter 쪽(main.dart)이 이 URI를 보고 식단 탭으로 이동한다.
                 views.setOnClickPendingIntent(
@@ -267,7 +295,24 @@ class MealWidgetProvider : HomeWidgetProvider() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+    private fun toggleIntent(context: Context): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, 1,
+            Intent(context, javaClass).setAction(ACTION_TOGGLE),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_TOGGLE) {
+            val prefs = HomeWidgetPlugin.getData(context)
+            val week = prefs.getString(MEAL_WEEK_KEY, null)
+            val next = week?.let { nextSource(it, prefs.getString(SOURCE_KEY, null)) }
+            if (next != null) prefs.edit().putString(SOURCE_KEY, next).apply()
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, javaClass))
+            if (ids.isNotEmpty()) onUpdate(context, manager, ids, prefs)
+            return
+        }
         if (intent.action == ACTION_TICK) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, javaClass))
