@@ -1067,6 +1067,35 @@ Future<void> _updateWidgetDataInternal(
   }
 }
 
+/// 위젯 테마·투명도만 바꿀 때. 식단은 다시 받지 않는다 — 값만 넣고 위젯 네 종류를
+/// 바로 다시 그린다. 예전엔 테마 버튼·투명도 슬라이더도 식단을 받아 온 뒤에야 값을
+/// 써서(공용 캐시 최대 1.5초·학교 서버까지) 위젯이 늦게 바뀌었다.
+Future<void> applyWidgetAppearance({ThemeMode? theme, double? transparency}) async {
+  if (theme != null) widgetTheme.value = theme;
+  if (transparency != null) widgetTransparency.value = transparency;
+  await PreferencesService.saveWidgetSettings(
+    widgetTransparency.value,
+    widgetTheme.value,
+    widgetSource.value,
+  );
+  try {
+    await HomeWidget.saveWidgetData<int>('themeMode', widgetTheme.value.index);
+    await HomeWidget.saveWidgetData<String>(
+      'transparency',
+      widgetTransparency.value.toString(),
+    );
+    await HomeWidget.updateWidget(
+      name: 'MealWidgetProvider',
+      androidName: 'MealWidgetProvider',
+      qualifiedAndroidName: 'com.knue.knuemate.MealWidgetProvider',
+      iOSName: kIosMealWidgetKind,
+    );
+  } catch (e) {
+    debugPrint('위젯 모양 적용 실패: $e');
+  }
+  await redrawBusNoticeWidgets();
+}
+
 // [4] 설정 저장 및 강제 업데이트
 Future<void> saveWidgetSettingsAndUpdate(
   double trans,

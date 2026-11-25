@@ -1960,43 +1960,28 @@ class _SettingsPageState extends State<SettingsPage> {
                                   label: "라이트",
                                   icon: Icons.light_mode,
                                   selected: mode == ThemeMode.light,
-                                  onTap: () {
-                                    widgetTheme.value = ThemeMode.light;
-                                    PreferencesService.saveWidgetSettings(
-                                      widgetTransparency.value,
-                                      ThemeMode.light,
-                                      widgetSource.value,
-                                    );
-                                    _forceUpdateWidget(context);
-                                  },
+                                  // 식단은 다시 안 받는다 — 모양만 바로 적용.
+                                  onTap: () => applyWidgetAppearance(
+                                    theme: ThemeMode.light,
+                                  ),
                                 ),
                                 _ThemeOption(
                                   label: "다크",
                                   icon: Icons.dark_mode,
                                   selected: mode == ThemeMode.dark,
-                                  onTap: () {
-                                    widgetTheme.value = ThemeMode.dark;
-                                    PreferencesService.saveWidgetSettings(
-                                      widgetTransparency.value,
-                                      ThemeMode.dark,
-                                      widgetSource.value,
-                                    );
-                                    _forceUpdateWidget(context);
-                                  },
+                                  // 식단은 다시 안 받는다 — 모양만 바로 적용.
+                                  onTap: () => applyWidgetAppearance(
+                                    theme: ThemeMode.dark,
+                                  ),
                                 ),
                                 _ThemeOption(
                                   label: "시스템",
                                   icon: Icons.settings_brightness,
                                   selected: mode == ThemeMode.system,
-                                  onTap: () {
-                                    widgetTheme.value = ThemeMode.system;
-                                    PreferencesService.saveWidgetSettings(
-                                      widgetTransparency.value,
-                                      ThemeMode.system,
-                                      widgetSource.value,
-                                    );
-                                    _forceUpdateWidget(context);
-                                  },
+                                  // 식단은 다시 안 받는다 — 모양만 바로 적용.
+                                  onTap: () => applyWidgetAppearance(
+                                    theme: ThemeMode.system,
+                                  ),
                                 ),
                               ],
                             ),
@@ -2020,14 +2005,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                     setState(() => _localTransparency = v);
                                     widgetTransparency.value = v;
                                   },
-                                  onChangeEnd: (v) async {
-                                    await saveWidgetSettingsAndUpdate(
-                                      v,
-                                      widgetTheme.value,
-                                      widgetSource.value,
-                                      context,
-                                    );
-                                  },
+                                  // 손을 뗄 때 한 번, 식단은 다시 안 받는다.
+                                  onChangeEnd: (v) =>
+                                      applyWidgetAppearance(transparency: v),
                                 ),
                               ),
                               const SizedBox(width: 16),
