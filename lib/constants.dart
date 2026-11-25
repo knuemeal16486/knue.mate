@@ -547,6 +547,18 @@ MealType? mealEndingSoonNow(MealSource source, DateTime now) {
   return (type: served.first, isTomorrow: true);
 }
 
+/// 식단 탭을 열었을 때(또는 식당을 바꿨을 때) 고를 끼니. [widgetMealSlot]과 같은
+/// 규칙이다 — 다만 오늘 끼니가 다 끝났으면 내일로 넘기지 않고 오늘 마지막 끼니를
+/// 고른다(식단 탭은 오늘 날짜를 연다). 순수 함수 — 테스트 대상.
+///
+/// 예전엔 식단 탭이 9시·14시로 따로 정해서, 조식이 없는 교직원 식당을 9시 전에
+/// 열면 "아침"이 골라졌고 기숙사 점심이 13:30에 끝나도 14시까지 "점심"이었다.
+MealType mealTabDefaultType(MealSource source, DateTime now) {
+  final slot = widgetMealSlot(source, now);
+  if (!slot.isTomorrow) return slot.type;
+  return MealType.values.lastWhere((t) => mealTimeRangeFor(t, source) != null);
+}
+
 /// "11:30 ~ 13:30" 같은 문자열을 [day]의 실제 시작·종료 시각으로 푼다.
 /// 그 식당이 그 끼니를 운영하지 않으면 null. 순수 함수(테스트 대상).
 ///

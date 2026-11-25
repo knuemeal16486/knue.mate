@@ -1900,7 +1900,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                       padding: const EdgeInsets.all(5),
                       onPressed: () async {
                         await Clipboard.setData(ClipboardData(text: phone));
-                        if (context.mounted) {
+                        if (mounted) {
                           showOverlayToast(context, '$roleTitle 번호가 복사되었습니다: $phone');
                         }
                       },

@@ -479,6 +479,16 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 - Android 위젯 확인: 에뮬레이터 `HomeWidgetPreferences.xml`을 `run-as`로 덮고
   `adb install -r`이면 다시 그린다.
 
+## 탭 수명 (2026-11-25 확인)
+
+하단 탭은 `PageView`(root_screen.dart)다. **화면에서 벗어난 탭은 dispose된다** — 버스 탭의 30초 갱신·
+Firestore 구독, 런 탭 타이머는 다른 탭으로 가면 같이 끝난다. 예외는 `wantKeepAlive` 탭(식단·지도)으로,
+살아남아도 `TickerMode`가 애니메이션만 멈춘다(`Timer.periodic`은 안 멈춘다 — keepAlive 탭에 주기 타이머를
+넣으면 직접 멈출 것). 예전 주석이 "모든 탭을 한꺼번에 마운트"라고 잘못 적어 숨은 탭 폴링을 의심한 적이 있다.
+
+**"지금 끼니"는 `widgetMealSlot` 하나**(constants.dart): 위젯·홈 카드가 그대로 쓰고, 식단 탭은
+`mealTabDefaultType`(같은 규칙, 오늘 끼니가 끝나면 오늘 마지막 끼니)을 쓴다. 시각을 따로 하드코딩하지 않는다.
+
 ## 설정 탭 (2026-11-25)
 
 `lib/settings_screen.dart`(예전엔 4천 줄짜리 meal_screen.dart 안에 있었다). 첫 화면은 목록 위주 —

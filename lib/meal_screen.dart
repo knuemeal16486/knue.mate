@@ -188,15 +188,8 @@ class _TodayMealPageState extends State<TodayMealPage>
   }
 
   void _updateSelectionByTime() {
-    final now = DateTime.now();
-    final hour = now.hour;
-    if (hour < 9) {
-      _selected = MealType.breakfast;
-    } else if (hour < 14) {
-      _selected = MealType.lunch;
-    } else {
-      _selected = MealType.dinner;
-    }
+    // 위젯·홈 카드와 같은 규칙(widgetMealSlot) — 식당마다 운영 시간이 다르다.
+    _selected = mealTabDefaultType(_source, DateTime.now());
   }
 
   Future<void> fetchMeals() async {
@@ -347,7 +340,13 @@ class _TodayMealPageState extends State<TodayMealPage>
   }
 
   Future<void> _onSourceChangedWithAlarmUpdate(MealSource s) async {
-    setState(() => _source = s);
+    setState(() {
+      _source = s;
+      // 새 식당이 안 하는 끼니(교직원 식당 조식)를 보고 있었으면 지금 끼니로.
+      if (mealTimeRangeFor(_selected, s) == null) {
+        _selected = mealTabDefaultType(s, DateTime.now());
+      }
+    });
     PreferencesService.saveMealSource(s);
 
     if (_alarmOn) {

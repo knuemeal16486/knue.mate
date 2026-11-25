@@ -3140,7 +3140,8 @@ class _HousingScreenState extends State<HousingScreen>
                       final res = await AdminAuthService.unlock(controller.text);
                       if (!mounted) return;
                       if (res == AdminUnlockResult.ok) {
-                        Navigator.pop(ctx);
+                        // 저장하는 사이 시트를 닫았으면 ctx가 이미 없다 — 닫힌 시트를 다시 닫으면 예외.
+                        if (ctx.mounted) Navigator.pop(ctx);
                         setState(() {});
                         showToast(context, "🛠️ 개발자 모드가 활성화되었습니다!");
                       } else {
@@ -3643,7 +3644,8 @@ class _HousingScreenState extends State<HousingScreen>
                             return;
                           }
                           if (!mounted) return;
-                          Navigator.pop(ctx);
+                          // 저장하는 사이 시트를 닫았으면 ctx가 이미 없다 — 닫힌 시트를 다시 닫으면 예외.
+                          if (ctx.mounted) Navigator.pop(ctx);
                           setState(() {
                             _base = CampusBase(
                               buildings: _base.buildings.where((x) => x.id != b.id).toList(),
@@ -3718,7 +3720,8 @@ class _HousingScreenState extends State<HousingScreen>
                             return;
                           }
                           if (!mounted) return;
-                          Navigator.pop(ctx);
+                          // 저장하는 사이 시트를 닫았으면 ctx가 이미 없다 — 닫힌 시트를 다시 닫으면 예외.
+                          if (ctx.mounted) Navigator.pop(ctx);
                           setState(() {
                             _overrides = {..._overrides, b.id: override};
                             _rebuild();
@@ -3869,7 +3872,8 @@ class _HousingScreenState extends State<HousingScreen>
                   return;
                 }
                 if (!mounted) return;
-                Navigator.pop(ctx);
+                // 저장하는 사이 시트를 닫았으면 ctx가 이미 없다 — 닫힌 시트를 다시 닫으면 예외.
+                if (ctx.mounted) Navigator.pop(ctx);
                 setState(() {
                   _base = CampusBase(
                     buildings: [..._base.buildings, newBuilding],
