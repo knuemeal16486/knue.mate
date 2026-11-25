@@ -1,6 +1,6 @@
 // 설정 화면의 위젯 미리보기를 그림으로 확인한다(2026-11-25).
 //
-//   flutter test test/widget_preview_png.dart   # → build/widget_preview.png
+//   flutter test test/widget_preview_png.dart   # → build/widget_preview.png, build/widget_settings_{light,dark}.png
 //
 // 라이트·다크 × 투명도 0·0.5·0.8 여섯 칸을 한 장에. 한글 글꼴은 환경 변수
 // KNUE_FONT_DIR(NotoSansKR_400Regular.ttf 등이 든 폴더)이나 Windows 글꼴에서 읽는다 —
@@ -15,6 +15,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:knue_mate/constants.dart' show widgetTheme, widgetTransparency;
 import 'package:knue_mate/widget_preview.dart';
+import 'package:knue_mate/widget_settings_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> _loadFonts() async {
   final dir = Platform.environment['KNUE_FONT_DIR'];
@@ -91,4 +93,34 @@ void main() {
     File('build/widget_preview.png').writeAsBytesSync(png!.buffer.asUint8List());
     addTearDown(tester.view.reset);
   });
+
+  // 설정 → 홈 위젯 화면 전체(라이트·다크).
+  for (final dark in [false, true]) {
+    testWidgets('홈 위젯 화면 PNG ${dark ? 'dark' : 'light'}', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.runAsync(_loadFonts);
+      tester.view.physicalSize = const Size(390, 1180);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      widgetTheme.value = ThemeMode.system;
+      widgetTransparency.value = 0.3;
+      final key = GlobalKey();
+      await tester.pumpWidget(RepaintBoundary(
+        key: key,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(fontFamily: 'NotoSansKR', brightness: Brightness.light),
+          darkTheme: ThemeData(fontFamily: 'NotoSansKR', brightness: Brightness.dark),
+          themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+          home: const WidgetSettingsScreen(),
+        ),
+      ));
+      await tester.pump();
+      final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final image = await tester.runAsync(() => boundary.toImage(pixelRatio: 2));
+      final png = await tester.runAsync(() => image!.toByteData(format: ui.ImageByteFormat.png));
+      Directory('build').createSync(recursive: true);
+      File('build/widget_settings_${dark ? 'dark' : 'light'}.png').writeAsBytesSync(png!.buffer.asUint8List());
+    });
+  }
 }

@@ -14,6 +14,7 @@ import 'main.dart' show pendingWidgetTab;
 import 'constants.dart';
 import 'meal_reminder.dart';
 import 'meal_screen.dart';
+import 'settings_screen.dart';
 import 'bus_screen.dart';
 import 'campus_map_screen.dart';
 import 'campus_run_screen.dart';

@@ -449,7 +449,8 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   Swift·Kotlin 포트는 Linux에서도 돌려 볼 수 있다: swift.org 툴체인·kotlinc로 순수 함수만 떼어 같은 표를 넣는다.
 - 위젯 **테마·투명도**는 `applyWidgetAppearance()` — 식단을 다시 받지 않고 값 두 개만 넣고 위젯 네 종류를 다시
   그린다(2026-11-25). 예전엔 테마 버튼·투명도 슬라이더도 식단을 받은 뒤에야 적용돼 늦게 바뀌었다.
-- **설정 화면 위젯 미리보기**(2026-11-25, `lib/widget_preview.dart`): "위젯 설정" 카드 맨 위. 배경화면 같은 판 위에
+- **설정 → 홈 위젯 화면**(2026-11-25, `lib/widget_settings_screen.dart`): 위젯 설정(식당·테마·투명도·즉시 업데이트)과
+  추가 방법 안내를 설정 첫 화면에서 옮겼다(사용자 결정). 맨 위 미리보기(`lib/widget_preview.dart`): 배경화면 같은 판 위에
   식단·버스 small 두 개를 예시 글자로 그리고, 테마·투명도(슬라이더를 끄는 동안에도)·앱 테마 색·식당을 바로 따른다.
   색은 `widgetPreviewPalette` — iOS `WidgetPalette`·Android `WidgetColors`와 같은 값이라 위젯 색을 바꾸면 여기도.
   그림 확인: `KNUE_FONT_DIR=<NotoSansKR_*.ttf 폴더> flutter test test/widget_preview_png.dart` → build/widget_preview.png.
@@ -477,6 +478,16 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   MealWidget 타깃 Sources에도 넣는다.
 - Android 위젯 확인: 에뮬레이터 `HomeWidgetPreferences.xml`을 `run-as`로 덮고
   `adb install -r`이면 다시 그린다.
+
+## 설정 탭 (2026-11-25)
+
+`lib/settings_screen.dart`(예전엔 4천 줄짜리 meal_screen.dart 안에 있었다). 첫 화면은 목록 위주 —
+하단 탭 순서·공지 알림·**홈 위젯**(별도 화면)·앱 테마·테마 색·앱 정보.
+
+- **설정 초기화는 설정 키만 지운다**(`PreferencesService.resetSettings`, 키 목록 `kSettingKeys`). 예전 `clearAll`은
+  `prefs.clear()`라 **개인 일정·D-day·식단/공지 캐시·학교 요청 간격(PersistentThrottle)·알림 기록**까지 지웠다.
+  누르면 확인 창을 먼저 띄운다. 설정 키를 새로 만들면 `kSettingKeys`에 넣는다(`test/settings_test.dart`).
+- "위젯에 테스트 데이터 넣기"(`testBasicWidgetFunction`)는 관리자 메뉴(버전 7번 탭)에만 있다.
 
 ## 사용 통계 (2026-11-15)
 

@@ -1415,16 +1415,39 @@ class PreferencesService {
     widgetSource.value = source;
   }
 
-  static Future<void> clearAll() async {
+  /// [resetSettings]가 지우는 키 — **설정만**. 개인 일정·D-day, 식단·공지 캐시,
+  /// 학교 요청 간격(PersistentThrottle), 알림 기록(이미 알린 글)은 남긴다.
+  /// 예전 `clearAll`은 `prefs.clear()`로 이것들까지 지웠다(2026-11-25 바로잡음).
+  static const List<String> kSettingKeys = [
+    keyThemeColor,
+    keyRainbowMode,
+    keyThemeMode,
+    keyMealSource,
+    keyWidgetTrans,
+    keyWidgetTheme,
+    keyWidgetSource,
+    keyTabOrder,
+    'tab_order_v1',
+    keyNoticeKeywords,
+    keyFavBoards,
+    keyNoticeAlarm,
+    keyNoticeAlertMode,
+    keyNoticeAlertHours,
+  ];
+
+  /// 설정을 기본값으로. 저장소의 설정 키만 지우고, 화면들이 구독 중인 알림자도
+  /// 기본값으로 되돌려 재시작 없이 반영되게 한다.
+  static Future<void> resetSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    for (final k in kSettingKeys) {
+      await prefs.remove(k);
+    }
     themeColor.value = const Color(0xFF2563EB);
+    rainbowModeNotifier.value = false;
     themeModeNotifier.value = ThemeMode.system;
     widgetTransparency.value = 0.0;
     widgetTheme.value = ThemeMode.system;
     widgetSource.value = MealSource.a;
-    // prefs.clear()는 저장소만 지운다 — 이미 화면들이 구독 중인 나머지 알림자들도
-    // 기본값으로 되돌려야 재시작 없이도 화면이 초기화 상태를 반영한다.
     defaultSourceNotifier.value = MealSource.a;
     tabOrder.value = [
       AppTab.home,
@@ -1438,8 +1461,6 @@ class PreferencesService {
     noticeAlarmOn.value = true;
     noticeAlertMode.value = NoticeAlertMode.instant;
     noticeAlertHours.value = [9, 18];
-    ddayItems.value = [];
-    personalEvents.value = [];
   }
 }
 
