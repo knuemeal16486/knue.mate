@@ -251,7 +251,9 @@ class _CallBusBottomSheetState extends State<CallBusBottomSheet>
           nextIndex = i;
           break;
         }
-      } catch (_) {}
+      } catch (_) {
+        // 시각 형식이 틀린 줄은 건너뛴다.
+      }
     }
 
     return ListView(
@@ -313,7 +315,9 @@ class _CallBusBottomSheetState extends State<CallBusBottomSheet>
           try {
             final parts = item.departureTime.split(":");
             depMinutes = int.parse(parts[0]) * 60 + int.parse(parts[1]);
-          } catch (_) {}
+          } catch (_) {
+            // 시각 형식이 틀리면 0분으로 둔다(그 줄만 어긋난다).
+          }
 
           final bool isPassed = nextIndex != -1 && index < nextIndex;
 

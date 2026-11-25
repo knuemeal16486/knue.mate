@@ -14,6 +14,7 @@ import 'main.dart' show pendingWidgetTab;
 import 'constants.dart';
 import 'meal_reminder.dart';
 import 'meal_screen.dart';
+import 'settings_screen.dart';
 import 'bus_screen.dart';
 import 'campus_map_screen.dart';
 import 'campus_run_screen.dart';
@@ -635,11 +636,11 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
           controller: _pageController,
           onPageChanged: (index) => setState(() => _currentIndex = index),
           physics: const NeverScrollableScrollPhysics(),
-          // PageView는 모든 탭을 한꺼번에 마운트해두고 안 보이는 탭도 계속
-          // 살아있다 — 홈 탭의 날씨 파티클 애니메이션처럼 AnimationController를
-          // 쓰는 화면은 다른 탭을 보고 있어도 계속 돌아 배터리를 먹는다.
-          // TickerMode(enabled: false)를 씌우면 안 보이는 탭의 티커를
-          // 자동으로 멈춰준다(위젯마다 직접 가시성을 체크할 필요 없음).
+          // PageView는 화면에서 벗어난 탭을 dispose한다(타이머·구독도 같이 끝남) —
+          // 다만 wantKeepAlive인 탭(식단·지도)은 살아남는다(2026-11-25 테스트로 확인).
+          // 살아남은 탭의 AnimationController가 계속 돌지 않게 TickerMode로 티커를
+          // 멈춘다. Timer.periodic은 TickerMode로 안 멈추니, keepAlive 탭에 주기
+          // 타이머를 넣을 땐 따로 멈춰야 한다.
           // 전환 애니메이션(400ms) 도중엔 방금 떠난 탭도 같이 켜둔다 —
           // 안 그러면 탭을 누른 순간 이전 탭 애니메이션이 화면에 남아있는
           // 채로 뚝 멈춰버린다.

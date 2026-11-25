@@ -77,7 +77,7 @@ class _HousingFilterSheetState extends State<HousingFilterSheet> {
         color: isDark ? const Color(0xFF161618) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: SafeArea(
+      child: Material(type: MaterialType.transparency, child: SafeArea(
         top: false,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
@@ -270,7 +270,7 @@ class _HousingFilterSheetState extends State<HousingFilterSheet> {
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 

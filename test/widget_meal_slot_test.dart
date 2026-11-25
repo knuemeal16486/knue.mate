@@ -109,4 +109,27 @@ void main() {
       }
     });
   });
+
+  // 식단 탭을 열 때 고르는 끼니 — 같은 규칙, 다만 오늘 끼니가 끝나면 오늘 마지막 끼니.
+  group('mealTabDefaultType(식단 탭)', () {
+    test('교직원 식당은 아침 시간에도 점심(조식 없음)', () {
+      expect(mealTabDefaultType(MealSource.b, _at(8, 0)), MealType.lunch);
+    });
+    test('기숙사 점심이 13:30에 끝나면 저녁', () {
+      expect(mealTabDefaultType(MealSource.a, _at(13, 31)), MealType.dinner);
+    });
+    test('오늘 끼니가 다 끝나면 내일로 넘기지 않고 오늘 저녁', () {
+      expect(mealTabDefaultType(MealSource.a, _at(21, 0)), MealType.dinner);
+      expect(mealTabDefaultType(MealSource.b, _at(21, 0)), MealType.dinner);
+    });
+    test('그 밖엔 위젯과 같다', () {
+      for (final h in [6, 8, 10, 12, 15, 18]) {
+        for (final src in MealSource.values) {
+          expect(mealTabDefaultType(src, _at(h, 0)),
+              widgetMealSlot(src, _at(h, 0)).type,
+              reason: '$src $h시');
+        }
+      }
+    });
+  });
 }

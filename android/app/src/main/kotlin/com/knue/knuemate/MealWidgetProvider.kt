@@ -1,7 +1,11 @@
 package com.knue.knuemate // [수정]
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
@@ -12,11 +16,126 @@ import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
 import es.antonborri.home_widget.HomeWidgetProvider
 import com.knue.knuemate.R
+import org.json.JSONObject
+import java.util.Calendar
 
 class MealWidgetProvider : HomeWidgetProvider() {
     
     companion object {
         private const val TAG = "MealWidgetProvider"
+        const val ACTION_TICK = "com.knue.knuemate.MEAL_TICK"
+        /** 위젯 저장소 키 — Dart kMealWeekJsonKey와 같다. */
+        const val MEAL_WEEK_KEY = "meal_week_json"
+        /** 위젯 버튼으로 고른 식당 id — Dart kMealWidgetSourceKey와 같다. 앱에서 바꾸면 지운다. */
+        const val SOURCE_KEY = "meal_widget_source"
+        const val ACTION_TOGGLE = "com.knue.knuemate.MEAL_TOGGLE_SOURCE"
+
+        /**
+         * 식당 바꾸기 버튼을 누르면 갈 식당 id. Dart nextMealWidgetSource와 같다:
+         * [current]가 없으면 selected에서 출발, JSON 식당 순서대로 다음(끝이면 처음),
+         * 식당이 하나뿐이면 null(버튼을 안 보인다).
+         */
+        fun nextSource(json: String, current: String?): String? = try {
+            val week = JSONObject(json)
+            val sources = week.getJSONArray("sources")
+            val ids = (0 until sources.length()).map { sources.getJSONObject(it).optString("id") }
+            if (ids.size < 2) null else {
+                val i = ids.indexOf(current ?: week.optString("selected"))
+                ids[(i + 1) % ids.size]
+            }
+        } catch (e: Exception) {
+            null
+        }
+
+        const val NO_MENU = "등록된 메뉴가 없습니다."
+        const val NO_DATA = "앱을 한 번 열면\n식단을 불러옵니다."
+        fun closedText(tomorrow: Boolean) = "${if (tomorrow) "내일" else "오늘"}은 식당을 운영하지 않아요 🥺"
+
+        data class MealText(val title: String, val time: String, val menu: String)
+
+        fun dayKey(c: Calendar): String = String.format(
+            "%04d-%02d-%02d", c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH),
+        )
+
+        /** [now]와 같은 날 "HH:mm"(초 0). */
+        private fun at(now: Calendar, hhmm: String): Calendar? {
+            val p = hhmm.split(":")
+            val h = p.getOrNull(0)?.toIntOrNull() ?: return null
+            val m = p.getOrNull(1)?.toIntOrNull() ?: return null
+            return (now.clone() as Calendar).apply {
+                set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m)
+                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }
+        }
+
+        private fun source(week: JSONObject, want: String?): JSONObject? {
+            val sources = week.optJSONArray("sources") ?: return null
+            if (sources.length() == 0) return null
+            val id = want ?: week.optString("selected")
+            for (i in 0 until sources.length()) {
+                val s = sources.getJSONObject(i)
+                if (s.optString("id") == id) return s
+            }
+            return sources.getJSONObject(0)
+        }
+
+        /**
+         * 한 주치(meal_week_json)에서 [now]에 그릴 글. Dart lib/meal_widget.dart의
+         * resolveMealWidget과 같다(기준 표 test/meal_widget_test.dart):
+         * 오늘 아직 안 끝난 첫 끼니(끝나는 분 00초까지 그 끼니) → 다 끝났으면 내일 첫 끼니.
+         * 그날 캐시 없음 → NO_DATA, closed → closedText, 그 끼니 빈 목록 → NO_MENU.
+         * JSON이 깨졌으면 null(옛 키로 그린다).
+         */
+        fun resolve(json: String, now: Calendar, want: String? = null): MealText? = try {
+            val week = JSONObject(json)
+            val src = source(week, want)
+            if (src == null) null else {
+                val title = src.optString("label")
+                val meals = src.getJSONArray("meals")
+                if (meals.length() == 0) MealText(title, "", NO_DATA) else {
+                    var pick: JSONObject? = null
+                    for (i in 0 until meals.length()) {
+                        val m = meals.getJSONObject(i)
+                        val end = at(now, m.optString("end"))
+                        if (end != null && !now.after(end)) { pick = m; break }
+                    }
+                    val tomorrow = pick == null
+                    val chosen = pick ?: meals.getJSONObject(0)
+                    val time = "${if (tomorrow) "내일" else "오늘"} ${chosen.optString("label")}"
+                    val date = (now.clone() as Calendar).apply { if (tomorrow) add(Calendar.DAY_OF_YEAR, 1) }
+                    val day = src.optJSONObject("days")?.optJSONObject(dayKey(date))
+                    when {
+                        day == null -> MealText(title, time, NO_DATA)
+                        day.optBoolean("closed", false) -> MealText(title, time, closedText(tomorrow))
+                        else -> {
+                            val list = day.optJSONArray(chosen.optString("key"))
+                            val items = (0 until (list?.length() ?: 0)).map { list!!.getString(it) }
+                            MealText(title, time, if (items.isEmpty()) NO_MENU else items.joinToString("\n") { "· $it" })
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+
+        /** 다음에 글이 바뀌는 때: 오늘·내일 끼니가 끝난 1초 뒤, 또는 자정 중 가장 이른 것. */
+        fun nextSwitch(json: String, now: Calendar): Calendar? = try {
+            val meals = source(JSONObject(json), null)?.getJSONArray("meals")
+            val candidates = mutableListOf<Calendar>()
+            for (offset in 0..1) {
+                val day = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, offset) }
+                if (offset > 0) candidates.add(at(day, "00:00")!!)
+                for (i in 0 until (meals?.length() ?: 0)) {
+                    at(day, meals!!.getJSONObject(i).optString("end"))?.let {
+                        it.add(Calendar.SECOND, 1); candidates.add(it)
+                    }
+                }
+            }
+            candidates.filter { it.after(now) }.minByOrNull { it.timeInMillis }
+        } catch (e: Exception) {
+            null
+        }
 
         // 레이아웃(home_widget_layout.xml)과 맞춘 치수(dp, 글꼴 배율 1 기준).
         // 에뮬레이터 화면을 재서 정한 값이다(2026-11-23, Pixel 9 Pro): 한국어 글꼴은
@@ -93,9 +212,14 @@ class MealWidgetProvider : HomeWidgetProvider() {
                 val views = RemoteViews(context.packageName, R.layout.home_widget_layout)
                 
                 // 데이터 읽기
-                val title = widgetData.getString("widget_title", "기숙사 식당") ?: "기숙사 식당"
-                val time = widgetData.getString("widget_time", "시간 정보") ?: ""
-                val menu = widgetData.getString("widget_menu", "정보를 불러오는 중...") ?: "정보 없음"
+                // 한 주치가 있으면 지금 시각으로 끼니를 고른다(앱을 안 열어도 넘어간다).
+                // 없으면 옛 키(앱이 고른 끼니 글).
+                val week = widgetData.getString(MEAL_WEEK_KEY, null)
+                val resolved = week?.let { resolve(it, Calendar.getInstance(), widgetData.getString(SOURCE_KEY, null)) }
+                val title = resolved?.title
+                    ?: (widgetData.getString("widget_title", "기숙사 식당") ?: "기숙사 식당")
+                val time = resolved?.time ?: (widgetData.getString("widget_time", "") ?: "")
+                val menu = resolved?.menu ?: (widgetData.getString("widget_menu", NO_DATA) ?: NO_DATA)
                 
                 val colors = WidgetColors.read(context, widgetData)
                 colors.applyBackground(views, R.id.widget_bg)
@@ -137,6 +261,14 @@ class MealWidgetProvider : HomeWidgetProvider() {
                 views.setInt(R.id.widget_menu, "setMaxLines", maxLines)
                 views.setTextColor(R.id.widget_menu, if (message) subColor else textColor)
 
+                // 식당 바꾸기 버튼 — 식당이 둘 이상일 때만. 앱을 열지 않고 바꾼다.
+                val canToggle = week != null && nextSource(week, null) != null
+                views.setViewVisibility(R.id.meal_toggle, if (canToggle) View.VISIBLE else View.GONE)
+                if (canToggle) {
+                    views.setInt(R.id.meal_toggle, "setColorFilter", colors.muted)
+                    views.setOnClickPendingIntent(R.id.meal_toggle, toggleIntent(context))
+                }
+
                 // 위젯을 누르면 앱이 knuemate://meal 로 열린다.
                 // Flutter 쪽(main.dart)이 이 URI를 보고 식단 탭으로 이동한다.
                 views.setOnClickPendingIntent(
@@ -152,6 +284,58 @@ class MealWidgetProvider : HomeWidgetProvider() {
             } catch (e: Exception) {
                 Log.e(TAG, "Update Failed", e)
             }
+        }
+        scheduleNext(context, widgetData)
+    }
+
+    private fun tickIntent(context: Context): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, 0,
+            Intent(context, javaClass).setAction(ACTION_TICK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    private fun toggleIntent(context: Context): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, 1,
+            Intent(context, javaClass).setAction(ACTION_TOGGLE),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_TOGGLE) {
+            val prefs = HomeWidgetPlugin.getData(context)
+            val week = prefs.getString(MEAL_WEEK_KEY, null)
+            val next = week?.let { nextSource(it, prefs.getString(SOURCE_KEY, null)) }
+            if (next != null) prefs.edit().putString(SOURCE_KEY, next).apply()
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, javaClass))
+            if (ids.isNotEmpty()) onUpdate(context, manager, ids, prefs)
+            return
+        }
+        if (intent.action == ACTION_TICK) {
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, javaClass))
+            if (ids.isNotEmpty()) onUpdate(context, manager, ids, HomeWidgetPlugin.getData(context))
+            return
+        }
+        super.onReceive(context, intent)
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(tickIntent(context))
+    }
+
+    /** 끼니가 끝나는 때(또는 자정)에 다시 그린다. 정확 알람이 아니라 권한이 필요 없다. */
+    private fun scheduleNext(context: Context, widgetData: SharedPreferences) {
+        val json = widgetData.getString(MEAL_WEEK_KEY, null) ?: return
+        val at = nextSwitch(json, Calendar.getInstance()) ?: return
+        try {
+            (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
+                .set(AlarmManager.RTC, at.timeInMillis, tickIntent(context))
+        } catch (e: Exception) {
+            Log.e(TAG, "알람 예약 실패", e)
         }
     }
 }

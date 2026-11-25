@@ -7,6 +7,14 @@ import 'ui_utils.dart';
 
 const String _kFavoriteClassroomsKey = 'campus_run_favorite_names';
 
+/// 1초 틱마다 화면을 다시 그릴지. 달리는 중이면 매초(경과 시간), 아니면 시각의
+/// 분이 바뀔 때만. 순수 함수 — 테스트 대상.
+bool runTickNeedsRebuild(DateTime prev, DateTime now, {required bool running}) =>
+    running ||
+    prev.minute != now.minute ||
+    prev.hour != now.hour ||
+    prev.day != now.day;
+
 class Classroom {
   final String name;
   final double lat;
@@ -95,15 +103,18 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     _loadFavorites();
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _currentTime = DateTime.now();
-          if (_isRunning && _runStartTime != null) {
-            _elapsedDuration = DateTime.now().difference(_runStartTime!);
-            if (_targetDurationSeconds != null) _updateRequiredSpeedOnly();
-          }
-        });
-      }
+      if (!mounted) return;
+      final now = DateTime.now();
+      // 달리지 않을 땐 화면에 "현재 시각 HH:MM"뿐이라 분이 바뀔 때만 다시 그린다
+      // (예전엔 매초 화면 전체를 다시 그렸다).
+      if (!runTickNeedsRebuild(_currentTime, now, running: _isRunning)) return;
+      setState(() {
+        _currentTime = now;
+        if (_isRunning && _runStartTime != null) {
+          _elapsedDuration = now.difference(_runStartTime!);
+          if (_targetDurationSeconds != null) _updateRequiredSpeedOnly();
+        }
+      });
     });
   }
 
@@ -149,7 +160,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
-                color: neonColor.withOpacity(0.2),
+                color: neonColor.withValues(alpha: 0.2),
                 blurRadius: 20,
                 spreadRadius: 2,
               ),
@@ -466,7 +477,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                     horizontal: 16,
                   ),
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                    color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -496,12 +507,12 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: isTargetSelected
-                            ? neonColor.withOpacity(0.5)
+                            ? neonColor.withValues(alpha: 0.5)
                             : (isDark ? Colors.white10 : Colors.black12),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: isDark ? Colors.black.withOpacity(0.5) : Colors.black.withOpacity(0.05),
+                          color: isDark ? Colors.black.withValues(alpha: 0.5) : Colors.black.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -553,10 +564,10 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                         horizontal: 16,
                       ),
                       decoration: BoxDecoration(
-                        border: Border.all(color: neonColor.withOpacity(0.5)),
+                        border: Border.all(color: neonColor.withValues(alpha: 0.5)),
                         borderRadius: BorderRadius.circular(20),
                         color: _targetDurationSeconds != null
-                            ? neonColor.withOpacity(0.1)
+                            ? neonColor.withValues(alpha: 0.1)
                             : Colors.transparent,
                       ),
                       child: Row(
@@ -670,10 +681,10 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.1),
+                      color: Colors.redAccent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.redAccent.withOpacity(0.3),
+                        color: Colors.redAccent.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Row(
@@ -718,7 +729,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                         boxShadow: [
                           BoxShadow(
                             color: (_isRunning ? Colors.redAccent : neonColor)
-                                .withOpacity(0.4),
+                                .withValues(alpha: 0.4),
                             blurRadius: 20,
                             spreadRadius: 5,
                           ),
@@ -890,7 +901,7 @@ class _ClassroomListState extends State<_ClassroomList> {
                   borderRadius: BorderRadius.circular(12),
                   border: isDark ? null : Border.all(color: Colors.black12),
                   boxShadow: isDark ? null : [
-                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))
                   ],
                 ),
                 child: ListTile(

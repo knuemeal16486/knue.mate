@@ -7,7 +7,8 @@ import WidgetKit
 // _updateWidgetDataInternal)이 넣는다 — 모든 위젯에 같이 적용된다.
 //
 //   themeMode     Int     ThemeMode.index (0 system / 1 light / 2 dark)
-//   transparency  String  0.0~1.0 (double을 문자열로 저장한다)
+//   transparency  String  0.0~1.0 (double을 문자열로 저장한다) — **iOS는 쓰지 않는다**(아래 bgStyle)
+//   bgStyle       Int     위젯 바탕 0 기본 / 1 테마색 / 2 회색 (lib/widget_preview.dart widgetBgColor)
 //   accent_light  String  "#RRGGBB" 앱 테마 색(흰 배경용) — lib/home_widgets.dart pushWidgetAccent
 //   accent_dark   String  "#RRGGBB" 앱 테마 색(어두운 배경용)
 
@@ -20,11 +21,16 @@ func sharedDefaults() -> UserDefaults? {
 struct WidgetThemeSettings {
     /// Flutter의 ThemeMode.index. 0 = system, 1 = light, 2 = dark.
     var themeModeIndex: Int = 0
-    /// 배경 투명도 0.0(불투명) ~ 1.0(완전 투명).
+    /// 배경 투명도 0.0(불투명) ~ 1.0(완전 투명). Android용 값이라 iOS 팔레트는 쓰지 않는다 —
+    /// iOS는 위젯 뒤 배경화면을 주지 않아 반투명 바탕이 시스템 회색 위에서 뿌옇게만 됐다(2026-11-25).
     var transparency: Double = 0.0
+    /// 위젯 바탕 스타일. 0 기본 / 1 테마색 / 2 회색.
+    var bgStyle: Int = 0
     /// 앱 테마 색. 없으면(앱이 아직 안 넣음) 기본 파랑.
     var accentLight: Color? = nil
     var accentDark: Color? = nil
+    var accentLightRGB: (Double, Double, Double)? = nil
+    var accentDarkRGB: (Double, Double, Double)? = nil
 
     static func read(_ defaults: UserDefaults?) -> WidgetThemeSettings {
         guard let defaults = defaults else { return WidgetThemeSettings() }
@@ -33,8 +39,11 @@ struct WidgetThemeSettings {
         // transparency는 문자열로 저장된다("0.0" 등).
         let t = Double(defaults.string(forKey: "transparency") ?? "") ?? 0.0
         return WidgetThemeSettings(themeModeIndex: index, transparency: max(0, min(1, t)),
+                                   bgStyle: defaults.object(forKey: "bgStyle") as? Int ?? 0,
                                    accentLight: widgetHexColor(defaults.string(forKey: "accent_light")),
-                                   accentDark: widgetHexColor(defaults.string(forKey: "accent_dark")))
+                                   accentDark: widgetHexColor(defaults.string(forKey: "accent_dark")),
+                                   accentLightRGB: widgetHexRGB(defaults.string(forKey: "accent_light")),
+                                   accentDarkRGB: widgetHexRGB(defaults.string(forKey: "accent_dark")))
     }
 }
 
@@ -48,6 +57,31 @@ func widgetHexColor(_ hex: String?) -> Color? {
                  blue: Double(v & 0xFF) / 255)
 }
 
+/// "#RRGGBB" → (r, g, b) 0~1. 바탕에 테마 색을 섞을 때 쓴다.
+func widgetHexRGB(_ hex: String?) -> (Double, Double, Double)? {
+    guard var h = hex?.trimmingCharacters(in: .whitespaces), h.hasPrefix("#") else { return nil }
+    h.removeFirst()
+    guard h.count == 6, let v = UInt32(h, radix: 16) else { return nil }
+    return (Double((v >> 16) & 0xFF) / 255, Double((v >> 8) & 0xFF) / 255, Double(v & 0xFF) / 255)
+}
+
+/// b에서 a 쪽으로 k만큼(Dart Color.lerp와 같다). 식을 한 줄에 쓰면 Swift 타입 검사가 너무 오래 걸린다.
+func widgetMix(_ b: Double, _ a: Double, _ k: Double) -> Double {
+    let d: Double = a - b
+    return b + d * k
+}
+
+// 바탕 색 성분(0~1). 31·44·46·242·247 / 255.
+let kWidgetDarkBase: Double = 31.0 / 255.0
+let kWidgetGray2C: Double = 44.0 / 255.0
+let kWidgetGray2E: Double = 46.0 / 255.0
+let kWidgetGrayF2: Double = 242.0 / 255.0
+let kWidgetGrayF7: Double = 247.0 / 255.0
+
+/// 테마색 바탕에서 앱 테마 색을 섞는 비율. Dart kWidgetTintLight/Dark와 같다.
+let kWidgetTintLight = 0.10
+let kWidgetTintDark = 0.18
+
 /// 투명도가 이 값 이상이면 배경화면 위 글씨로 보고 진하게 쓴다. Android WidgetColors와 같다.
 let kWidgetOnWallpaperTransparency = 0.7
 
@@ -55,23 +89,50 @@ let kWidgetOnWallpaperTransparency = 0.7
 struct WidgetPalette {
     let isDark: Bool
     let transparency: Double
+    private let bgStyle: Int
     private let accentLight: Color?
     private let accentDark: Color?
+    private let accentLightRGB: (Double, Double, Double)?
+    private let accentDarkRGB: (Double, Double, Double)?
 
-    init(_ settings: WidgetThemeSettings, system: ColorScheme) {
-        switch settings.themeModeIndex {
+    init(_ settings: WidgetThemeSettings, system: ColorScheme, env: WidgetEnv = WidgetEnv()) {
+        // 배경이 빠진 자리(StandBy 등)는 시스템이 깐 바탕 위라 앱 테마(라이트 고정 등)를
+        // 따르면 검은 바탕에 검은 글씨가 된다 — 그땐 기기 설정을 따른다.
+        switch (env.showsBackground ? settings.themeModeIndex : 0) {
         case 1: isDark = false
         case 2: isDark = true
         default: isDark = system == .dark
         }
-        transparency = settings.transparency
+        // 배경이 빠진 자리만 투명(1). 그 밖엔 늘 불투명 — 투명도 값은 Android 전용.
+        transparency = env.showsBackground ? 0 : 1
+        bgStyle = settings.bgStyle
         accentLight = settings.accentLight
         accentDark = settings.accentDark
+        accentLightRGB = settings.accentLightRGB
+        accentDarkRGB = settings.accentDarkRGB
     }
 
+    /// 위젯 바탕 — Dart widgetBgColor와 같은 규칙(모두 불투명).
+    /// 식을 짧게 나눠 쓴다(튜플·삼항·나눗셈을 한 식에 섞으면 Swift 타입 검사가 시간 초과로 실패한다).
     var background: Color {
-        let base = isDark ? Color(red: 0.12, green: 0.12, blue: 0.12) : Color.white
-        return base.opacity(1.0 - transparency)
+        if transparency >= 1 { return .clear }
+        let base: Double = isDark ? kWidgetDarkBase : 1.0  // #FFFFFF / #1F1F1F
+        if bgStyle == 1 {
+            let fallback: (Double, Double, Double) = (0.26, 0.52, 0.96)
+            let picked: (Double, Double, Double)? = isDark ? accentDarkRGB : accentLightRGB
+            let a: (Double, Double, Double) = picked ?? fallback
+            let k: Double = isDark ? kWidgetTintDark : kWidgetTintLight
+            let r: Double = widgetMix(base, a.0, k)
+            let g: Double = widgetMix(base, a.1, k)
+            let b: Double = widgetMix(base, a.2, k)
+            return Color(red: r, green: g, blue: b)
+        }
+        if bgStyle == 2 {
+            // iOS 그룹 바탕 #F2F2F7 / #2C2C2E
+            if isDark { return Color(red: kWidgetGray2C, green: kWidgetGray2C, blue: kWidgetGray2E) }
+            return Color(red: kWidgetGrayF2, green: kWidgetGrayF2, blue: kWidgetGrayF7)
+        }
+        return Color(red: base, green: base, blue: base)
     }
 
     var title: Color { isDark ? .white : .black }
@@ -130,12 +191,16 @@ extension WidgetConfiguration {
 // 크고 굵은 머리글 + 흐린 보조 줄, 항목마다 왼쪽 옅은 색 막대.
 
 /// 항목 왼쪽의 옅은 세로 막대. 높이는 쓰는 쪽에서 정한다.
+/// 시스템이 색을 칠하는 모드(틴트 홈 화면·잠금화면)에선 옅으면 안 보여서 진하게,
+/// 강조색 무리로 넣는다.
 struct WidgetBar: View {
     let color: Color
+    var env: WidgetEnv = WidgetEnv()
     var body: some View {
         RoundedRectangle(cornerRadius: 1.5)
-            .fill(color.opacity(0.4))
+            .fill(color.opacity(env.fullColor ? 0.4 : 1))
             .frame(width: 3)
+            .widgetAccentableCompat()
     }
 }
 
@@ -144,7 +209,7 @@ struct WidgetBigHeader: View {
     let title: String
     let subs: [String]
     let palette: WidgetPalette
-    var size: CGFloat = 24
+    var size: CGFloat = WidgetType.headerLarge
     /// 제목 바로 밑 짧은 가로 막대 색(식단 위젯 — 앱 테마 색). nil이면 없음.
     var underline: Color? = nil
     /// 가로 막대 길이(pt). 식단 small 48, medium 72(Android meal_top_line·meal_side_line과 같다).
@@ -157,16 +222,18 @@ struct WidgetBigHeader: View {
                 .foregroundColor(palette.title)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .widgetAccentableCompat()
             if let underline {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(underline)
                     .frame(width: underlineWidth, height: 3)
                     .padding(.top, 3)
                     .padding(.bottom, 3)
+                    .widgetAccentableCompat()
             }
             ForEach(Array(subs.enumerated()), id: \.offset) { _, s in
                 Text(s)
-                    .font(.system(size: 12))
+                    .font(.system(size: WidgetType.sub))
                     .foregroundColor(palette.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -180,4 +247,126 @@ func widgetRGB(_ v: UInt32) -> Color {
     Color(red: Double((v >> 16) & 0xFF) / 255,
           green: Double((v >> 8) & 0xFF) / 255,
           blue: Double(v & 0xFF) / 255)
+}
+
+// ── 글자·여백 규칙 ──
+// 세 위젯이 같은 값을 쓴다. Android res/values/widget_dimens.xml과 같다
+// (test/native_id_consistency_test.dart가 맞춰 본다). 화면 코드에 숫자를 직접 쓰지 않는다.
+enum WidgetType {
+    /// 넓은 위젯 왼쪽 칸·큰 위젯 머리글("점심"·"버스"·"공지").
+    static let headerLarge: CGFloat = 24
+    /// 좁은 위젯·한 줄 머리글.
+    static let headerSmall: CGFloat = 20
+    /// 곧 떠나는 차(small)의 노선·시각.
+    static let emphasis: CGFloat = 16
+    static let emphasisSub: CGFloat = 14
+    /// 본문 — 메뉴·노선·공지 제목·안내 문구.
+    static let body: CGFloat = 13
+    /// 머리글 아래 보조 줄.
+    static let sub: CGFloat = 12
+    /// 시각·게시판·"N분 뒤".
+    static let caption: CGFloat = 11
+}
+
+enum WidgetSpace {
+    static let padding: CGFloat = 14
+}
+
+// ── 시스템이 위젯을 어떻게 그리는지 ──
+
+/// iOS 16+ 렌더링 모드(틴트 홈 화면·잠금화면은 fullColor가 아니다)와
+/// iOS 17+ 배경 표시 여부(StandBy 등에선 시스템이 배경을 뺀다).
+struct WidgetEnv {
+    var fullColor = true
+    var showsBackground = true
+}
+
+/// [WidgetEnv]를 읽어 넘긴다. 배포 대상이 iOS 15라 @Environment를 버전별로 가른다.
+struct WidgetEnvReader<Content: View>: View {
+    @ViewBuilder let content: (WidgetEnv) -> Content
+
+    var body: some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            WidgetEnvReader17(content: content)
+        } else if #available(iOSApplicationExtension 16.0, *) {
+            WidgetEnvReader16(content: content)
+        } else {
+            content(WidgetEnv())
+        }
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct WidgetEnvReader17<Content: View>: View {
+    @Environment(\.widgetRenderingMode) private var mode
+    @Environment(\.showsWidgetContainerBackground) private var showsBackground
+    let content: (WidgetEnv) -> Content
+    var body: some View {
+        content(WidgetEnv(fullColor: mode == .fullColor, showsBackground: showsBackground))
+    }
+}
+
+@available(iOSApplicationExtension 16.0, *)
+private struct WidgetEnvReader16<Content: View>: View {
+    @Environment(\.widgetRenderingMode) private var mode
+    let content: (WidgetEnv) -> Content
+    var body: some View {
+        content(WidgetEnv(fullColor: mode == .fullColor))
+    }
+}
+
+extension View {
+    /// 틴트 모드에서 강조색으로 칠할 무리(머리글·막대·가장 먼저 오는 차). iOS 15는 그대로.
+    @ViewBuilder
+    func widgetAccentableCompat(_ on: Bool = true) -> some View {
+        if #available(iOSApplicationExtension 16.0, *) {
+            widgetAccentable(on)
+        } else {
+            self
+        }
+    }
+}
+
+/// 비어 있음·오래됨·운영 없음 안내. 세 위젯이 같은 모양이다.
+struct WidgetMessage: View {
+    let text: String
+    let palette: WidgetPalette
+    var body: some View {
+        Text(text)
+            .font(.system(size: WidgetType.body))
+            .foregroundColor(palette.body)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+// ── 잠금화면 위젯(iOS 16+) ──
+// 홈 화면 위젯과 같은 kind에 잠금화면 크기를 더한다. 잠금화면은 시스템이 한 색으로
+// 칠하므로 배경·색 막대 없이 글자만, 강조할 것만 widgetAccentable로.
+
+enum WidgetLockFamily { case inline, circular, rectangular }
+
+/// 홈 화면 크기 + (iOS 16 이상이면) 잠금화면 크기.
+func widgetFamilies(home: [WidgetFamily], lock: [WidgetLockFamily]) -> [WidgetFamily] {
+    guard #available(iOSApplicationExtension 16.0, *) else { return home }
+    return home + lock.map { f -> WidgetFamily in
+        switch f {
+        case .inline: return .accessoryInline
+        case .circular: return .accessoryCircular
+        case .rectangular: return .accessoryRectangular
+        }
+    }
+}
+
+extension WidgetFamily {
+    /// 잠금화면(액세서리) 크기인지. iOS 15에는 없다.
+    var isAccessory: Bool {
+        if #available(iOSApplicationExtension 16.0, *) {
+            switch self {
+            case .accessoryInline, .accessoryCircular, .accessoryRectangular: return true
+            default: return false
+            }
+        }
+        return false
+    }
 }

@@ -196,7 +196,8 @@ open class BusWidgetProvider : HomeWidgetProvider() {
                 // 좁으면(2칸) 머리글이 위, 넓으면 왼쪽 칸.
                 val widthDp = appWidgetManager.getAppWidgetOptions(widgetId)
                     .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
-                val wide = widthDp >= 220
+                // 곧 떠나는 차는 넓혀도 small 모양(넓은 모양은 노선별과 겹쳐 뺐다 — 2026-11-25).
+                val wide = !nextStyle && widthDp >= 220
                 val hasRoutes = !routes.isNullOrEmpty()
                 val side = wide && hasRoutes
                 views.setViewVisibility(R.id.bus_side, if (side) View.VISIBLE else View.GONE)
@@ -222,7 +223,6 @@ open class BusWidgetProvider : HomeWidgetProvider() {
                     val routeTimes = routes.map { if (holiday) it.holiday else it.weekday }
                     when {
                         !nextStyle -> drawRoutes(views, routes, routeTimes, nowMin, wide, colors)
-                        wide -> drawUpcoming(views, routes, routeTimes, nowMin, colors)
                         else -> drawNextSmall(views, routes, routeTimes, nowMin, colors)
                     }
                 }
@@ -300,30 +300,6 @@ open class BusWidgetProvider : HomeWidgetProvider() {
                 views.setTextColor(ETA_IDS[i], if (hot) colors.highlight else colors.body)
                 views.setTextViewTextSize(ETA_IDS[i], android.util.TypedValue.COMPLEX_UNIT_SP, 12f)
             }
-        }
-    }
-
-    /** 곧 떠나는 차(넓은 위젯): 모든 노선을 합쳐 시각 순으로 5대. 첫 차는 주황. */
-    private fun drawUpcoming(
-        views: RemoteViews, routes: List<Route>, routeTimes: List<List<String>>,
-        nowMin: Int, colors: WidgetColors,
-    ) {
-        val up = upcomingDepartures(routeTimes, nowMin, LABEL_IDS.size)
-        if (up.isEmpty()) {
-            views.setViewVisibility(R.id.bus_empty, View.VISIBLE)
-            views.setTextViewText(R.id.bus_empty, "오늘 운행 끝")
-            views.setTextColor(R.id.bus_empty, colors.muted)
-            return
-        }
-        views.setViewVisibility(R.id.bus_rows, View.VISIBLE)
-        for (i in LABEL_IDS.indices) {
-            val d = up.getOrNull(i)
-            if (d == null) { clearRow(views, i); continue }
-            labelRow(views, i, d.first, routes[d.first].label, true, colors)
-            views.setTextViewText(TIMES_IDS[i], d.second)
-            views.setTextColor(TIMES_IDS[i], if (i == 0) colors.highlight else colors.body)
-            views.setTextViewText(ETA_IDS[i], etaText((minutesOf(d.second) ?: nowMin) - nowMin))
-            views.setTextColor(ETA_IDS[i], if (i == 0) colors.highlight else colors.muted)
         }
     }
 

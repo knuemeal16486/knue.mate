@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.6.6+112
+version: 1.6.7+113
 
 environment:
   sdk: ^3.10.4
@@ -81,15 +81,18 @@ dev_dependencies:
   image: ^4.8.0 # tool/trace_map.dart 전용 (앱 번들에는 안 들어감)
   
 flutter_native_splash:
-  color: "#FFFFFF"            # 배경색 (흰색은 #FFFFFF, 검정은 #000000)
-  image: "assets/icons/knue_icon.png"    # 가운데 띄울 이미지 경로
-  # branding: "assets/icons/knue_icon.png" # (선택) 로고 아래에 브랜드 이미지 추가하고 싶을 때
-  color_dark: "#000000"       # (선택) 다크모드일 때 배경색
-  image_dark: "assets/icons/knue_icon.png" # (선택) 다크모드일 때 이미지
-  
-  android_12:                 # 안드로이드 12 이상을 위한 설정
-    image: "assets/icons/knue_icon.png"
+  # 바탕을 투명하게 뺀 로고를 쓴다(tool/make_splash_images.py). 원본 knue_icon.png는
+  # 흰 정사각형이라 다크 모드 검은 바탕 위에 흰 네모로 떴다.
+  color: "#FFFFFF"
+  image: "assets/icons/splash_light.png"
+  color_dark: "#0D0D0F"       # 앱 다크 테마 바탕색과 같다
+  image_dark: "assets/icons/splash_dark.png"   # "KNUE" 밝은 회색, 색 획 명도 올림
+
+  android_12:                 # 안드로이드 12+: 가운데 원(지름 2/3)만 보인다 — 글자가 원 안에 들게 줄인 것
+    image: "assets/icons/splash_android12.png"
     color: "#FFFFFF"
+    image_dark: "assets/icons/splash_android12_dark.png"
+    color_dark: "#0D0D0F"
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
@@ -110,6 +113,7 @@ flutter:
     - .env
     - assets/buildings/knue_buildings.json
     - assets/icons/knue_icon.png
+    - assets/icons/knue_icon_dark.png   # 다크 모드 로딩 화면(tool/make_splash_images.py)
     # knuesquare.png(7MB)는 여기 등록만 돼 있고 코드에서 한 번도 안 쓴다.
     # 등록돼 있는 것만으로 모든 사용자 APK에 그대로 들어가므로 뺀다.
     # 파일은 원본 보관용으로 assets/icons에 남겨 둔다.

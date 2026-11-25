@@ -20,6 +20,7 @@ import 'notice_model.dart';
 import 'notice_screen.dart';
 import 'firebase_sync_service.dart';
 import 'meal_rating.dart';
+import 'meal_widget.dart' show mealItemsOf;
 import 'notice_service.dart';
 import 'offline_cache.dart';
 import 'root_screen.dart';
@@ -181,18 +182,13 @@ class _HomeScreenState extends State<HomeScreen> {
   // 데이터 로딩 로직
   // ---------------------------------------------------------------------
 
+  /// 홈 카드가 보여 줄 끼니 — 위젯과 같은 규칙(`widgetMealSlot`).
   ({MealType type, DateTime date}) _resolveNextMeal(DateTime now) {
-    final source = defaultSourceNotifier.value;
-    for (final type in [MealType.breakfast, MealType.lunch, MealType.dinner]) {
-      final status = statusFor(type, now, now, source: source);
-      if (status == ServeStatus.waiting || status == ServeStatus.open) {
-        return (type: type, date: now);
-      }
-    }
-    final tomorrowFirstMeal = source == MealSource.b
-        ? MealType.lunch
-        : MealType.breakfast;
-    return (type: tomorrowFirstMeal, date: now.add(const Duration(days: 1)));
+    final slot = widgetMealSlot(defaultSourceNotifier.value, now);
+    return (
+      type: slot.type,
+      date: slot.isTomorrow ? now.add(const Duration(days: 1)) : now,
+    );
   }
 
   Future<void> _loadMeal() async {
@@ -207,7 +203,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final next = _resolveNextMeal(now);
       final result = await fetchMealApi(next.date, source);
       final meals = (result is Map ? result['meals'] : null) as Map?;
-      final items = asStringList(meals?[next.type.stdKey] ?? []);
+      // 옛 공용 캐시는 한국어 키(중식 등)라 키를 가리지 않고 읽는다.
+      final items = mealItemsOf(meals, next.type);
       if (!mounted) return;
       setState(() {
         _nextMealType = next.type;
@@ -492,7 +489,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _weather = info;
         _greeting = pickGreeting(DateTime.now(), weather: info);
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('home_screen 날씨 불러오기 실패: $e');
+    }
   }
 
   // ---------------------------------------------------------------------

@@ -1,12 +1,20 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart' show Color;
+import 'package:flutter/material.dart' show Color, ThemeMode;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:knue_mate/bus_timetable_data.dart';
-import 'package:knue_mate/constants.dart' show AppTab;
+import 'package:knue_mate/constants.dart'
+    show
+        AppTab,
+        applyWidgetAppearance,
+        kIosMealWidgetKind,
+        PreferencesService,
+        widgetBgStyle,
+        widgetTheme,
+        widgetTransparency;
 import 'package:knue_mate/home_widgets.dart';
 import 'package:knue_mate/notice_model.dart';
 import 'package:knue_mate/notice_service.dart'
@@ -249,5 +257,38 @@ void main() {
     });
     await NoticeCache.save([_n('학사공지', '2026-11-20', '새글')]);
     expect(saved, contains(kWidgetNoticeRowsKey));
+  });
+
+  // 테마·투명도는 식단을 다시 받지 않고 바로 적용된다 — 값 두 개를 넣고 위젯 네 종류를
+  // 다시 그린다(식단·버스 노선별·곧 떠나는 차·공지).
+  test('applyWidgetAppearance는 테마·투명도만 넣고 위젯을 모두 다시 그린다', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    final saved = <String, Object?>{};
+    final redrawn = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('home_widget'),
+            (call) async {
+      final args = call.arguments as Map;
+      if (call.method == 'saveWidgetData') {
+        saved[args['id'] as String] = args['data'];
+      }
+      if (call.method == 'updateWidget') redrawn.add('${args['ios']}');
+      return true;
+    });
+    await applyWidgetAppearance(theme: ThemeMode.dark, transparency: 0.5, bgStyle: 2);
+    expect(saved, {'themeMode': ThemeMode.dark.index, 'transparency': '0.5', 'bgStyle': 2});
+    expect(redrawn, [
+      kIosMealWidgetKind,
+      kIosBusWidgetKind,
+      kIosBusNextWidgetKind,
+      kIosNoticeWidgetKind,
+    ]);
+    expect(widgetTheme.value, ThemeMode.dark);
+    expect(widgetTransparency.value, 0.5);
+    expect(widgetBgStyle.value, 2);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt(PreferencesService.keyWidgetBgStyle), 2);
+    widgetBgStyle.value = 0;
   });
 }

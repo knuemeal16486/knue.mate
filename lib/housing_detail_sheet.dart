@@ -136,7 +136,7 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
       buffer.writeln('💬 학생 후기: "${s.recentReviews.first}"');
     }
 
-    Share.share(buffer.toString());
+    SharePlus.instance.share(ShareParams(text: buffer.toString()));
   }
 
   /// 외벽 현수막/관리인/집주인 복수 연락처 (보통 최대 2개).
@@ -287,7 +287,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
           color: widget.isDark ? const Color(0xFF1C1C1E) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        child: SingleChildScrollView(
+        child: Material(type: MaterialType.transparency, child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,7 +378,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
               ),
             ],
           ),
-        ),
+        )),
       ),
     );
   }
@@ -395,7 +395,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
           color: widget.isDark ? const Color(0xFF1C1C1E) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        child: Column(
+        child: Material(type: MaterialType.transparency, child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
@@ -474,7 +474,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
               ),
             ),
           ],
-        ),
+        )),
       ),
     );
   }
@@ -527,7 +527,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
               ),
             ],
           ),
-          child: Stack(
+          child: Material(type: MaterialType.transparency, child: Stack(
             children: [
               SingleChildScrollView(
                 controller: scrollController,
@@ -873,7 +873,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                   child: _buildBottomQuickActionBar(isDark),
                 ),
             ],
-          ),
+          )),
         );
       },
     );
@@ -889,7 +889,8 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06)),
         ),
-        child: child,
+        // 색 상자 안 ListTile·ExpansionTile 물결이 보이게 투명 Material을 둔다.
+        child: Material(type: MaterialType.transparency, child: child),
       );
 
   /// 학생 제보로 모은 이 집의 시세와 조건. 없는 건 지어내지 않고 비워 둔다.
@@ -1900,7 +1901,7 @@ ${pricing != null ? '- 예상 시세 조건: 보증금 ${pricing.deposit}만원 
                       padding: const EdgeInsets.all(5),
                       onPressed: () async {
                         await Clipboard.setData(ClipboardData(text: phone));
-                        if (context.mounted) {
+                        if (mounted) {
                           showOverlayToast(context, '$roleTitle 번호가 복사되었습니다: $phone');
                         }
                       },

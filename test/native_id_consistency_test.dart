@@ -6,6 +6,9 @@ import 'package:knue_mate/home_widgets.dart';
 import 'package:knue_mate/club_event_alert_service.dart'
     show kClubEventCheckTask;
 import 'package:knue_mate/keyword_alert_service.dart' show kNoticeCheckTask;
+import 'package:knue_mate/meal_widget.dart';
+import 'package:knue_mate/widget_preview.dart'
+    show kWidgetOnWallpaperTransparency, kWidgetTintDark, kWidgetTintLight;
 
 /// iOS Info.plist / AppDelegate.swift / Android MainActivity.kt / Dart 쪽에
 /// 각각 따로 타이핑된 "서로 같아야 하는" 문자열 식별자들이 실제로 일치하는지
@@ -279,6 +282,26 @@ void main() {
 
     const ktDir = 'android/app/src/main/kotlin/com/knue/knuemate';
 
+    // 식단 위젯이 스스로 끼니를 넘기는 한 주치(lib/meal_widget.dart). 키와 문구가
+    // 세 곳에서 같아야 앱 화면·iOS·Android가 같은 글을 보여 준다.
+    test('식단 위젯 한 주치 키·문구가 Dart·Swift·Kotlin에서 같다', () {
+      final swift = read('$iosDir/MealWidget.swift');
+      final kotlin = read('$ktDir/MealWidgetProvider.kt');
+      String lit(String s) => s.replaceAll('\n', r'\n');
+      for (final src in [swift, kotlin]) {
+        expect(src, contains('"$kMealWeekJsonKey"'));
+        expect(src, contains('"$kMealWidgetSourceKey"'));
+        expect(src, contains('"${lit(kMealWidgetNoMenu)}"'));
+        expect(src, contains('"${lit(kMealWidgetNoData)}"'));
+        expect(src, contains(mealWidgetClosedText(true).substring(2)));
+      }
+      // 식당 바꾸기 버튼(3단계): iOS는 위젯 확장 안 AppIntent, Android는 브로드캐스트.
+      expect(swift, contains('Button(intent: ToggleMealSourceIntent())'));
+      expect(kotlin, contains('ACTION_TOGGLE'));
+      expect(read('android/app/src/main/res/layout/home_widget_layout.xml'),
+          contains('@+id/meal_toggle'));
+    });
+
     test('Android 버스 위젯이 Manifest에 있고 키가 Dart와 같다', () {
       expect(androidManifest, contains('android:name=".BusWidgetProvider"'));
       expect(kAndroidBusWidget, 'com.knue.knuemate.BusWidgetProvider');
@@ -294,6 +317,58 @@ void main() {
           contains('class BusNextWidgetProvider : BusWidgetProvider()'));
     });
 
+    // 잠금화면 위젯(4단계, iOS 16+): 곧 떠나는 차·식단에만 붙인다. 잠금화면 화면도
+    // containerBackground를 거쳐야 iOS 17에서 "배경 API를 쓰라"는 빈 위젯이 안 된다.
+    test('잠금화면 위젯은 곧 떠나는 차·식단에 있고 배경을 비워 둔다', () {
+      final bus = read('$iosDir/BusWidget.swift');
+      final meal = read('$iosDir/MealWidget.swift');
+      expect(bus, contains('lock: [.inline, .circular, .rectangular]'));
+      expect(meal, contains('lock: [.inline, .rectangular]'));
+      for (final src in [bus, meal]) {
+        expect(src, contains('family.isAccessory'));
+        expect(src, contains('.widgetBackground(Color.clear)'));
+      }
+      // 노선별 버스·공지는 잠금화면에 없다(같은 내용이 두 번 뜨지 않게).
+      expect(RegExp(r'lock: \[').allMatches(bus).length, 1);
+      expect(read('$iosDir/NoticeWidget.swift'), isNot(contains('lock: [')));
+    });
+
+    // 글자·여백 규칙(2단계 디자인 정리) — iOS WidgetType·WidgetSpace와
+    // Android widget_dimens.xml이 같은 값이어야 두 기기 위젯이 같아 보인다.
+    test('위젯 글자·여백 규칙이 iOS·Android에서 같다', () {
+      final swift = read('ios/MealWidget/WidgetShared.swift');
+      final xml = read('android/app/src/main/res/values/widget_dimens.xml');
+      const names = {
+        'headerLarge': 'widget_text_header_large',
+        'headerSmall': 'widget_text_header_small',
+        'emphasis': 'widget_text_emphasis',
+        'emphasisSub': 'widget_text_emphasis_sub',
+        'body': 'widget_text_body',
+        'sub': 'widget_text_sub',
+        'caption': 'widget_text_caption',
+        'padding': 'widget_padding',
+      };
+      names.forEach((ios, android) {
+        final a = RegExp('static let $ios: CGFloat = (\\d+)').firstMatch(swift)?[1];
+        final b = RegExp('name="$android">(\\d+)(sp|dp)<').firstMatch(xml)?[1];
+        expect(a, isNotNull, reason: ios);
+        expect(a, b, reason: '$ios ↔ $android');
+      });
+      // 레이아웃·Swift 화면 코드에 글자 크기 숫자를 직접 쓰지 않는다.
+      for (final f in [
+        'home_widget_layout.xml',
+        'bus_widget_layout.xml',
+        'notice_widget_layout.xml',
+      ]) {
+        expect(read('android/app/src/main/res/layout/$f'),
+            isNot(matches(RegExp(r'textSize="\d'))), reason: f);
+      }
+      for (final f in ['MealWidget', 'BusWidget', 'NoticeWidget']) {
+        expect(read('$iosDir/$f.swift'),
+            isNot(matches(RegExp(r'\.system\(size: \d'))), reason: f);
+      }
+    });
+
     // 투명 위젯에서 글씨를 진하게 바꾸는 기준 — 두 기기에서 같아야 한다.
     test('위젯 "배경화면 위 글씨" 투명도 기준이 iOS·Android에서 같다', () {
       final swift = RegExp(r'kWidgetOnWallpaperTransparency = ([0-9.]+)')
@@ -302,6 +377,22 @@ void main() {
           .firstMatch(read('$ktDir/WidgetTheme.kt'))?[1];
       expect(swift, isNotNull);
       expect(kotlin, swift);
+      // 설정 화면 미리보기(lib/widget_preview.dart)도 같은 기준이어야 한다.
+      expect('$kWidgetOnWallpaperTransparency', swift);
+    });
+
+    // iOS 위젯 바탕 스타일 — 키·섞는 비율·회색 값이 Dart(lib/widget_preview.dart)와 같아야 한다.
+    test('iOS 위젯 바탕(bgStyle)이 Dart와 같다', () {
+      final swift = read('ios/MealWidget/WidgetShared.swift');
+      expect(swift, contains('forKey: "bgStyle"'));
+      expect(read('lib/constants.dart'), contains("saveWidgetData<int>('bgStyle'"));
+      double num(String name) =>
+          double.parse(RegExp('let $name = ([0-9.]+)').firstMatch(swift)![1]!);
+      expect(num('kWidgetTintLight'), kWidgetTintLight);
+      expect(num('kWidgetTintDark'), kWidgetTintDark);
+      for (final v in ['31.0 / 255.0', '44.0 / 255.0', '46.0 / 255.0', '242.0 / 255.0', '247.0 / 255.0']) {
+        expect(swift, contains(v), reason: v);
+      }
     });
 
     // 노선 막대 색 — iOS kBusRouteColorIndex와 Kotlin ROUTE_COLOR_INDEX가 같아야 한다.

@@ -180,7 +180,7 @@ class BusCard extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.04),
+                color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.04),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -273,10 +273,10 @@ class BusCard extends StatelessWidget {
                           // 이제 상행·하행 모두 실제 도착 예정 시간이 있으므로
                           // 한쪽만 회색으로 죽이지 않는다. 임박한 차만 빨강.
                           color: isArrived
-                              ? Colors.red.withOpacity(0.15)
+                              ? Colors.red.withValues(alpha: 0.15)
                               : (isDark
-                                    ? Colors.blueAccent.withOpacity(0.2)
-                                    : Colors.blue.withOpacity(0.1)),
+                                    ? Colors.blueAccent.withValues(alpha: 0.2)
+                                    : Colors.blue.withValues(alpha: 0.1)),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -577,11 +577,15 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
         await Geolocator.requestPermission();
       }
       final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 5),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 5),
+        ),
       );
       if (mounted) setState(() => _userPosition = pos);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('bus_card 내 위치 못 받음(권한·시간 초과): $e');
+    }
   }
 
   String? _getNearestStopName(List<String> stops, [List<RouteStop>? routeStops]) {
@@ -890,7 +894,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.2),
+                color: Colors.black.withValues(alpha: 0.2),
                 blurRadius: 20,
                 offset: const Offset(0, -5),
               ),
@@ -925,7 +929,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: widget.bus.color.withOpacity(0.3),
+                                color: widget.bus.color.withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -985,7 +989,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                       "실시간",
                                       style: TextStyle(
                                         fontSize: 10,
-                                        color: Colors.green.withOpacity(0.7),
+                                        color: Colors.green.withValues(alpha: 0.7),
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -1011,7 +1015,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                             child: CircularProgressIndicator(
                               strokeWidth: 1.5,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                (isDark ? Colors.white : Colors.black12).withOpacity(0.3),
+                                (isDark ? Colors.white : Colors.black12).withValues(alpha: 0.3),
                               ),
                             ),
                           ),
@@ -1023,7 +1027,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? Colors.white.withOpacity(0.04)
+                            ? Colors.white.withValues(alpha: 0.04)
                             : Colors.grey.shade50,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
@@ -1161,7 +1165,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.white.withOpacity(0.05)
+                          ? Colors.white.withValues(alpha: 0.05)
                           : Colors.grey[100],
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -1194,7 +1198,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                 boxShadow: isSelected
                                     ? [
                                         BoxShadow(
-                                          color: Colors.black.withOpacity(0.05),
+                                          color: Colors.black.withValues(alpha: 0.05),
                                           blurRadius: 4,
                                           offset: const Offset(0, 2),
                                         ),
@@ -1229,7 +1233,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                           vertical: 1,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: widget.bus.color.withOpacity(0.15),
+                                          color: widget.bus.color.withValues(alpha: 0.15),
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
@@ -1329,7 +1333,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                                     bottom: isLast ? 28 : 0,
                                                   ),
                                                   decoration: BoxDecoration(
-                                                    color: lineColor.withOpacity(0.5),
+                                                    color: lineColor.withValues(alpha: 0.5),
                                                     borderRadius: BorderRadius.circular(1.5),
                                                   ),
                                                 ),
@@ -1409,7 +1413,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                                       ),
                                                       boxShadow: [
                                                         BoxShadow(
-                                                          color: widget.bus.color.withOpacity(0.4),
+                                                          color: widget.bus.color.withValues(alpha: 0.4),
                                                           blurRadius: 4,
                                                         ),
                                                       ],
@@ -1460,9 +1464,9 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                                   Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                     decoration: BoxDecoration(
-                                                      color: Colors.blue.withOpacity(0.1),
+                                                      color: Colors.blue.withValues(alpha: 0.1),
                                                       borderRadius: BorderRadius.circular(4),
-                                                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                                                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                                                     ),
                                                     child: const Text(
                                                       "가까움",
@@ -1473,9 +1477,9 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                                   Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                     decoration: BoxDecoration(
-                                                      color: Colors.orange.withOpacity(0.1),
+                                                      color: Colors.orange.withValues(alpha: 0.1),
                                                       borderRadius: BorderRadius.circular(4),
-                                                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                                                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                                                     ),
                                                     child: Row(
                                                       mainAxisSize: MainAxisSize.min,
@@ -1498,7 +1502,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                                   _buildBusAtStopText(busesAtStop),
                                                   style: TextStyle(
                                                     fontSize: 12,
-                                                    color: widget.bus.color.withOpacity(0.8),
+                                                    color: widget.bus.color.withValues(alpha: 0.8),
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
@@ -1528,7 +1532,7 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
                                         (isDark
                                                 ? Colors.white10
                                                 : Colors.black87)
-                                            .withOpacity(0.8),
+                                            .withValues(alpha: 0.8),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: const Text(

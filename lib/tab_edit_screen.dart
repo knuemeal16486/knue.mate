@@ -20,10 +20,8 @@ class _TabEditScreenState extends State<TabEditScreen> {
   }
 
   void _onReorder(int oldIndex, int newIndex) {
+    // onReorderItem은 newIndex를 이미 "뺀 뒤 자리"로 준다 — 따로 1을 빼지 않는다.
     setState(() {
-      if (newIndex > oldIndex) {
-        newIndex -= 1;
-      }
       final item = _tempOrder.removeAt(oldIndex);
       _tempOrder.insert(newIndex, item);
     });
@@ -95,7 +93,7 @@ class _TabEditScreenState extends State<TabEditScreen> {
             child: ReorderableListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: _tempOrder.length,
-              onReorder: _onReorder,
+              onReorderItem: _onReorder,
               proxyDecorator: (child, index, animation) {
                 return AnimatedBuilder(
                   animation: animation,
@@ -128,7 +126,7 @@ class _TabEditScreenState extends State<TabEditScreen> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+                          color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -142,7 +140,7 @@ class _TabEditScreenState extends State<TabEditScreen> {
                       leading: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: tab.color.withOpacity(0.15),
+                          color: tab.color.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Icon(tab.icon, color: tab.color),

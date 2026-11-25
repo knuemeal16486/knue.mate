@@ -529,7 +529,9 @@ class _HousingScreenState extends State<HousingScreen>
       final prefs = await SharedPreferences.getInstance();
       final v = prefs.getBool(_noticeDismissedKey) ?? false;
       if (mounted && v) setState(() => _noticeDismissed = true);
-    } catch (_) {}
+    } catch (_) {
+      // 안내를 닫았는지 기록 — 못 읽으면 다시 보여 줄 뿐이다.
+    }
   }
 
   Future<void> _dismissNotice() async {
@@ -537,7 +539,9 @@ class _HousingScreenState extends State<HousingScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_noticeDismissedKey, true);
-    } catch (_) {}
+    } catch (_) {
+      // 화면에선 이미 닫혔다 — 기록만 못 하면 다음에 한 번 더 보일 뿐.
+    }
   }
 
   /// 폰 세로처럼 좁은 화면. 지도 도구를 접고 안내를 짧게 한다.
@@ -673,13 +677,13 @@ class _HousingScreenState extends State<HousingScreen>
     if (mounted) {
       setState(() {
         _transformController.value = Matrix4.identity()
-          ..translate(tx, ty)
-          ..scale(currentScale);
+          ..translateByDouble(tx, ty, 0, 1)
+          ..scaleByDouble(currentScale, currentScale, currentScale, 1);
       });
     } else {
       _transformController.value = Matrix4.identity()
-        ..translate(tx, ty)
-        ..scale(currentScale);
+        ..translateByDouble(tx, ty, 0, 1)
+        ..scaleByDouble(currentScale, currentScale, currentScale, 1);
     }
   }
 
@@ -697,8 +701,8 @@ class _HousingScreenState extends State<HousingScreen>
         center.dy - (center.dy - matrix.getTranslation().y) * scaleChange;
 
     _transformController.value = Matrix4.identity()
-      ..translate(tx, ty)
-      ..scale(targetScale);
+      ..translateByDouble(tx, ty, 0, 1)
+      ..scaleByDouble(targetScale, targetScale, targetScale, 1);
   }
 
   // ── 다시 그리기 캐시 ──
@@ -1093,7 +1097,7 @@ class _HousingScreenState extends State<HousingScreen>
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<HousingZone>(
-                value: selectedZone,
+                initialValue: selectedZone,
                 decoration: const InputDecoration(labelText: '구역', border: OutlineInputBorder(), isDense: true),
                 items: HousingZone.values.map((z) => DropdownMenuItem(value: z, child: Text(z.label))).toList(),
                 onChanged: (v) => setDlgState(() => selectedZone = v ?? selectedZone),
@@ -1244,7 +1248,7 @@ class _HousingScreenState extends State<HousingScreen>
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<HousingZone>(
-                        value: selectedZone,
+                        initialValue: selectedZone,
                         decoration: const InputDecoration(labelText: '구역', border: OutlineInputBorder(), isDense: true),
                         items: HousingZone.values.map((z) => DropdownMenuItem(value: z, child: Text(z.label))).toList(),
                         onChanged: (v) => setDlgState(() => selectedZone = v ?? selectedZone),
@@ -1523,8 +1527,8 @@ class _HousingScreenState extends State<HousingScreen>
     final ty = (size.height * 0.35) - (pt.dy * targetScale);
 
     _transformController.value = Matrix4.identity()
-      ..translate(tx, ty)
-      ..scale(targetScale);
+      ..translateByDouble(tx, ty, 0, 1)
+      ..scaleByDouble(targetScale, targetScale, targetScale, 1);
 
     if (openDetail) {
       _showDetail(b);
@@ -1954,7 +1958,10 @@ class _HousingScreenState extends State<HousingScreen>
                 width: 0.8,
               ),
             ),
-            child: ListView(
+            // 색 상자 바로 안의 ListTile은 누를 때 물결이 가려진다 — 투명 Material을 사이에.
+            child: Material(
+              type: MaterialType.transparency,
+              child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 4),
               shrinkWrap: true,
               children: _getMatchingSearchResults().map((item) {
@@ -2015,6 +2022,7 @@ class _HousingScreenState extends State<HousingScreen>
                   },
                 );
               }).toList(),
+              ),
             ),
           ),
 
@@ -3140,7 +3148,8 @@ class _HousingScreenState extends State<HousingScreen>
                       final res = await AdminAuthService.unlock(controller.text);
                       if (!mounted) return;
                       if (res == AdminUnlockResult.ok) {
-                        Navigator.pop(ctx);
+                        // 저장하는 사이 시트를 닫았으면 ctx가 이미 없다 — 닫힌 시트를 다시 닫으면 예외.
+                        if (ctx.mounted) Navigator.pop(ctx);
                         setState(() {});
                         showToast(context, "🛠️ 개발자 모드가 활성화되었습니다!");
                       } else {
@@ -3478,7 +3487,7 @@ class _HousingScreenState extends State<HousingScreen>
                       }),
                     ),
                     ...colorPresets.map((clr) {
-                      final isSel = !systemColor && selectedColor != null && selectedColor!.value == clr.value;
+                      final isSel = !systemColor && selectedColor != null && selectedColor!.toARGB32() == clr.toARGB32();
                       return GestureDetector(
                         onTap: () => setSheetState(() {
                           selectedColor = clr;
@@ -3511,7 +3520,7 @@ class _HousingScreenState extends State<HousingScreen>
                 const SizedBox(height: 14),
 
                 DropdownButtonFormField<HousingZone>(
-                  value: selectedZone,
+                  initialValue: selectedZone,
                   decoration: const InputDecoration(labelText: "원룸 구역", border: OutlineInputBorder(), isDense: true),
                   items: HousingZone.values.map((z) => DropdownMenuItem(value: z, child: Text(z.label))).toList(),
                   onChanged: (v) => setSheetState(() => selectedZone = v ?? HousingZone.values.first),
@@ -3643,7 +3652,8 @@ class _HousingScreenState extends State<HousingScreen>
                             return;
                           }
                           if (!mounted) return;
-                          Navigator.pop(ctx);
+                          // 저장하는 사이 시트를 닫았으면 ctx가 이미 없다 — 닫힌 시트를 다시 닫으면 예외.
+                          if (ctx.mounted) Navigator.pop(ctx);
                           setState(() {
                             _base = CampusBase(
                               buildings: _base.buildings.where((x) => x.id != b.id).toList(),
@@ -3680,7 +3690,7 @@ class _HousingScreenState extends State<HousingScreen>
                           final colorHex = systemColor
                               ? HousingBuildingOverride.systemColor
                               : selectedColor != null
-                                  ? '#${selectedColor!.value.toRadixString(16).padLeft(8, '0').substring(2)}'
+                                  ? '#${selectedColor!.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}'
                                   : null;
                           final override = HousingBuildingOverride(
                             buildingId: b.id,
@@ -3718,7 +3728,8 @@ class _HousingScreenState extends State<HousingScreen>
                             return;
                           }
                           if (!mounted) return;
-                          Navigator.pop(ctx);
+                          // 저장하는 사이 시트를 닫았으면 ctx가 이미 없다 — 닫힌 시트를 다시 닫으면 예외.
+                          if (ctx.mounted) Navigator.pop(ctx);
                           setState(() {
                             _overrides = {..._overrides, b.id: override};
                             _rebuild();
@@ -3769,7 +3780,7 @@ class _HousingScreenState extends State<HousingScreen>
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<HousingZone>(
-                  value: selectedZone,
+                  initialValue: selectedZone,
                   decoration: const InputDecoration(labelText: "원룸 구역", border: OutlineInputBorder(), isDense: true),
                   items: HousingZone.values.map((z) => DropdownMenuItem(value: z, child: Text(z.label))).toList(),
                   onChanged: (v) => setDlgState(() => selectedZone = v ?? HousingZone.values.first),
@@ -3781,7 +3792,7 @@ class _HousingScreenState extends State<HousingScreen>
                   spacing: 8,
                   runSpacing: 6,
                   children: colorPresets.map((clr) {
-                    final isSel = selectedColor.value == clr.value;
+                    final isSel = selectedColor.toARGB32() == clr.toARGB32();
                     return GestureDetector(
                       onTap: () => setDlgState(() => selectedColor = clr),
                       child: Container(
@@ -3851,7 +3862,7 @@ class _HousingScreenState extends State<HousingScreen>
                   ring: ring,
                   isCampus: false,
                 );
-                final colorHex = '#${selectedColor.value.toRadixString(16).padLeft(8, '0').substring(2)}';
+                final colorHex = '#${selectedColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
                 final override = HousingBuildingOverride(
                   buildingId: newId,
                   name: name,
@@ -3869,7 +3880,8 @@ class _HousingScreenState extends State<HousingScreen>
                   return;
                 }
                 if (!mounted) return;
-                Navigator.pop(ctx);
+                // 저장하는 사이 시트를 닫았으면 ctx가 이미 없다 — 닫힌 시트를 다시 닫으면 예외.
+                if (ctx.mounted) Navigator.pop(ctx);
                 setState(() {
                   _base = CampusBase(
                     buildings: [..._base.buildings, newBuilding],
@@ -5694,7 +5706,7 @@ class _HousingScreenState extends State<HousingScreen>
             color: isDark ? const Color(0xFF161618) : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: ListView(
+          child: Material(type: MaterialType.transparency, child: ListView(
             controller: controller,
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
             children: [
@@ -5798,7 +5810,7 @@ class _HousingScreenState extends State<HousingScreen>
                   ),
               ],
             ],
-          ),
+          )),
         ),
       ),
     );
@@ -5995,7 +6007,7 @@ class _HousingScreenState extends State<HousingScreen>
           color: isDark ? const Color(0xFF161618) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        child: SafeArea(
+        child: Material(type: MaterialType.transparency, child: SafeArea(
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
@@ -6026,7 +6038,7 @@ class _HousingScreenState extends State<HousingScreen>
               ],
             ),
           ),
-        ),
+        )),
       ),
     );
   }

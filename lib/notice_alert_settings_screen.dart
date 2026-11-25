@@ -84,7 +84,11 @@ class _NoticeAlertSettingsScreenState
               color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: ValueListenableBuilder<bool>(
+            // 색을 칠한 상자 바로 안의 ListTile은 누를 때 물결이 상자에 가려 안 보인다 —
+            // 투명 Material을 사이에 둔다(Flutter 새 버전은 이를 assert로 잡는다).
+            child: Material(
+              type: MaterialType.transparency,
+              child: ValueListenableBuilder<bool>(
               valueListenable: PreferencesService.noticeAlarmOn,
               builder: (context, on, _) => SwitchListTile(
                 title: const Text("새 공지 알림 받기"),
@@ -93,6 +97,7 @@ class _NoticeAlertSettingsScreenState
                 activeThumbColor: color,
                 onChanged: _setAlarmOn,
               ),
+            ),
             ),
           ),
           const SizedBox(height: 20),
@@ -148,7 +153,10 @@ class _NoticeAlertSettingsScreenState
             builder: (context, mode, _) => RadioGroup<NoticeAlertMode>(
               groupValue: mode,
               onChanged: (v) => _setMode(v!),
-              child: Column(
+              // 색 상자 안 ListTile 물결이 보이게(위 스위치와 같은 이유).
+              child: Material(
+                type: MaterialType.transparency,
+                child: Column(
                 children: [
                   RadioListTile<NoticeAlertMode>(
                     contentPadding: EdgeInsets.zero,
@@ -167,6 +175,7 @@ class _NoticeAlertSettingsScreenState
                   if (mode == NoticeAlertMode.scheduled)
                     _buildHoursEditor(context, color, isDark),
                 ],
+              ),
               ),
             ),
           ),

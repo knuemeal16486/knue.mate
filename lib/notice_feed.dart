@@ -238,7 +238,9 @@ class NoticeFeed {
       final raw = prefs.getString(_indexKey);
       final index = raw == null ? null : parseFeedIndex(raw);
       if (index != null) boards.value = index.boards;
-    } catch (_) {}
+    } catch (_) {
+      // 기기에 둔 목록 캐시 — 못 읽으면 새로 받는다.
+    }
   }
 
   /// 공지를 새로 받는다. 받기에 성공했으면 true, 받을 때가 아니었으면 지난번

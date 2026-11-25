@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 위젯 안 작은 동그란 버튼 바탕. 라이트·다크 둘 다에서 보이게 회색 반투명. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#26888888" />
+</shape>

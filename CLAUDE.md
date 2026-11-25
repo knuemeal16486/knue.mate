@@ -22,9 +22,19 @@ Android 리소스 축소: `android.r8.optimizedResourceShrinking=true`(gradle.pr
 스플래시 `styles.xml`의 `windowLayoutInDisplayCutoutMode shortEdges`는 Android 15에서
 지원 중단이라 뺐다. `flutter_native_splash:create`를 다시 돌리면 도로 생기니 또 지운다.
 
+스플래시 로고는 원본(`knue_icon.png`, 흰 정사각형)이 아니라 바탕을 투명하게 뺀
+`splash_*.png`다 — 원본을 다크 모드 검은 바탕에 올리면 흰 네모가 떴다(2026-11-25).
+로고를 바꾸면 `python tool/make_splash_images.py` → `dart run flutter_native_splash:create`.
+Android 12+는 가운데 원만 보여서 `splash_android12*.png`는 글자를 원 안으로 줄여 둔다.
+앱 로딩 화면(`_buildLoadingScreen`)도 다크 모드면 같은 바탕색(#0D0D0F)·`knue_icon_dark.png`.
+
 `flutter clean` 뒤 처음 빌드는 느리다. 플러그인을 추가하면 Gradle이 옛 상태를
 들고 있어 "cannot find symbol"이 나는데, `flutter clean && flutter pub get`이면
 풀린다(실제 의존성 문제가 아니다).
+
+색을 칠한 상자(`Container(decoration: BoxDecoration(color: …))`) 바로 안의 `ListTile`·`ExpansionTile`은
+누를 때 물결이 상자에 가려 안 보인다. Flutter 새 버전(3.50에서 확인)은 이를 assert로 잡아 테스트가 깨진다 —
+상자와 타일 사이에 `Material(type: MaterialType.transparency)`를 둔다(자취방 시트들·`_infoCard`·공지 알림 설정).
 
 ## 순수 함수 + 테스트
 
@@ -280,6 +290,12 @@ App Store에서 **승인된 버전 이름(pubspec의 1.6.x)은 다시 못 올린
 (90186)·"must contain a higher version"(90062)으로 거부된다. 한 버전이 승인되면 다음 업로드
 전에 이름도 올린다(1.6.5 → 1.6.6). 빌드 번호만 올리면 같은 이름 안에서 TestFlight용으로만 된다.
 
+**iOS 빌드 번호는 Codemagic이 정한다**(2026-11-25): Workflow Editor의 iOS Build arguments에
+`--build-number=$((BUILD_NUMBER + 200))`(Codemagic 빌드 횟수 + 200, 첫 적용 274). pubspec의 `+N`은 iOS에선
+덮어써진다. 같은 번호를 다시 올리면 409(-19232)로 거부된다. `app-store-connect get-latest-testflight-build-number`는
+빌드 단계에 업로드 키(`APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY`)가 없어 인자 처리에서 실패했다. 버전 이름은 여전히
+pubspec에서 올린다. codemagic.yaml 방식은 쓰지 않기로 했다(사용자 결정).
+
 관리자 인증: 비밀번호를 앱이 들고 있지 않다. `admin_grants/{uid}` 문서를 만들 때
 **보안 규칙이 서버에서** `app_config/admin`과 대조한다.
 
@@ -402,6 +418,11 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   키 이름·kind·Manifest는 `test/native_id_consistency_test.dart`가 확인한다.
 - 테마·투명도(`themeMode`·`transparency`)는 식단 위젯 설정 하나로 세 위젯에 같이. 투명도 0.7 이상이면
   배경화면 위 글씨로 보고 흐린 글씨·주황을 진하게 쓴다(`onWallpaper`, 기준값은 일관성 테스트).
+- **iOS는 투명도를 쓰지 않는다**(2026-11-25 기기 확인). iOS는 위젯 뒤 배경화면을 앱에 주지 않아 반투명 바탕 뒤로
+  시스템 회색이 비쳐 뿌옇게만 됐다. iOS는 불투명한 **위젯 바탕**(`bgStyle` — 0 기본·1 테마색·2 회색, Dart
+  `widgetBgStyle`·`widgetBgColor`, Swift `WidgetPalette.background`)을 고르고, 설정 화면도 iOS면 슬라이더 대신 3칸을
+  보인다. 진짜 투명은 사용자가 홈 화면 편집 → 사용자화(착색·투명)로만 된다. Android는 실제로 비치므로 투명도 그대로.
+  Swift 색 계산은 식을 짧게 나눈다 — 튜플·삼항·나눗셈을 한 식에 섞으면 타입 검사 시간 초과로 빌드가 깨진다.
 - **모양(2026-11-24, 에브리타임식)**: 크고 굵은 머리글("점심"·"버스"·"공지", 제목색) + 흐린 보조 줄,
   항목 왼쪽에 옅은 색 막대(iOS `WidgetBar`·`WidgetBigHeader`, Android `drawable/widget_bar` +
   `WidgetColors.applyBar`). 식단은 세로 막대 대신 "점심" 밑에 가로 막대(앱 테마 색, small 48·medium 72, iOS
@@ -414,7 +435,8 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   무지개 모드의 날마다 바뀌는 색은 앱을 열어야 위젯에 반영된다.
 - 버스 위젯은 **두 종류**를 위젯 고르는 화면에서 사용자가 고른다: 노선별(`BusWidget` /
   `BusWidgetProvider`)과 곧 떠나는 차(`BusNextWidget` / `BusNextWidgetProvider`, 모든 노선을 합쳐 시각 순
-  `upcomingDepartures`). 같은 시간표·레이아웃을 쓰고, Dart는 둘 다 다시 그린다(`_updateBusWidgets`).
+  `upcomingDepartures`). 곧 떠나는 차는 **small·잠금화면만**(medium은 노선별과 겹쳐 뺐다, 2026-11-25 사용자 결정 —
+  Android는 가로로 못 늘리고, 이미 넓힌 것도 small 모양으로 그린다). 같은 시간표·레이아웃을 쓰고, Dart는 둘 다 다시 그린다(`_updateBusWidgets`).
   가장 먼저 오는 차는 주황(`highlight`, `soonestRoutes`).
 - Android 위젯 레이아웃에 맨 `View`를 쓰면 "Can't load widget"이 난다(RemoteViews 허용 목록) —
   빈 칸은 `FrameLayout`으로.
@@ -424,10 +446,70 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 - 식단 medium은 메뉴 하나에 한 줄, 넘치면 두 열(`mealMenuColumns`, 두 열에도 넘치면 "외 N개").
   small은 다 들어가면 한 줄에 하나씩, 넘치면 줄 폭에 맞춰 " · "로 묶는다(`mealMenuFlowLines`,
   메뉴가 줄 끝에서 끊기지 않고 마지막 줄은 "외 N개").
+- iOS 위젯에 `Text(date, style: .relative)`(문자열 끼워 넣기 포함)를 쓰지 않는다 — 그걸 쓰던 버스 위젯
+  (노선별 medium·곧 떠나는 차 둘 다)이 iPad에서 흰 화면이었다(2026-11-25). "N분 뒤"는 엔트리 시각 기준
+  고정 글자(`busEtaLabel`)이고, 타임라인에 앞으로 120분 동안 매 분 엔트리를 넣어 줄인다.
+- **식단 위젯은 스스로 끼니를 넘긴다**(2026-11-25, `lib/meal_widget.dart`). 앱이 두 식당의 오늘~7일
+  식단과 끼니 끝나는 시각을 `meal_week_json`에 넣고(`pushMealWidgetWeek` — 캐시만 읽고 학교·Firestore에 묻지
+  않는다. `MealCache.save/saveWeek`·위젯 갱신·앱 시작 때), 위젯이 지금 시각으로 고른다(`resolveMealWidget`).
+  iOS는 끼니가 끝난 1초 뒤·자정마다 엔트리, Android는 그때 `AlarmManager`(`MEAL_TICK`). 규칙은 Dart 하나가 기준이고
+  Swift·Kotlin은 옮긴 것 — `test/meal_widget_test.dart` 표를 바꾸면 둘 다. 끝나는 시각은 `mealTimeRangeFor`에서만 온다.
+  옛 키(`widget_title`·`widget_time`·`widget_menu`)는 JSON이 없을 때(업데이트 직후)만 쓰인다.
+  Swift·Kotlin 포트는 Linux에서도 돌려 볼 수 있다: swift.org 툴체인·kotlinc로 순수 함수만 떼어 같은 표를 넣는다.
+- 위젯 **테마·투명도**는 `applyWidgetAppearance()` — 식단을 다시 받지 않고 값 두 개만 넣고 위젯 네 종류를 다시
+  그린다(2026-11-25). 예전엔 테마 버튼·투명도 슬라이더도 식단을 받은 뒤에야 적용돼 늦게 바뀌었다.
+- **설정 → 홈 위젯 화면**(2026-11-25, `lib/widget_settings_screen.dart`): 위젯 설정(식당·테마·투명도·즉시 업데이트)과
+  추가 방법 안내를 설정 첫 화면에서 옮겼다(사용자 결정). 맨 위 미리보기(`lib/widget_preview.dart`): 배경화면 같은 판 위에
+  식단·버스 small 두 개를 예시 글자로 그리고, 테마·투명도(슬라이더를 끄는 동안에도)·앱 테마 색·식당을 바로 따른다.
+  색은 `widgetPreviewPalette` — iOS `WidgetPalette`·Android `WidgetColors`와 같은 값이라 위젯 색을 바꾸면 여기도.
+  그림 확인: `KNUE_FONT_DIR=<NotoSansKR_*.ttf 폴더> flutter test test/widget_preview_png.dart` → build/widget_preview.png.
+- 식단 위젯을 앱에서 고칠 땐 `refreshMealWidgetNow()`를 부른다. `fetchMealApi`는 네트워크로 받았을 때만
+  위젯을 쓰고 캐시면 그냥 돌려줘서, "위젯 데이터 즉시 업데이트"가 아무것도 안 바꿨다(2026-11-25).
+  위젯 식당은 `widgetSource`다 — 식단 탭에서 다른 식당을 열어도 위젯은 안 바뀐다.
+- **위젯에서 식당 바꾸기(2026-11-25)**: 식단 위젯 오른쪽 위(넓으면 왼쪽 칸 아래) 동그란 버튼. 앱을 열지 않고
+  `meal_widget_source`(Dart `kMealWidgetSourceKey`)에 식당 id를 적는다 — iOS 17+는 위젯 확장 안
+  `ToggleMealSourceIntent`(MealWidget.swift — 새 파일을 만들면 project.pbxproj에 넣어야 해서 같은 파일에 뒀다),
+  iOS 15·16은 버튼이 없다. Android는 `MEAL_TOGGLE_SOURCE` 브로드캐스트. 이 값이 앱 설정(`widgetSource`)보다
+  먼저고, 앱에서 위젯 식당을 바꾸면 지운다(`clearMealWidgetSourceOverride`). 다음 식당 규칙은
+  `nextMealWidgetSource`(Dart·Swift·Kotlin 같다).
+- **글자·여백 규칙(2026-11-25)**: iOS `WidgetType`·`WidgetSpace`(WidgetShared.swift) = Android
+  `res/values/widget_dimens.xml`. 머리글 24(넓은 칸)/20(좁은 칸), 강조 16/14, 본문 13, 보조 12, 캡션 11, 여백 14.
+  화면 코드·레이아웃에 숫자를 직접 쓰지 않는다(일관성 테스트가 잡는다). 안내 문구는 `WidgetMessage` 하나.
+- **시스템이 칠하는 모드**: 위젯 구성은 `WidgetEnvReader { env in …EntryView(env: env) }`로 감싼다.
+  틴트 홈 화면·잠금화면(fullColor 아님)에선 막대를 진하게, 머리글·막대·가장 빠른 차는 `widgetAccentableCompat()`.
+  StandBy처럼 배경이 빠지면 앱 테마 대신 기기 설정을 따른다(라이트 고정이면 검은 바탕에 검은 글씨가 됐다).
+- **잠금화면 위젯(2026-11-25, iOS 16+)**: 새 kind가 아니라 같은 위젯에 잠금화면 크기를 더했다
+  (`widgetFamilies(home:lock:)`). 곧 떠나는 차(`BusLockView` — inline·circular·rectangular)와 식단
+  (`MealLockView` — inline·rectangular)만. 노선별 버스·공지는 넣지 않았다. 화면은 `family.isAccessory`로
+  가르고, 시스템이 한 색으로 칠하므로 색 막대·배경 없이 글자만 쓴다(배경은 `.widgetBackground(Color.clear)` —
+  빼면 iOS 17에서 빈 위젯). 버스 "N분 뒤"는 기존 매 분 엔트리를 그대로 탄다. Android엔 잠금화면 위젯이 없다.
 - iOS 위젯은 모두 `MealWidget` 확장 하나(`MealWidgetBundle`)에 들어 있다 — 새 파일은
   MealWidget 타깃 Sources에도 넣는다.
+  번들 id `com.knue.knuemate.MealWidget`, 구성 `Flutter/Generated.xcconfig`라 버전·빌드 번호가 앱과 같다.
+  App Group `group.knue.meal`(Runner·위젯 둘 다 entitlements). Codemagic이 위젯용 배포 프로파일도 받아
+  업로드까지 된다(2026-11-25 확인).
 - Android 위젯 확인: 에뮬레이터 `HomeWidgetPreferences.xml`을 `run-as`로 덮고
   `adb install -r`이면 다시 그린다.
+
+## 탭 수명 (2026-11-25 확인)
+
+하단 탭은 `PageView`(root_screen.dart)다. **화면에서 벗어난 탭은 dispose된다** — 버스 탭의 30초 갱신·
+Firestore 구독, 런 탭 타이머는 다른 탭으로 가면 같이 끝난다. 예외는 `wantKeepAlive` 탭(식단·지도)으로,
+살아남아도 `TickerMode`가 애니메이션만 멈춘다(`Timer.periodic`은 안 멈춘다 — keepAlive 탭에 주기 타이머를
+넣으면 직접 멈출 것). 예전 주석이 "모든 탭을 한꺼번에 마운트"라고 잘못 적어 숨은 탭 폴링을 의심한 적이 있다.
+
+**"지금 끼니"는 `widgetMealSlot` 하나**(constants.dart): 위젯·홈 카드가 그대로 쓰고, 식단 탭은
+`mealTabDefaultType`(같은 규칙, 오늘 끼니가 끝나면 오늘 마지막 끼니)을 쓴다. 시각을 따로 하드코딩하지 않는다.
+
+## 설정 탭 (2026-11-25)
+
+`lib/settings_screen.dart`(예전엔 4천 줄짜리 meal_screen.dart 안에 있었다). 첫 화면은 목록 위주 —
+하단 탭 순서·공지 알림·**홈 위젯**(별도 화면)·앱 테마·테마 색·앱 정보.
+
+- **설정 초기화는 설정 키만 지운다**(`PreferencesService.resetSettings`, 키 목록 `kSettingKeys`). 예전 `clearAll`은
+  `prefs.clear()`라 **개인 일정·D-day·식단/공지 캐시·학교 요청 간격(PersistentThrottle)·알림 기록**까지 지웠다.
+  누르면 확인 창을 먼저 띄운다. 설정 키를 새로 만들면 `kSettingKeys`에 넣는다(`test/settings_test.dart`).
+- "위젯에 테스트 데이터 넣기"(`testBasicWidgetFunction`)는 관리자 메뉴(버전 7번 탭)에만 있다.
 
 ## 사용 통계 (2026-11-15)
 
@@ -521,13 +603,6 @@ flutter test test/bus_preview.dart         # 버스 탭 화면 → build/bus_pre
   콘솔에서 정리해도 된다.
 - **Firebase Storage가 활성화돼 있지 않다.** 행사 포스터·제휴 이미지 업로드가
   전부 실패한다. Blaze 요금제가 필요할 수 있다.
-- iOS 식단 위젯: `MealWidget` 타깃은 등록했다(2026-11-23, 번들 id
-  `com.knue.knuemate.MealWidget`, 기본 구성 `Flutter/Generated.xcconfig`라 버전·빌드
-  번호가 앱과 같다). 이때 Runner에도 `Runner.entitlements`(App Group·푸시)를 처음
-  연결했다. Apple Developer의 App Group `group.knue.meal`과 두 App ID도 끝냈다
-  (개발 프로파일에 그룹·푸시가 들어간 것 확인). 남은 건 Codemagic이 위젯용 배포
-  프로비저닝 프로파일도 받게 하는 것.
-
 **알려진 한계**
 - 체육관/제2체육관 경계는 두 이름표의 중간에 생겨 실제 칸막이 자리와 다르다
   (체육관 910㎡ / 제2체육관 2202㎡, 실제로는 본관이 더 크다).

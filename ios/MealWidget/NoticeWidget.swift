@@ -302,10 +302,11 @@ private enum NoticeLoader {
 
 struct NoticeWidgetEntryView: View {
     var entry: NoticeEntry
+    var env: WidgetEnv = WidgetEnv()
     @Environment(\.colorScheme) private var systemColorScheme
     @Environment(\.widgetFamily) private var family
 
-    private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme) }
+    private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme, env: env) }
     /// 한 줄(13pt) 높이와 줄 사이 최소 간격. 들어가는 만큼 줄을 넣고 남는 높이는
     /// 줄 사이에 고르게 나눠 아래까지 채운다. 글이 모자라면 위에 모은다.
     private static let rowHeight: CGFloat = 17
@@ -326,17 +327,19 @@ struct NoticeWidgetEntryView: View {
                 if family == .systemLarge {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("공지")
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.system(size: WidgetType.headerLarge, weight: .bold))
                             .foregroundColor(palette.title)
-                        statusText.font(.system(size: 12))
+                            .widgetAccentableCompat()
+                        statusText.font(.system(size: WidgetType.sub))
                     }
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text("공지")
-                            .font(.system(size: 20, weight: .bold))
+                            .font(.system(size: WidgetType.headerSmall, weight: .bold))
                             .foregroundColor(palette.title)
+                            .widgetAccentableCompat()
                         Spacer(minLength: 0)
-                        statusText.font(.system(size: 11))
+                        statusText.font(.system(size: WidgetType.caption))
                     }
                 }
             }
@@ -345,9 +348,7 @@ struct NoticeWidgetEntryView: View {
 
             if let rows = entry.rows {
                 if rows.isEmpty {
-                    Text("즐겨찾기 게시판의 글이 아직 없어요.")
-                        .font(.system(size: 13))
-                        .foregroundColor(palette.body)
+                    WidgetMessage(text: "즐겨찾기 게시판의 글이 아직 없어요.", palette: palette)
                     Spacer(minLength: 0)
                 } else {
                     GeometryReader { geo in
@@ -356,13 +357,11 @@ struct NoticeWidgetEntryView: View {
                     }
                 }
             } else {
-                Text("앱을 한 번 열면\n공지를 불러옵니다.")
-                    .font(.system(size: 13))
-                    .foregroundColor(palette.body)
+                WidgetMessage(text: "앱을 한 번 열면\n공지를 불러옵니다.", palette: palette)
                 Spacer(minLength: 0)
             }
         }
-        .padding(14)
+        .padding(WidgetSpace.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .widgetBackground(palette.background)
         .widgetURL(URL(string: "knuemate://notice?homeWidget"))
@@ -409,19 +408,19 @@ struct NoticeWidgetEntryView: View {
         let boardColor = noticeBoardColor(row.b, boards: entry.boards, isDark: palette.isDark)
         // 게시판 색 막대 + 굵은 제목, 오른쪽 끝에 게시판 이름(그 색)·날짜.
         let content = HStack(alignment: .center, spacing: 6) {
-            WidgetBar(color: boardColor).frame(height: Self.rowHeight - 2)
+            WidgetBar(color: boardColor, env: env).frame(height: Self.rowHeight - 2)
             Text(row.t)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: WidgetType.body, weight: .semibold))
                 .foregroundColor(palette.title)
                 .lineLimit(1)
             Spacer(minLength: 2)
             Text(row.b)
-                .font(.system(size: 11))
+                .font(.system(size: WidgetType.caption))
                 .foregroundColor(boardColor)
                 .lineLimit(1)
                 .fixedSize()
             Text(Self.shortDate(row.d))
-                .font(.system(size: 11).monospacedDigit())
+                .font(.system(size: WidgetType.caption).monospacedDigit())
                 .foregroundColor(palette.muted)
                 .fixedSize()
         }
@@ -461,7 +460,7 @@ struct NoticeWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: NoticeProvider()) { entry in
-            NoticeWidgetEntryView(entry: entry)
+            WidgetEnvReader { env in NoticeWidgetEntryView(entry: entry, env: env) }
         }
         .configurationDisplayName("공지")
         .description("즐겨찾기 게시판마다 가장 최신 글을 봅니다.")

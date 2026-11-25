@@ -147,7 +147,7 @@ void main() {
       await PreferencesService.setRainbowMode(true);
 
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt(PreferencesService.keyThemeColor), picked.value,
+      expect(prefs.getInt(PreferencesService.keyThemeColor), picked.toARGB32(),
           reason: '저장된 사용자 색이 오늘의 색으로 덮여썼다');
     });
 

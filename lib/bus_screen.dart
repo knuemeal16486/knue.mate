@@ -517,7 +517,7 @@ class _BusAppScreenState extends State<BusAppScreen>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -574,8 +574,8 @@ class _BusAppScreenState extends State<BusAppScreen>
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: isDark
-                    ? Colors.white.withOpacity(0.05)
-                    : Colors.grey.withOpacity(0.05),
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.grey.withValues(alpha: 0.05),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -1173,7 +1173,7 @@ class _BusAppScreenState extends State<BusAppScreen>
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: primary.withOpacity(isDark ? 0.25 : 0.15),
+                    color: primary.withValues(alpha: isDark ? 0.25 : 0.15),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -1299,7 +1299,7 @@ class _BusAppScreenState extends State<BusAppScreen>
             color: Theme.of(context).cardColor,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1339,13 +1339,13 @@ class _BusAppScreenState extends State<BusAppScreen>
                             border: Border.all(
                               color: isSelected
                                   ? primary
-                                  : Colors.grey.withOpacity(0.3),
+                                  : Colors.grey.withValues(alpha: 0.3),
                               width: isSelected ? 2 : 1,
                             ),
                             boxShadow: isSelected
                                 ? [
                                     BoxShadow(
-                                      color: primary.withOpacity(
+                                      color: primary.withValues(alpha: 
                                         isDark ? 0.15 : 0.08,
                                       ),
                                       blurRadius: 20,
@@ -1382,10 +1382,10 @@ class _BusAppScreenState extends State<BusAppScreen>
                           vertical: 9,
                         ),
                         decoration: BoxDecoration(
-                          color: primary.withOpacity(isDark ? 0.15 : 0.08),
+                          color: primary.withValues(alpha: isDark ? 0.15 : 0.08),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: primary.withOpacity(isDark ? 0.4 : 0.3),
+                            color: primary.withValues(alpha: isDark ? 0.4 : 0.3),
                             width: 1,
                           ),
                         ),
@@ -1530,10 +1530,10 @@ class _BusAppScreenState extends State<BusAppScreen>
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: primary.withOpacity(isDark ? 0.15 : 0.08),
+                    color: primary.withValues(alpha: isDark ? 0.15 : 0.08),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: primary.withOpacity(isDark ? 0.25 : 0.18),
+                      color: primary.withValues(alpha: isDark ? 0.25 : 0.18),
                     ),
                   ),
                   child: Row(
@@ -1782,8 +1782,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                   // 흰 배경과 구분이 안 갈 만큼 옅어서("물 빠진" 느낌) 14%로 올렸다.
                   color: isNext
                       ? (isDark
-                            ? primary.withOpacity(0.2)
-                            : primary.withOpacity(0.14))
+                            ? primary.withValues(alpha: 0.2)
+                            : primary.withValues(alpha: 0.14))
                       : Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(20),
                   border: isNext
@@ -1794,8 +1794,8 @@ class _BusAppScreenState extends State<BusAppScreen>
                   boxShadow: [
                     BoxShadow(
                       color: isNext
-                          ? primary.withOpacity(isDark ? 0.1 : 0.05)
-                          : Colors.black.withOpacity(isDark ? 0.15 : 0.015),
+                          ? primary.withValues(alpha: isDark ? 0.1 : 0.05)
+                          : Colors.black.withValues(alpha: isDark ? 0.15 : 0.015),
                       blurRadius: isNext ? 32 : 12,
                       offset: Offset(0, isNext ? 6 : 4),
                     ),
@@ -1880,7 +1880,7 @@ class _BusAppScreenState extends State<BusAppScreen>
                                               : (isNext
                                                     ? (isDark
                                                           ? Colors.white70
-                                                          : primary.withOpacity(
+                                                          : primary.withValues(alpha: 
                                                               0.7,
                                                             ))
                                                     : (isDark
@@ -2034,7 +2034,7 @@ class _BusAppScreenState extends State<BusAppScreen>
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       backgroundColor: Theme.of(
                         context,
-                      ).primaryColor.withOpacity(0.1),
+                      ).primaryColor.withValues(alpha: 0.1),
                       foregroundColor: Theme.of(context).primaryColor,
                       elevation: 0,
                     ),
@@ -2219,7 +2219,7 @@ class _BusAppScreenState extends State<BusAppScreen>
                 ? primary
                 : (isDark
                       ? Colors.grey.shade600
-                      : Colors.grey.withOpacity(0.5)),
+                      : Colors.grey.withValues(alpha: 0.5)),
           ),
         ),
         child: Text(

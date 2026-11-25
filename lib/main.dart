@@ -26,6 +26,7 @@ import 'club_event_alert_service.dart';
 import 'exit_promo_settings.dart';
 import 'notice_feed.dart';
 import 'home_widgets.dart';
+import 'meal_widget.dart' show pushMealWidgetWeek;
 import 'package:url_launcher/url_launcher.dart';
 
 @pragma('vm:entry-point')
@@ -50,8 +51,8 @@ void callbackDispatcher() {
       } else if (task == kClubEventCheckTask) {
         await ClubEventAlertService.checkAndNotify();
       } else {
-        final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
-        await fetchMealApi(targetDate, defaultSourceNotifier.value);
+        // 위젯 설정의 식당으로 받고, 캐시로 끝나도 위젯을 다시 쓴다.
+        await refreshMealWidgetNow();
       }
     } catch (e) {
       debugPrint("Workmanager error: $e");
@@ -254,7 +255,7 @@ void main() async {
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       unawaited(() async {
         try {
-          await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+          await Workmanager().initialize(callbackDispatcher);
           await Workmanager().registerPeriodicTask(
             "meal_widget_update_task",
             "widget_update",
@@ -278,8 +279,11 @@ void main() async {
 }
 
 Widget _buildLoadingScreen(BuildContext context, Widget? child) {
+  // 네이티브 스플래시와 이어지게 기기 다크 모드를 따른다(색은 pubspec의
+  // flutter_native_splash와 같다). 예전엔 늘 흰 바탕에 흰 네모 로고였다.
+  final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
   return Scaffold(
-    backgroundColor: Colors.white,
+    backgroundColor: dark ? const Color(0xFF0D0D0F) : Colors.white,
     body: Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -287,7 +291,7 @@ Widget _buildLoadingScreen(BuildContext context, Widget? child) {
           // 원본이 2048×2048이라 그냥 그리면 100×100으로 보여주면서도
           // 디코드는 원본 크기로 한다 — 한 장에 램 16MB. cacheWidth를 주면
           // 디코드 단계에서 줄여 받는다(화면 배율을 고려해 넉넉히 300).
-          Image.asset('assets/icons/knue_icon.png', width: 100, height: 100, cacheWidth: 300, cacheHeight: 300, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
+          Image.asset(dark ? 'assets/icons/knue_icon_dark.png' : 'assets/icons/knue_icon.png', width: 100, height: 100, cacheWidth: 300, cacheHeight: 300, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
           const SizedBox(height: 24),
           const CircularProgressIndicator(strokeWidth: 3),
           const SizedBox(height: 16),
@@ -442,6 +446,7 @@ Future<void> _initializeHomeWidget() async {
     debugPrint("HomeWidget 초기화 시도...");
     await HomeWidget.setAppGroupId('group.knue.meal');
     unawaited(pushBusWidgetTimetable());
+    unawaited(pushMealWidgetWeek());
     unawaited(pushNoticeWidget());
     // 위젯 머리글 색은 앱 테마 색을 따른다(무지개 모드의 날마다 바뀌는 색 포함).
     unawaited(pushWidgetAccent(themeColor.value));
@@ -579,7 +584,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: color,
                   primary: color,
-                  secondary: color.withOpacity(0.8),
+                  secondary: color.withValues(alpha: 0.8),
                   brightness: Brightness.light,
                 ),
                 textTheme: _applyLetterSpacingDelta(
@@ -592,7 +597,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 cardColor: Colors.white,
                 cardTheme: CardThemeData(
                   elevation: 8,
-                  shadowColor: Colors.black.withOpacity(0.04),
+                  shadowColor: Colors.black.withValues(alpha: 0.04),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),
@@ -625,7 +630,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: color,
                   primary: color,
-                  secondary: color.withOpacity(0.8),
+                  secondary: color.withValues(alpha: 0.8),
                   brightness: Brightness.dark,
                   surface: const Color(0xFF161618),
                 ),
@@ -639,7 +644,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 cardColor: const Color(0xFF1E1E22),
                 cardTheme: CardThemeData(
                   elevation: 8,
-                  shadowColor: Colors.black.withOpacity(0.2),
+                  shadowColor: Colors.black.withValues(alpha: 0.2),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),

@@ -15,6 +15,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
 import 'home_widgets.dart' show pushNoticeWidget, redrawBusNoticeWidgets;
+import 'meal_widget.dart'
+    show clearMealWidgetSourceOverride, pushMealWidgetWeek;
 import 'meal_api.dart';
 import 'offline_cache.dart';
 import 'schedule_model.dart';
@@ -32,6 +34,11 @@ final ValueNotifier<MealSource> defaultSourceNotifier = ValueNotifier(
 );
 
 final ValueNotifier<double> widgetTransparency = ValueNotifier(0.0);
+
+/// iOS 위젯 바탕(0 기본·1 테마색·2 회색, `widgetBgColor`). iOS는 위젯 뒤 배경화면을 앱에 주지 않아
+/// 투명도를 올리면 시스템 회색이 비쳐 뿌옇게만 됐다(2026-11-25) — iOS는 투명도 대신 이걸 쓴다.
+/// Android는 실제로 배경화면이 비치므로 투명도 그대로.
+final ValueNotifier<int> widgetBgStyle = ValueNotifier(0);
 final ValueNotifier<ThemeMode> widgetTheme = ValueNotifier(ThemeMode.system);
 final ValueNotifier<MealSource> widgetSource = ValueNotifier(MealSource.a);
 
@@ -368,7 +375,9 @@ Future<KnueWeatherInfo?> fetchGangnaeWeather() async {
         windSpeed: (cw['windspeed'] as num).toDouble(),
       );
     }
-  } catch (_) {}
+  } catch (e) {
+    debugPrint('fetchGangnaeWeather 실패: $e');
+  }
   return null;
 }
 
@@ -545,6 +554,18 @@ MealType? mealEndingSoonNow(MealSource source, DateTime now) {
   return (type: served.first, isTomorrow: true);
 }
 
+/// 식단 탭을 열었을 때(또는 식당을 바꿨을 때) 고를 끼니. [widgetMealSlot]과 같은
+/// 규칙이다 — 다만 오늘 끼니가 다 끝났으면 내일로 넘기지 않고 오늘 마지막 끼니를
+/// 고른다(식단 탭은 오늘 날짜를 연다). 순수 함수 — 테스트 대상.
+///
+/// 예전엔 식단 탭이 9시·14시로 따로 정해서, 조식이 없는 교직원 식당을 9시 전에
+/// 열면 "아침"이 골라졌고 기숙사 점심이 13:30에 끝나도 14시까지 "점심"이었다.
+MealType mealTabDefaultType(MealSource source, DateTime now) {
+  final slot = widgetMealSlot(source, now);
+  if (!slot.isTomorrow) return slot.type;
+  return MealType.values.lastWhere((t) => mealTimeRangeFor(t, source) != null);
+}
+
 /// "11:30 ~ 13:30" 같은 문자열을 [day]의 실제 시작·종료 시각으로 푼다.
 /// 그 식당이 그 끼니를 운영하지 않으면 null. 순수 함수(테스트 대상).
 ///
@@ -700,7 +721,7 @@ void showToastOn(ScaffoldMessengerState messenger, String msg) {
       duration: const Duration(seconds: 1),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-      backgroundColor: Colors.grey.withOpacity(0.9),
+      backgroundColor: Colors.grey.withValues(alpha: 0.9),
     ),
   );
 }
@@ -805,7 +826,10 @@ class MealCache {
       DateTime date, MealSource source, Map<String, dynamic> data) async {
     // 내용이 그대로면 revision을 올리지 않는다 — 올리면 화면이 다시 로드하고,
     // 그게 또 갱신을 부르는 무한 루프가 된다.
-    if (await JsonCache.save(_key(date, source), data)) revision.value++;
+    if (await JsonCache.save(_key(date, source), data)) {
+      revision.value++;
+      unawaited(pushMealWidgetWeek()); // 위젯이 스스로 끼니를 넘기게 한 주치를 넣는다
+    }
   }
 
   /// 한 주치를 한꺼번에 저장한다. 하나라도 바뀌었으면 revision은 **한 번만**
@@ -818,7 +842,10 @@ class MealCache {
     for (final e in byDate.entries) {
       if (await JsonCache.save(_key(e.key, source), e.value)) changed = true;
     }
-    if (changed) revision.value++;
+    if (changed) {
+      revision.value++;
+      unawaited(pushMealWidgetWeek());
+    }
   }
 }
 
@@ -891,7 +918,7 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
       // Firestore 문서에는 lastUpdated(Timestamp)처럼 JSON으로 못 바꾸는 값이
       // 섞여 있다. 통째로 캐시에 넣으면 jsonEncode가 터지므로 메뉴만 남긴다.
       MealCache.save(date, source, {'meals': cachedMeal['meals']});
-      if (DateUtils.isSameDay(date, getWidgetTargetDate(source))) {
+      if (_isWidgetMeal(date, source)) {
         // 위젯 업데이트는 비동기로 진행하고 데이터를 즉시 반환
         _updateWidgetDataInternal(cachedMeal, source, date);
       }
@@ -930,7 +957,7 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
       FirebaseSyncService.saveMealWeekToFirestore(source, byDate); // await 없이
 
       final result = <String, dynamic>{'meals': week.mealsOn(date)};
-      if (DateUtils.isSameDay(date, getWidgetTargetDate(source))) {
+      if (_isWidgetMeal(date, source)) {
         _updateWidgetDataInternal(result, source, date);
       }
       return result;
@@ -941,6 +968,29 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
     debugPrint('fetchMealApi error: $e');
   }
   return _emptyMeals();
+}
+
+/// 받아 온 식단이 위젯이 보여 줄 식단(위젯 설정의 식당 · 위젯 끼니의 날)인지.
+/// 예전엔 식당을 안 봐서, 식단 탭에서 다른 식당을 열면 위젯이 그 식당으로 바뀌었다.
+bool _isWidgetMeal(DateTime date, MealSource source) =>
+    source == widgetSource.value &&
+    DateUtils.isSameDay(date, getWidgetTargetDate(source));
+
+/// 홈 위젯 식단을 지금 다시 채운다. 메뉴가 있으면 true.
+///
+/// [fetchMealApi]는 네트워크로 받았을 때만 위젯을 고친다 — 캐시가 있으면 캐시만
+/// 돌려주고 끝이라, "위젯 데이터 즉시 업데이트"·위젯 설정 변경이 위젯을 안
+/// 고쳤다(설정 변경은 먼저 넣은 "불러오는 중..."이 그대로 남았다). 그리고 저녁
+/// 이후엔 위젯이 내일 끼니를 보여 주는데 오늘 날짜로 받고 있었다.
+/// 여기서는 위젯 날짜로 받고, 받은 값(캐시든 네트워크든)으로 항상 다시 쓴다.
+Future<bool> refreshMealWidgetNow([MealSource? source]) async {
+  final s = source ?? widgetSource.value;
+  final date = getWidgetTargetDate(s);
+  final data = await fetchMealApi(date, s);
+  if (data is! Map) return false;
+  final meals = Map<String, dynamic>.from(data);
+  await _updateWidgetDataInternal(meals, s, date);
+  return mealHasMenu(meals);
 }
 
 Map<String, dynamic> _emptyMeals() => {
@@ -1002,6 +1052,10 @@ Future<void> _updateWidgetDataInternal(
       }
     }
 
+    // 위젯이 스스로 끼니를 넘기는 한 주치(meal_widget.dart). 아래 옛 키는
+    // JSON을 못 읽는 경우(업데이트 직후 등)에 쓰인다.
+    await pushMealWidgetWeek(redraw: false);
+
     // 데이터 저장
     await HomeWidget.saveWidgetData<String>('widget_title', sourceName);
     await HomeWidget.saveWidgetData<String>('widget_time', timeText);
@@ -1013,6 +1067,7 @@ Future<void> _updateWidgetDataInternal(
       'transparency',
       widgetTransparency.value.toString(),
     );
+    await HomeWidget.saveWidgetData<int>('bgStyle', widgetBgStyle.value);
 
     // [수정] 위젯 업데이트 시 전체 패키지명 사용 (가장 확실한 방법)
     // iOSName은 WidgetKit의 kind 문자열 — ios/MealWidget/MealWidget.swift의
@@ -1032,6 +1087,41 @@ Future<void> _updateWidgetDataInternal(
   }
 }
 
+/// 위젯 테마·투명도만 바꿀 때. 식단은 다시 받지 않는다 — 값만 넣고 위젯 네 종류를
+/// 바로 다시 그린다. 예전엔 테마 버튼·투명도 슬라이더도 식단을 받아 온 뒤에야 값을
+/// 써서(공용 캐시 최대 1.5초·학교 서버까지) 위젯이 늦게 바뀌었다.
+Future<void> applyWidgetAppearance({ThemeMode? theme, double? transparency, int? bgStyle}) async {
+  if (theme != null) widgetTheme.value = theme;
+  if (transparency != null) widgetTransparency.value = transparency;
+  if (bgStyle != null) {
+    widgetBgStyle.value = bgStyle;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(PreferencesService.keyWidgetBgStyle, bgStyle);
+  }
+  await PreferencesService.saveWidgetSettings(
+    widgetTransparency.value,
+    widgetTheme.value,
+    widgetSource.value,
+  );
+  try {
+    await HomeWidget.saveWidgetData<int>('themeMode', widgetTheme.value.index);
+    await HomeWidget.saveWidgetData<String>(
+      'transparency',
+      widgetTransparency.value.toString(),
+    );
+    await HomeWidget.saveWidgetData<int>('bgStyle', widgetBgStyle.value);
+    await HomeWidget.updateWidget(
+      name: 'MealWidgetProvider',
+      androidName: 'MealWidgetProvider',
+      qualifiedAndroidName: 'com.knue.knuemate.MealWidgetProvider',
+      iOSName: kIosMealWidgetKind,
+    );
+  } catch (e) {
+    debugPrint('위젯 모양 적용 실패: $e');
+  }
+  await redrawBusNoticeWidgets();
+}
+
 // [4] 설정 저장 및 강제 업데이트
 Future<void> saveWidgetSettingsAndUpdate(
   double trans,
@@ -1044,23 +1134,13 @@ Future<void> saveWidgetSettingsAndUpdate(
   widgetSource.value = source;
 
   await PreferencesService.saveWidgetSettings(trans, theme, source);
+  // 위젯 버튼으로 골라 둔 식당보다 방금 앱에서 고른 식당이 먼저다.
+  await clearMealWidgetSourceOverride();
 
   try {
-    // 로딩 상태 먼저 표시
-    await HomeWidget.saveWidgetData<String>(
-      'widget_menu',
-      "데이터를 불러오는 중...\n(최대 30초 소요)",
-    );
-    await HomeWidget.updateWidget(
-      name: 'MealWidgetProvider',
-      androidName: 'MealWidgetProvider',
-      iOSName: kIosMealWidgetKind,
-    );
-
-    // 실제 데이터 호출
-    final targetDate = getWidgetTargetDate(source);
-    await fetchMealApi(targetDate, source);
-
+    // 예전엔 "불러오는 중..."을 먼저 넣었는데, 캐시로 끝나면 위젯이 그 글자에
+    // 머물렀다. 받은 값으로 바로 덮는다.
+    await refreshMealWidgetNow(source);
     if (context.mounted) showToast(context, "위젯 설정이 적용되었습니다.");
   } catch (e) {
     if (context.mounted) showToast(context, "데이터 갱신 실패");
@@ -1069,8 +1149,7 @@ Future<void> saveWidgetSettingsAndUpdate(
 
 Future<void> forceUpdateWidgetWithCurrentSettings() async {
   await PreferencesService.loadSettings();
-  final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
-  await fetchMealApi(targetDate, defaultSourceNotifier.value);
+  await refreshMealWidgetNow();
 }
 
 Future<void> testBasicWidgetFunction() async {
@@ -1095,6 +1174,7 @@ class PreferencesService {
   static const String keyThemeMode = 'theme_mode';
   static const String keyMealSource = 'meal_source';
   static const String keyWidgetTrans = 'widget_trans';
+  static const String keyWidgetBgStyle = 'widget_bg_style';
   static const String keyWidgetTheme = 'widget_theme';
   static const String keyWidgetSource = 'widget_source';
   static const String keyTabOrder = 'tab_order_v2'; // v1 → v2
@@ -1186,6 +1266,7 @@ class PreferencesService {
       defaultSourceNotifier.value = MealSource.values[sourceIndex];
 
     widgetTransparency.value = prefs.getDouble(keyWidgetTrans) ?? 0.0;
+    widgetBgStyle.value = prefs.getInt(keyWidgetBgStyle) ?? 0;
     final int? wTheme = prefs.getInt(keyWidgetTheme);
     if (wTheme != null) widgetTheme.value = ThemeMode.values[wTheme];
     final int? wSource = prefs.getInt(keyWidgetSource);
@@ -1316,7 +1397,7 @@ class PreferencesService {
 
   static Future<void> saveThemeColor(Color color) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(keyThemeColor, color.value);
+    await prefs.setInt(keyThemeColor, color.toARGB32());
   }
 
   /// 무지개 모드 토글. 켜면 오늘의 색을 즉시 적용하고, 끄면 저장해둔
@@ -1362,16 +1443,41 @@ class PreferencesService {
     widgetSource.value = source;
   }
 
-  static Future<void> clearAll() async {
+  /// [resetSettings]가 지우는 키 — **설정만**. 개인 일정·D-day, 식단·공지 캐시,
+  /// 학교 요청 간격(PersistentThrottle), 알림 기록(이미 알린 글)은 남긴다.
+  /// 예전 `clearAll`은 `prefs.clear()`로 이것들까지 지웠다(2026-11-25 바로잡음).
+  static const List<String> kSettingKeys = [
+    keyThemeColor,
+    keyRainbowMode,
+    keyThemeMode,
+    keyMealSource,
+    keyWidgetTrans,
+    keyWidgetBgStyle,
+    keyWidgetTheme,
+    keyWidgetSource,
+    keyTabOrder,
+    'tab_order_v1',
+    keyNoticeKeywords,
+    keyFavBoards,
+    keyNoticeAlarm,
+    keyNoticeAlertMode,
+    keyNoticeAlertHours,
+  ];
+
+  /// 설정을 기본값으로. 저장소의 설정 키만 지우고, 화면들이 구독 중인 알림자도
+  /// 기본값으로 되돌려 재시작 없이 반영되게 한다.
+  static Future<void> resetSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    for (final k in kSettingKeys) {
+      await prefs.remove(k);
+    }
     themeColor.value = const Color(0xFF2563EB);
+    rainbowModeNotifier.value = false;
     themeModeNotifier.value = ThemeMode.system;
     widgetTransparency.value = 0.0;
+    widgetBgStyle.value = 0;
     widgetTheme.value = ThemeMode.system;
     widgetSource.value = MealSource.a;
-    // prefs.clear()는 저장소만 지운다 — 이미 화면들이 구독 중인 나머지 알림자들도
-    // 기본값으로 되돌려야 재시작 없이도 화면이 초기화 상태를 반영한다.
     defaultSourceNotifier.value = MealSource.a;
     tabOrder.value = [
       AppTab.home,
@@ -1385,8 +1491,6 @@ class PreferencesService {
     noticeAlarmOn.value = true;
     noticeAlertMode.value = NoticeAlertMode.instant;
     noticeAlertHours.value = [9, 18];
-    ddayItems.value = [];
-    personalEvents.value = [];
   }
 }
 
@@ -1405,7 +1509,9 @@ class NotificationService {
     tz.initializeTimeZones();
     try {
       tz.setLocalLocation(tz.getLocation('Asia/Seoul'));
-    } catch (_) {}
+    } catch (_) {
+      // 시간대를 못 찾으면 기기 기본값을 쓴다.
+    }
 
     // flutter_local_notifications는 아이콘 이름을 drawable 타입으로만 찾는다
     // (res/drawable-*/ic_stat_notify.png). "@mipmap/..." 같은 XML 참조 문법이

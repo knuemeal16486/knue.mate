@@ -84,7 +84,7 @@ class _HousingNoteSheetState extends State<HousingNoteSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 16),
-      child: Column(
+      child: Material(type: MaterialType.transparency, child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Center(
@@ -323,7 +323,7 @@ class _HousingNoteSheetState extends State<HousingNoteSheet> {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 }
