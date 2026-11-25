@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 홈 위젯 글자·여백 규칙. iOS WidgetShared.swift의 WidgetType·WidgetSpace와 같은 값이다
+     (test/native_id_consistency_test.dart가 맞춰 본다). 레이아웃에 숫자를 직접 쓰지 않는다. -->
+<resources>
+    <!-- 넓은 위젯 왼쪽 칸·큰 위젯의 머리글("점심"·"버스") -->
+    <dimen name="widget_text_header_large">24sp</dimen>
+    <!-- 좁은 위젯·한 줄 머리글 -->
+    <dimen name="widget_text_header_small">20sp</dimen>
+    <!-- 곧 떠나는 차(작은 위젯)의 노선·시각 -->
+    <dimen name="widget_text_emphasis">16sp</dimen>
+    <dimen name="widget_text_emphasis_sub">14sp</dimen>
+    <!-- 본문(메뉴·노선·공지 제목) -->
+    <dimen name="widget_text_body">13sp</dimen>
+    <!-- 머리글 아래 보조 줄 -->
+    <dimen name="widget_text_sub">12sp</dimen>
+    <!-- 시각·게시판·"N분 뒤" -->
+    <dimen name="widget_text_caption">11sp</dimen>
+    <dimen name="widget_padding">14dp</dimen>
+</resources>

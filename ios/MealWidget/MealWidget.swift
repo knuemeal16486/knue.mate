@@ -310,10 +310,11 @@ func mealMenuFitMedium(_ items: [String], height: CGFloat) -> MealMenuFit {
 
 struct MealWidgetEntryView: View {
     var entry: MealEntry
+    var env: WidgetEnv = WidgetEnv()
     @Environment(\.colorScheme) private var systemColorScheme
     @Environment(\.widgetFamily) private var family
 
-    private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme) }
+    private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme, env: env) }
 
     var body: some View {
         let header = mealHeaderParts(entry.time)
@@ -326,7 +327,7 @@ struct MealWidgetEntryView: View {
                     WidgetBigHeader(title: header.meal,
                                     subs: [[entry.title, header.day].filter { !$0.isEmpty }
                                         .joined(separator: " · ")],
-                                    palette: palette, size: 22, underline: palette.accent, underlineWidth: 48)
+                                    palette: palette, size: WidgetType.headerSmall, underline: palette.accent, underlineWidth: 48)
                     GeometryReader { geo in
                         if isMessage {
                             messageText
@@ -373,7 +374,7 @@ struct MealWidgetEntryView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(14)
+        .padding(WidgetSpace.padding)
         .widgetBackground(palette.background)
         // 위젯을 누르면 앱이 이 URL로 열린다. Flutter 쪽(main.dart)이
         // home_widget의 클릭 스트림에서 이 host("meal")를 보고 식단 탭으로
@@ -383,10 +384,8 @@ struct MealWidgetEntryView: View {
 
     /// 메뉴 대신 안내 문구(앱을 열어야 함·운영 안 함).
     private var messageText: some View {
-        Text(entry.menu)
-            .font(.system(size: 13))
-            .foregroundColor(palette.body)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        WidgetMessage(text: entry.menu, palette: palette)
+            .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -425,7 +424,7 @@ struct MealWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: MealProvider()) { entry in
-            MealWidgetEntryView(entry: entry)
+            WidgetEnvReader { env in MealWidgetEntryView(entry: entry, env: env) }
         }
         .configurationDisplayName("청람 밥상")
         .description("오늘의 학식 메뉴를 홈 화면에서 바로 봅니다.")

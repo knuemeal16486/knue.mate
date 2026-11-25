@@ -443,6 +443,12 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 - 식단 위젯을 앱에서 고칠 땐 `refreshMealWidgetNow()`를 부른다. `fetchMealApi`는 네트워크로 받았을 때만
   위젯을 쓰고 캐시면 그냥 돌려줘서, "위젯 데이터 즉시 업데이트"가 아무것도 안 바꿨다(2026-11-25).
   위젯 식당은 `widgetSource`다 — 식단 탭에서 다른 식당을 열어도 위젯은 안 바뀐다.
+- **글자·여백 규칙(2026-11-25)**: iOS `WidgetType`·`WidgetSpace`(WidgetShared.swift) = Android
+  `res/values/widget_dimens.xml`. 머리글 24(넓은 칸)/20(좁은 칸), 강조 16/14, 본문 13, 보조 12, 캡션 11, 여백 14.
+  화면 코드·레이아웃에 숫자를 직접 쓰지 않는다(일관성 테스트가 잡는다). 안내 문구는 `WidgetMessage` 하나.
+- **시스템이 칠하는 모드**: 위젯 구성은 `WidgetEnvReader { env in …EntryView(env: env) }`로 감싼다.
+  틴트 홈 화면·잠금화면(fullColor 아님)에선 막대를 진하게, 머리글·막대·가장 빠른 차는 `widgetAccentableCompat()`.
+  StandBy처럼 배경이 빠지면 앱 테마 대신 기기 설정을 따른다(라이트 고정이면 검은 바탕에 검은 글씨가 됐다).
 - iOS 위젯은 모두 `MealWidget` 확장 하나(`MealWidgetBundle`)에 들어 있다 — 새 파일은
   MealWidget 타깃 Sources에도 넣는다.
 - Android 위젯 확인: 에뮬레이터 `HomeWidgetPreferences.xml`을 `run-as`로 덮고

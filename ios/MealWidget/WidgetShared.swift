@@ -58,13 +58,15 @@ struct WidgetPalette {
     private let accentLight: Color?
     private let accentDark: Color?
 
-    init(_ settings: WidgetThemeSettings, system: ColorScheme) {
-        switch settings.themeModeIndex {
+    init(_ settings: WidgetThemeSettings, system: ColorScheme, env: WidgetEnv = WidgetEnv()) {
+        // 배경이 빠진 자리(StandBy 등)는 시스템이 깐 바탕 위라 앱 테마(라이트 고정 등)를
+        // 따르면 검은 바탕에 검은 글씨가 된다 — 그땐 기기 설정을 따른다.
+        switch (env.showsBackground ? settings.themeModeIndex : 0) {
         case 1: isDark = false
         case 2: isDark = true
         default: isDark = system == .dark
         }
-        transparency = settings.transparency
+        transparency = env.showsBackground ? settings.transparency : 1
         accentLight = settings.accentLight
         accentDark = settings.accentDark
     }
@@ -130,12 +132,16 @@ extension WidgetConfiguration {
 // 크고 굵은 머리글 + 흐린 보조 줄, 항목마다 왼쪽 옅은 색 막대.
 
 /// 항목 왼쪽의 옅은 세로 막대. 높이는 쓰는 쪽에서 정한다.
+/// 시스템이 색을 칠하는 모드(틴트 홈 화면·잠금화면)에선 옅으면 안 보여서 진하게,
+/// 강조색 무리로 넣는다.
 struct WidgetBar: View {
     let color: Color
+    var env: WidgetEnv = WidgetEnv()
     var body: some View {
         RoundedRectangle(cornerRadius: 1.5)
-            .fill(color.opacity(0.4))
+            .fill(color.opacity(env.fullColor ? 0.4 : 1))
             .frame(width: 3)
+            .widgetAccentableCompat()
     }
 }
 
@@ -144,7 +150,7 @@ struct WidgetBigHeader: View {
     let title: String
     let subs: [String]
     let palette: WidgetPalette
-    var size: CGFloat = 24
+    var size: CGFloat = WidgetType.headerLarge
     /// 제목 바로 밑 짧은 가로 막대 색(식단 위젯 — 앱 테마 색). nil이면 없음.
     var underline: Color? = nil
     /// 가로 막대 길이(pt). 식단 small 48, medium 72(Android meal_top_line·meal_side_line과 같다).
@@ -157,16 +163,18 @@ struct WidgetBigHeader: View {
                 .foregroundColor(palette.title)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .widgetAccentableCompat()
             if let underline {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(underline)
                     .frame(width: underlineWidth, height: 3)
                     .padding(.top, 3)
                     .padding(.bottom, 3)
+                    .widgetAccentableCompat()
             }
             ForEach(Array(subs.enumerated()), id: \.offset) { _, s in
                 Text(s)
-                    .font(.system(size: 12))
+                    .font(.system(size: WidgetType.sub))
                     .foregroundColor(palette.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -180,4 +188,95 @@ func widgetRGB(_ v: UInt32) -> Color {
     Color(red: Double((v >> 16) & 0xFF) / 255,
           green: Double((v >> 8) & 0xFF) / 255,
           blue: Double(v & 0xFF) / 255)
+}
+
+// ── 글자·여백 규칙 ──
+// 세 위젯이 같은 값을 쓴다. Android res/values/widget_dimens.xml과 같다
+// (test/native_id_consistency_test.dart가 맞춰 본다). 화면 코드에 숫자를 직접 쓰지 않는다.
+enum WidgetType {
+    /// 넓은 위젯 왼쪽 칸·큰 위젯 머리글("점심"·"버스"·"공지").
+    static let headerLarge: CGFloat = 24
+    /// 좁은 위젯·한 줄 머리글.
+    static let headerSmall: CGFloat = 20
+    /// 곧 떠나는 차(small)의 노선·시각.
+    static let emphasis: CGFloat = 16
+    static let emphasisSub: CGFloat = 14
+    /// 본문 — 메뉴·노선·공지 제목·안내 문구.
+    static let body: CGFloat = 13
+    /// 머리글 아래 보조 줄.
+    static let sub: CGFloat = 12
+    /// 시각·게시판·"N분 뒤".
+    static let caption: CGFloat = 11
+}
+
+enum WidgetSpace {
+    static let padding: CGFloat = 14
+}
+
+// ── 시스템이 위젯을 어떻게 그리는지 ──
+
+/// iOS 16+ 렌더링 모드(틴트 홈 화면·잠금화면은 fullColor가 아니다)와
+/// iOS 17+ 배경 표시 여부(StandBy 등에선 시스템이 배경을 뺀다).
+struct WidgetEnv {
+    var fullColor = true
+    var showsBackground = true
+}
+
+/// [WidgetEnv]를 읽어 넘긴다. 배포 대상이 iOS 15라 @Environment를 버전별로 가른다.
+struct WidgetEnvReader<Content: View>: View {
+    @ViewBuilder let content: (WidgetEnv) -> Content
+
+    var body: some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            WidgetEnvReader17(content: content)
+        } else if #available(iOSApplicationExtension 16.0, *) {
+            WidgetEnvReader16(content: content)
+        } else {
+            content(WidgetEnv())
+        }
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct WidgetEnvReader17<Content: View>: View {
+    @Environment(\.widgetRenderingMode) private var mode
+    @Environment(\.showsWidgetContainerBackground) private var showsBackground
+    let content: (WidgetEnv) -> Content
+    var body: some View {
+        content(WidgetEnv(fullColor: mode == .fullColor, showsBackground: showsBackground))
+    }
+}
+
+@available(iOSApplicationExtension 16.0, *)
+private struct WidgetEnvReader16<Content: View>: View {
+    @Environment(\.widgetRenderingMode) private var mode
+    let content: (WidgetEnv) -> Content
+    var body: some View {
+        content(WidgetEnv(fullColor: mode == .fullColor))
+    }
+}
+
+extension View {
+    /// 틴트 모드에서 강조색으로 칠할 무리(머리글·막대·가장 먼저 오는 차). iOS 15는 그대로.
+    @ViewBuilder
+    func widgetAccentableCompat(_ on: Bool = true) -> some View {
+        if #available(iOSApplicationExtension 16.0, *) {
+            widgetAccentable(on)
+        } else {
+            self
+        }
+    }
+}
+
+/// 비어 있음·오래됨·운영 없음 안내. 세 위젯이 같은 모양이다.
+struct WidgetMessage: View {
+    let text: String
+    let palette: WidgetPalette
+    var body: some View {
+        Text(text)
+            .font(.system(size: WidgetType.body))
+            .foregroundColor(palette.body)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
 }

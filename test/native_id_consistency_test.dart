@@ -309,6 +309,42 @@ void main() {
           contains('class BusNextWidgetProvider : BusWidgetProvider()'));
     });
 
+    // 글자·여백 규칙(2단계 디자인 정리) — iOS WidgetType·WidgetSpace와
+    // Android widget_dimens.xml이 같은 값이어야 두 기기 위젯이 같아 보인다.
+    test('위젯 글자·여백 규칙이 iOS·Android에서 같다', () {
+      final swift = read('ios/MealWidget/WidgetShared.swift');
+      final xml = read('android/app/src/main/res/values/widget_dimens.xml');
+      const names = {
+        'headerLarge': 'widget_text_header_large',
+        'headerSmall': 'widget_text_header_small',
+        'emphasis': 'widget_text_emphasis',
+        'emphasisSub': 'widget_text_emphasis_sub',
+        'body': 'widget_text_body',
+        'sub': 'widget_text_sub',
+        'caption': 'widget_text_caption',
+        'padding': 'widget_padding',
+      };
+      names.forEach((ios, android) {
+        final a = RegExp('static let $ios: CGFloat = (\\d+)').firstMatch(swift)?[1];
+        final b = RegExp('name="$android">(\\d+)(sp|dp)<').firstMatch(xml)?[1];
+        expect(a, isNotNull, reason: ios);
+        expect(a, b, reason: '$ios ↔ $android');
+      });
+      // 레이아웃·Swift 화면 코드에 글자 크기 숫자를 직접 쓰지 않는다.
+      for (final f in [
+        'home_widget_layout.xml',
+        'bus_widget_layout.xml',
+        'notice_widget_layout.xml',
+      ]) {
+        expect(read('android/app/src/main/res/layout/$f'),
+            isNot(matches(RegExp(r'textSize="\d'))), reason: f);
+      }
+      for (final f in ['MealWidget', 'BusWidget', 'NoticeWidget']) {
+        expect(read('$iosDir/$f.swift'),
+            isNot(matches(RegExp(r'\.system\(size: \d'))), reason: f);
+      }
+    });
+
     // 투명 위젯에서 글씨를 진하게 바꾸는 기준 — 두 기기에서 같아야 한다.
     test('위젯 "배경화면 위 글씨" 투명도 기준이 iOS·Android에서 같다', () {
       final swift = RegExp(r'kWidgetOnWallpaperTransparency = ([0-9.]+)')

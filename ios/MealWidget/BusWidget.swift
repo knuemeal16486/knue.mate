@@ -183,10 +183,11 @@ enum BusWidgetStyle {
 struct BusWidgetEntryView: View {
     var entry: BusEntry
     var style: BusWidgetStyle = .routes
+    var env: WidgetEnv = WidgetEnv()
     @Environment(\.colorScheme) private var systemColorScheme
     @Environment(\.widgetFamily) private var family
 
-    private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme) }
+    private var palette: WidgetPalette { WidgetPalette(entry.theme, system: systemColorScheme, env: env) }
     private var isSmall: Bool { family == .systemSmall }
     private var dayLabel: String { isBusHoliday(entry.date) ? "주말" : "평일" }
 
@@ -196,7 +197,7 @@ struct BusWidgetEntryView: View {
                 if isSmall {
                     VStack(alignment: .leading, spacing: 8) {
                         WidgetBigHeader(title: "버스", subs: ["학교 출발 · " + dayLabel],
-                                        palette: palette, size: 20)
+                                        palette: palette, size: WidgetType.headerSmall)
                         if style == .next { nextSmall(routes) } else { routeRows(routes) }
                     }
                 } else {
@@ -211,14 +212,13 @@ struct BusWidgetEntryView: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    WidgetBigHeader(title: "버스", subs: ["학교 출발"], palette: palette, size: 20)
-                    Text("앱을 한 번 열면\n시간표를 불러옵니다.")
-                        .font(.system(size: 13))
-                        .foregroundColor(palette.body)
+                    WidgetBigHeader(title: "버스", subs: ["학교 출발"], palette: palette,
+                                    size: WidgetType.headerSmall)
+                    WidgetMessage(text: "앱을 한 번 열면\n시간표를 불러옵니다.", palette: palette)
                 }
             }
         }
-        .padding(14)
+        .padding(WidgetSpace.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .widgetBackground(palette.background)
         .widgetURL(URL(string: "knuemate://bus?homeWidget"))
@@ -243,29 +243,30 @@ struct BusWidgetEntryView: View {
     private func routeRow(_ route: BusRoute, index: Int, soonest: Bool) -> some View {
         let next = nextDepartures(route.times(on: entry.date), now: entry.date, n: isSmall ? 1 : 2)
         HStack(alignment: .center, spacing: 6) {
-            WidgetBar(color: busRouteColor(index, isDark: palette.isDark)).frame(height: 14)
+            WidgetBar(color: busRouteColor(index, isDark: palette.isDark), env: env).frame(height: 14)
             // small은 폭이 좁아 노선 이름이 시각을 밀어내지 않게 — 이름이 줄고 시각은 그대로.
             Text(route.label)
-                .font(.system(size: isSmall ? 12 : 13, weight: .bold))
+                .font(.system(size: isSmall ? WidgetType.sub : WidgetType.body, weight: .bold))
                 .foregroundColor(palette.title)
                 .minimumScaleFactor(0.75)
                 .frame(width: isSmall ? nil : 66, alignment: .leading)
             if isSmall { Spacer(minLength: 4) }
             if next.isEmpty {
                 Text(isSmall ? "운행 끝" : "오늘 운행 끝")
-                    .font(.system(size: 12))
+                    .font(.system(size: WidgetType.sub))
                     .foregroundColor(palette.muted)
                     .fixedSize()
             } else {
                 // 가장 먼저 오는 차는 주황으로 눈에 띄게.
                 Text(next[0])
-                    .font(.system(size: isSmall ? 12 : 13, weight: .semibold).monospacedDigit())
+                    .font(.system(size: isSmall ? WidgetType.sub : WidgetType.body, weight: .semibold).monospacedDigit())
                     .foregroundColor(soonest ? palette.highlight : palette.body)
+                    .widgetAccentableCompat(soonest)
                     .fixedSize()
                 if !isSmall {
                     if next.count > 1 {
                         Text(next[1])
-                            .font(.system(size: 13).monospacedDigit())
+                            .font(.system(size: WidgetType.body).monospacedDigit())
                             .foregroundColor(palette.muted)
                             .fixedSize()
                     }
@@ -284,16 +285,17 @@ struct BusWidgetEntryView: View {
         let up = upcomingDepartures(routes.map { $0.times(on: entry.date) }, now: entry.date, n: 3)
         if let first = up.first {
             HStack(alignment: .top, spacing: 7) {
-                WidgetBar(color: busRouteColor(first.route, isDark: palette.isDark))
+                WidgetBar(color: busRouteColor(first.route, isDark: palette.isDark), env: env)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(routes[first.route].label)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: WidgetType.emphasis, weight: .bold))
                         .foregroundColor(palette.title)
                         .minimumScaleFactor(0.8)
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text(first.time)
-                            .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                            .font(.system(size: WidgetType.emphasisSub, weight: .semibold).monospacedDigit())
                             .foregroundColor(palette.highlight)
+                            .widgetAccentableCompat()
                         eta(first.time, strong: true)
                     }
                 }
@@ -304,7 +306,7 @@ struct BusWidgetEntryView: View {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(Array(up.dropFirst().enumerated()), id: \.offset) { _, d in
                     Text("다음 \(routes[d.route].label) \(d.time)")
-                        .font(.system(size: 11).monospacedDigit())
+                        .font(.system(size: WidgetType.caption).monospacedDigit())
                         .foregroundColor(palette.muted)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -312,7 +314,7 @@ struct BusWidgetEntryView: View {
             }
         } else {
             Text("오늘 운행 끝")
-                .font(.system(size: 13))
+                .font(.system(size: WidgetType.body))
                 .foregroundColor(palette.muted)
         }
     }
@@ -322,22 +324,23 @@ struct BusWidgetEntryView: View {
         let up = upcomingDepartures(routes.map { $0.times(on: entry.date) }, now: entry.date, n: 5)
         if up.isEmpty {
             Text("오늘 운행 끝")
-                .font(.system(size: 13))
+                .font(.system(size: WidgetType.body))
                 .foregroundColor(palette.muted)
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(up.enumerated()), id: \.offset) { i, d in
                     if i > 0 { Spacer(minLength: 2) }
                     HStack(alignment: .center, spacing: 6) {
-                        WidgetBar(color: busRouteColor(d.route, isDark: palette.isDark)).frame(height: 14)
+                        WidgetBar(color: busRouteColor(d.route, isDark: palette.isDark), env: env).frame(height: 14)
                         Text(routes[d.route].label)
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: WidgetType.body, weight: .bold))
                             .foregroundColor(palette.title)
                             .minimumScaleFactor(0.75)
                             .frame(width: 72, alignment: .leading)
                         Text(d.time)
-                            .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                            .font(.system(size: WidgetType.body, weight: .semibold).monospacedDigit())
                             .foregroundColor(i == 0 ? palette.highlight : palette.body)
+                            .widgetAccentableCompat(i == 0)
                             .fixedSize()
                         Spacer(minLength: 2)
                         eta(d.time, strong: i == 0)
@@ -356,7 +359,7 @@ struct BusWidgetEntryView: View {
     private func eta(_ hhmm: String, strong: Bool) -> some View {
         if let d = departureDate(hhmm) {
             Text(busEtaLabel(Int((d.timeIntervalSince(entry.date) / 60).rounded(.up))))
-                .font(.system(size: 11, weight: strong ? .bold : .regular).monospacedDigit())
+                .font(.system(size: WidgetType.caption, weight: strong ? .bold : .regular).monospacedDigit())
                 .foregroundColor(strong ? palette.highlight : palette.muted)
                 .fixedSize()
         }
@@ -374,7 +377,7 @@ struct BusWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: BusProvider()) { entry in
-            BusWidgetEntryView(entry: entry)
+            WidgetEnvReader { env in BusWidgetEntryView(entry: entry, env: env) }
         }
         .configurationDisplayName("학교 출발 버스 · 노선별")
         .description("교원대에서 나가는 513·514·518·913 노선마다 다음 차 시각.")
@@ -389,7 +392,7 @@ struct BusNextWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: BusProvider()) { entry in
-            BusWidgetEntryView(entry: entry, style: .next)
+            WidgetEnvReader { env in BusWidgetEntryView(entry: entry, style: .next, env: env) }
         }
         .configurationDisplayName("학교 출발 버스 · 곧 떠나는 차")
         .description("교원대에서 가장 먼저 떠나는 버스와 그다음 차들.")
