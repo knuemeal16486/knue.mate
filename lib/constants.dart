@@ -15,6 +15,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'firebase_sync_service.dart';
 import 'home_widgets.dart' show pushNoticeWidget, redrawBusNoticeWidgets;
+import 'meal_widget.dart' show pushMealWidgetWeek;
 import 'meal_api.dart';
 import 'offline_cache.dart';
 import 'schedule_model.dart';
@@ -805,7 +806,10 @@ class MealCache {
       DateTime date, MealSource source, Map<String, dynamic> data) async {
     // 내용이 그대로면 revision을 올리지 않는다 — 올리면 화면이 다시 로드하고,
     // 그게 또 갱신을 부르는 무한 루프가 된다.
-    if (await JsonCache.save(_key(date, source), data)) revision.value++;
+    if (await JsonCache.save(_key(date, source), data)) {
+      revision.value++;
+      unawaited(pushMealWidgetWeek()); // 위젯이 스스로 끼니를 넘기게 한 주치를 넣는다
+    }
   }
 
   /// 한 주치를 한꺼번에 저장한다. 하나라도 바뀌었으면 revision은 **한 번만**
@@ -818,7 +822,10 @@ class MealCache {
     for (final e in byDate.entries) {
       if (await JsonCache.save(_key(e.key, source), e.value)) changed = true;
     }
-    if (changed) revision.value++;
+    if (changed) {
+      revision.value++;
+      unawaited(pushMealWidgetWeek());
+    }
   }
 }
 
@@ -1024,6 +1031,10 @@ Future<void> _updateWidgetDataInternal(
         menuText = "내일은 식당을 운영하지 않아요 🥺";
       }
     }
+
+    // 위젯이 스스로 끼니를 넘기는 한 주치(meal_widget.dart). 아래 옛 키는
+    // JSON을 못 읽는 경우(업데이트 직후 등)에 쓰인다.
+    await pushMealWidgetWeek(redraw: false);
 
     // 데이터 저장
     await HomeWidget.saveWidgetData<String>('widget_title', sourceName);

@@ -433,6 +433,13 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 - iOS 위젯에 `Text(date, style: .relative)`(문자열 끼워 넣기 포함)를 쓰지 않는다 — 그걸 쓰던 버스 위젯
   (노선별 medium·곧 떠나는 차 둘 다)이 iPad에서 흰 화면이었다(2026-11-25). "N분 뒤"는 엔트리 시각 기준
   고정 글자(`busEtaLabel`)이고, 타임라인에 앞으로 120분 동안 매 분 엔트리를 넣어 줄인다.
+- **식단 위젯은 스스로 끼니를 넘긴다**(2026-11-25, `lib/meal_widget.dart`). 앱이 두 식당의 오늘~7일
+  식단과 끼니 끝나는 시각을 `meal_week_json`에 넣고(`pushMealWidgetWeek` — 캐시만 읽고 학교·Firestore에 묻지
+  않는다. `MealCache.save/saveWeek`·위젯 갱신·앱 시작 때), 위젯이 지금 시각으로 고른다(`resolveMealWidget`).
+  iOS는 끼니가 끝난 1초 뒤·자정마다 엔트리, Android는 그때 `AlarmManager`(`MEAL_TICK`). 규칙은 Dart 하나가 기준이고
+  Swift·Kotlin은 옮긴 것 — `test/meal_widget_test.dart` 표를 바꾸면 둘 다. 끝나는 시각은 `mealTimeRangeFor`에서만 온다.
+  옛 키(`widget_title`·`widget_time`·`widget_menu`)는 JSON이 없을 때(업데이트 직후)만 쓰인다.
+  Swift·Kotlin 포트는 Linux에서도 돌려 볼 수 있다: swift.org 툴체인·kotlinc로 순수 함수만 떼어 같은 표를 넣는다.
 - 식단 위젯을 앱에서 고칠 땐 `refreshMealWidgetNow()`를 부른다. `fetchMealApi`는 네트워크로 받았을 때만
   위젯을 쓰고 캐시면 그냥 돌려줘서, "위젯 데이터 즉시 업데이트"가 아무것도 안 바꿨다(2026-11-25).
   위젯 식당은 `widgetSource`다 — 식단 탭에서 다른 식당을 열어도 위젯은 안 바뀐다.

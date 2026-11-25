@@ -42,34 +42,130 @@ struct MealProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MealEntry) -> Void) {
-        completion(readEntry())
+        completion(readEntry(at: Date()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<MealEntry>) -> Void) {
-        let entry = readEntry()
-        // 앱이 갱신할 때마다 WidgetCenter.reloadTimelines가 불리지만, 앱을 한동안
-        // 안 열어도 끼니가 바뀌면 값이 낡아 보인다. 한 시간마다 한 번은 스스로
-        // 다시 그리게 해 둔다(데이터 자체는 앱이 넣어준 것을 그대로 읽는다).
-        let next = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
-        completion(Timeline(entries: [entry], policy: .after(next)))
+        let now = Date()
+        let cal = Calendar.current
+        // 한 주치(meal_week_json)가 있으면 끼니가 끝나는 때마다 엔트리를 넣어 위젯이
+        // 스스로 점심 → 저녁 → 내일 아침으로 넘어간다. 앱을 안 열어도 된다.
+        var dates: Set<Date> = [now]
+        if let week = readMealWeek() {
+            for d in mealWidgetSwitchDates(week, now: now, calendar: cal) { dates.insert(d) }
+        }
+        let entries = dates.sorted().map { readEntry(at: $0) }
+        // 6시간마다는 다시 만든다(앱이 새 식단을 넣었는데 reload를 못 받은 경우 대비).
+        let next = cal.date(byAdding: .hour, value: 6, to: now) ?? now.addingTimeInterval(21600)
+        completion(Timeline(entries: entries, policy: .after(next)))
     }
 
-    private func readEntry() -> MealEntry {
+    private func readMealWeek() -> [String: Any]? {
+        guard let raw = sharedDefaults()?.string(forKey: "meal_week_json"),
+              let data = raw.data(using: .utf8) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    private func readEntry(at date: Date) -> MealEntry {
         guard let defaults = sharedDefaults() else {
             return MealEntry.placeholder
         }
+        let theme = WidgetThemeSettings.read(defaults)
+        if let week = readMealWeek(), let r = resolveMealWidget(week, now: date) {
+            return MealEntry(date: date, title: r.title, time: r.time, menu: r.menu, theme: theme)
+        }
+        // 옛 키 — 앱이 아직 한 주치를 넣지 않았을 때(업데이트 직후).
         let title = defaults.string(forKey: "widget_title") ?? "KNUE Mate"
         let time = defaults.string(forKey: "widget_time") ?? ""
-        let menu = defaults.string(forKey: "widget_menu") ?? "앱을 한 번 열면\n식단을 불러옵니다."
+        let menu = defaults.string(forKey: "widget_menu") ?? kMealWidgetNoData
 
-        return MealEntry(
-            date: Date(),
-            title: title,
-            time: time,
-            menu: menu,
-            theme: WidgetThemeSettings.read(defaults)
-        )
+        return MealEntry(date: date, title: title, time: time, menu: menu, theme: theme)
     }
+}
+
+// ── 한 주치 식단에서 끼니 고르기 ──
+// Dart lib/meal_widget.dart의 resolveMealWidget과 같은 규칙이다(Kotlin
+// MealWidgetProvider.resolve도). 기준 표는 test/meal_widget_test.dart:
+//
+// | 지금(기숙사) | 머리글 | 메뉴 |
+// |---|---|---|
+// | 수 08:00 | 오늘 아침 | 그날 아침 |
+// | 수 09:00:00 / 09:00:01 | 오늘 아침 / 오늘 점심 | (끝나는 분 00초까지 그 끼니) |
+// | 수 19:30 | 내일 아침 | 목 아침 |
+// | 금 20:00, 토 closed | 내일 아침 | 내일은 식당을 운영하지 않아요 🥺 |
+// | 그날 캐시 없음 | — | 앱을 한 번 열면 식단을 불러옵니다. |
+// | 그 끼니 빈 목록 | — | 등록된 메뉴가 없습니다. |
+
+let kMealWidgetNoMenu = "등록된 메뉴가 없습니다."
+let kMealWidgetNoData = "앱을 한 번 열면\n식단을 불러옵니다."
+
+func mealWidgetClosedText(_ tomorrow: Bool) -> String {
+    "\(tomorrow ? "내일" : "오늘")은 식당을 운영하지 않아요 🥺"
+}
+
+func mealWidgetDayKey(_ d: Date, calendar: Calendar = .current) -> String {
+    let c = calendar.dateComponents([.year, .month, .day], from: d)
+    return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+}
+
+/// [now]와 같은 날 "HH:mm".
+private func mealWidgetAt(_ now: Date, _ hhmm: String, calendar: Calendar) -> Date? {
+    guard let m = busMinutes(hhmm) else { return nil }
+    return calendar.date(byAdding: .minute, value: m, to: calendar.startOfDay(for: now))
+}
+
+private func mealWidgetSource(_ week: [String: Any], source: String?) -> [String: Any]? {
+    guard let sources = week["sources"] as? [[String: Any]], !sources.isEmpty else { return nil }
+    let want = source ?? week["selected"] as? String
+    return sources.first { $0["id"] as? String == want } ?? sources.first
+}
+
+/// 지금 그릴 (식당, "오늘 점심", 메뉴). JSON이 깨졌으면 nil — 옛 키로 그린다.
+func resolveMealWidget(_ week: [String: Any], now: Date, source: String? = nil,
+                       calendar: Calendar = .current) -> (title: String, time: String, menu: String)? {
+    guard let src = mealWidgetSource(week, source: source),
+          let meals = src["meals"] as? [[String: Any]] else { return nil }
+    let title = src["label"] as? String ?? ""
+    if meals.isEmpty { return (title, "", kMealWidgetNoData) }
+    var pick: [String: Any]? = nil
+    var tomorrow = false
+    for m in meals {
+        if let end = (m["end"] as? String).flatMap({ mealWidgetAt(now, $0, calendar: calendar) }), now <= end {
+            pick = m
+            break
+        }
+    }
+    if pick == nil {
+        pick = meals.first
+        tomorrow = true
+    }
+    let label = pick?["label"] as? String ?? ""
+    let time = "\(tomorrow ? "내일" : "오늘") \(label)"
+    let date = calendar.date(byAdding: .day, value: tomorrow ? 1 : 0, to: calendar.startOfDay(for: now)) ?? now
+    guard let day = (src["days"] as? [String: Any])?[mealWidgetDayKey(date, calendar: calendar)] as? [String: Any] else {
+        return (title, time, kMealWidgetNoData)
+    }
+    if day["closed"] as? Bool == true { return (title, time, mealWidgetClosedText(tomorrow)) }
+    let items = (pick?["key"] as? String).flatMap { day[$0] as? [String] } ?? []
+    return (title, time, items.isEmpty ? kMealWidgetNoMenu : items.map { "· " + $0 }.joined(separator: "\n"))
+}
+
+/// 위젯 글이 바뀌는 때: 오늘·내일 끼니가 끝난 바로 뒤(1초)와 자정.
+func mealWidgetSwitchDates(_ week: [String: Any], now: Date, calendar: Calendar = .current) -> [Date] {
+    guard let src = mealWidgetSource(week, source: nil),
+          let meals = src["meals"] as? [[String: Any]] else { return [] }
+    let today = calendar.startOfDay(for: now)
+    var out: [Date] = []
+    for offset in 0...1 {
+        guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
+        if offset > 0 { out.append(day) }  // 자정: "내일 아침" → "오늘 아침"
+        for m in meals {
+            if let end = (m["end"] as? String).flatMap({ mealWidgetAt(day, $0, calendar: calendar) }) {
+                out.append(end.addingTimeInterval(1))
+            }
+        }
+    }
+    return out.filter { $0 > now }
 }
 
 /// small 위젯 메뉴 줄. [rows]줄 안에 다 들어가면 한 줄에 하나씩("· " 머리).

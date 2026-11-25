@@ -6,6 +6,7 @@ import 'package:knue_mate/home_widgets.dart';
 import 'package:knue_mate/club_event_alert_service.dart'
     show kClubEventCheckTask;
 import 'package:knue_mate/keyword_alert_service.dart' show kNoticeCheckTask;
+import 'package:knue_mate/meal_widget.dart';
 
 /// iOS Info.plist / AppDelegate.swift / Android MainActivity.kt / Dart 쪽에
 /// 각각 따로 타이핑된 "서로 같아야 하는" 문자열 식별자들이 실제로 일치하는지
@@ -278,6 +279,20 @@ void main() {
     });
 
     const ktDir = 'android/app/src/main/kotlin/com/knue/knuemate';
+
+    // 식단 위젯이 스스로 끼니를 넘기는 한 주치(lib/meal_widget.dart). 키와 문구가
+    // 세 곳에서 같아야 앱 화면·iOS·Android가 같은 글을 보여 준다.
+    test('식단 위젯 한 주치 키·문구가 Dart·Swift·Kotlin에서 같다', () {
+      final swift = read('$iosDir/MealWidget.swift');
+      final kotlin = read('$ktDir/MealWidgetProvider.kt');
+      String lit(String s) => s.replaceAll('\n', r'\n');
+      for (final src in [swift, kotlin]) {
+        expect(src, contains('"$kMealWeekJsonKey"'));
+        expect(src, contains('"${lit(kMealWidgetNoMenu)}"'));
+        expect(src, contains('"${lit(kMealWidgetNoData)}"'));
+        expect(src, contains(mealWidgetClosedText(true).substring(2)));
+      }
+    });
 
     test('Android 버스 위젯이 Manifest에 있고 키가 Dart와 같다', () {
       expect(androidManifest, contains('android:name=".BusWidgetProvider"'));

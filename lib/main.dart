@@ -26,6 +26,7 @@ import 'club_event_alert_service.dart';
 import 'exit_promo_settings.dart';
 import 'notice_feed.dart';
 import 'home_widgets.dart';
+import 'meal_widget.dart' show pushMealWidgetWeek;
 import 'package:url_launcher/url_launcher.dart';
 
 @pragma('vm:entry-point')
@@ -445,6 +446,7 @@ Future<void> _initializeHomeWidget() async {
     debugPrint("HomeWidget 초기화 시도...");
     await HomeWidget.setAppGroupId('group.knue.meal');
     unawaited(pushBusWidgetTimetable());
+    unawaited(pushMealWidgetWeek());
     unawaited(pushNoticeWidget());
     // 위젯 머리글 색은 앱 테마 색을 따른다(무지개 모드의 날마다 바뀌는 색 포함).
     unawaited(pushWidgetAccent(themeColor.value));
