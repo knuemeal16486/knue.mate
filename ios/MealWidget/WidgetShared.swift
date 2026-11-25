@@ -7,7 +7,8 @@ import WidgetKit
 // _updateWidgetDataInternal)이 넣는다 — 모든 위젯에 같이 적용된다.
 //
 //   themeMode     Int     ThemeMode.index (0 system / 1 light / 2 dark)
-//   transparency  String  0.0~1.0 (double을 문자열로 저장한다)
+//   transparency  String  0.0~1.0 (double을 문자열로 저장한다) — **iOS는 쓰지 않는다**(아래 bgStyle)
+//   bgStyle       Int     위젯 바탕 0 기본 / 1 테마색 / 2 회색 (lib/widget_preview.dart widgetBgColor)
 //   accent_light  String  "#RRGGBB" 앱 테마 색(흰 배경용) — lib/home_widgets.dart pushWidgetAccent
 //   accent_dark   String  "#RRGGBB" 앱 테마 색(어두운 배경용)
 
@@ -20,11 +21,16 @@ func sharedDefaults() -> UserDefaults? {
 struct WidgetThemeSettings {
     /// Flutter의 ThemeMode.index. 0 = system, 1 = light, 2 = dark.
     var themeModeIndex: Int = 0
-    /// 배경 투명도 0.0(불투명) ~ 1.0(완전 투명).
+    /// 배경 투명도 0.0(불투명) ~ 1.0(완전 투명). Android용 값이라 iOS 팔레트는 쓰지 않는다 —
+    /// iOS는 위젯 뒤 배경화면을 주지 않아 반투명 바탕이 시스템 회색 위에서 뿌옇게만 됐다(2026-11-25).
     var transparency: Double = 0.0
+    /// 위젯 바탕 스타일. 0 기본 / 1 테마색 / 2 회색.
+    var bgStyle: Int = 0
     /// 앱 테마 색. 없으면(앱이 아직 안 넣음) 기본 파랑.
     var accentLight: Color? = nil
     var accentDark: Color? = nil
+    var accentLightRGB: (Double, Double, Double)? = nil
+    var accentDarkRGB: (Double, Double, Double)? = nil
 
     static func read(_ defaults: UserDefaults?) -> WidgetThemeSettings {
         guard let defaults = defaults else { return WidgetThemeSettings() }
@@ -33,8 +39,11 @@ struct WidgetThemeSettings {
         // transparency는 문자열로 저장된다("0.0" 등).
         let t = Double(defaults.string(forKey: "transparency") ?? "") ?? 0.0
         return WidgetThemeSettings(themeModeIndex: index, transparency: max(0, min(1, t)),
+                                   bgStyle: defaults.object(forKey: "bgStyle") as? Int ?? 0,
                                    accentLight: widgetHexColor(defaults.string(forKey: "accent_light")),
-                                   accentDark: widgetHexColor(defaults.string(forKey: "accent_dark")))
+                                   accentDark: widgetHexColor(defaults.string(forKey: "accent_dark")),
+                                   accentLightRGB: widgetHexRGB(defaults.string(forKey: "accent_light")),
+                                   accentDarkRGB: widgetHexRGB(defaults.string(forKey: "accent_dark")))
     }
 }
 
@@ -48,6 +57,31 @@ func widgetHexColor(_ hex: String?) -> Color? {
                  blue: Double(v & 0xFF) / 255)
 }
 
+/// "#RRGGBB" → (r, g, b) 0~1. 바탕에 테마 색을 섞을 때 쓴다.
+func widgetHexRGB(_ hex: String?) -> (Double, Double, Double)? {
+    guard var h = hex?.trimmingCharacters(in: .whitespaces), h.hasPrefix("#") else { return nil }
+    h.removeFirst()
+    guard h.count == 6, let v = UInt32(h, radix: 16) else { return nil }
+    return (Double((v >> 16) & 0xFF) / 255, Double((v >> 8) & 0xFF) / 255, Double(v & 0xFF) / 255)
+}
+
+/// b에서 a 쪽으로 k만큼(Dart Color.lerp와 같다). 식을 한 줄에 쓰면 Swift 타입 검사가 너무 오래 걸린다.
+func widgetMix(_ b: Double, _ a: Double, _ k: Double) -> Double {
+    let d: Double = a - b
+    return b + d * k
+}
+
+// 바탕 색 성분(0~1). 31·44·46·242·247 / 255.
+let kWidgetDarkBase: Double = 31.0 / 255.0
+let kWidgetGray2C: Double = 44.0 / 255.0
+let kWidgetGray2E: Double = 46.0 / 255.0
+let kWidgetGrayF2: Double = 242.0 / 255.0
+let kWidgetGrayF7: Double = 247.0 / 255.0
+
+/// 테마색 바탕에서 앱 테마 색을 섞는 비율. Dart kWidgetTintLight/Dark와 같다.
+let kWidgetTintLight = 0.10
+let kWidgetTintDark = 0.18
+
 /// 투명도가 이 값 이상이면 배경화면 위 글씨로 보고 진하게 쓴다. Android WidgetColors와 같다.
 let kWidgetOnWallpaperTransparency = 0.7
 
@@ -55,8 +89,11 @@ let kWidgetOnWallpaperTransparency = 0.7
 struct WidgetPalette {
     let isDark: Bool
     let transparency: Double
+    private let bgStyle: Int
     private let accentLight: Color?
     private let accentDark: Color?
+    private let accentLightRGB: (Double, Double, Double)?
+    private let accentDarkRGB: (Double, Double, Double)?
 
     init(_ settings: WidgetThemeSettings, system: ColorScheme, env: WidgetEnv = WidgetEnv()) {
         // 배경이 빠진 자리(StandBy 등)는 시스템이 깐 바탕 위라 앱 테마(라이트 고정 등)를
@@ -66,14 +103,36 @@ struct WidgetPalette {
         case 2: isDark = true
         default: isDark = system == .dark
         }
-        transparency = env.showsBackground ? settings.transparency : 1
+        // 배경이 빠진 자리만 투명(1). 그 밖엔 늘 불투명 — 투명도 값은 Android 전용.
+        transparency = env.showsBackground ? 0 : 1
+        bgStyle = settings.bgStyle
         accentLight = settings.accentLight
         accentDark = settings.accentDark
+        accentLightRGB = settings.accentLightRGB
+        accentDarkRGB = settings.accentDarkRGB
     }
 
+    /// 위젯 바탕 — Dart widgetBgColor와 같은 규칙(모두 불투명).
+    /// 식을 짧게 나눠 쓴다(튜플·삼항·나눗셈을 한 식에 섞으면 Swift 타입 검사가 시간 초과로 실패한다).
     var background: Color {
-        let base = isDark ? Color(red: 0.12, green: 0.12, blue: 0.12) : Color.white
-        return base.opacity(1.0 - transparency)
+        if transparency >= 1 { return .clear }
+        let base: Double = isDark ? kWidgetDarkBase : 1.0  // #FFFFFF / #1F1F1F
+        if bgStyle == 1 {
+            let fallback: (Double, Double, Double) = (0.26, 0.52, 0.96)
+            let picked: (Double, Double, Double)? = isDark ? accentDarkRGB : accentLightRGB
+            let a: (Double, Double, Double) = picked ?? fallback
+            let k: Double = isDark ? kWidgetTintDark : kWidgetTintLight
+            let r: Double = widgetMix(base, a.0, k)
+            let g: Double = widgetMix(base, a.1, k)
+            let b: Double = widgetMix(base, a.2, k)
+            return Color(red: r, green: g, blue: b)
+        }
+        if bgStyle == 2 {
+            // iOS 그룹 바탕 #F2F2F7 / #2C2C2E
+            if isDark { return Color(red: kWidgetGray2C, green: kWidgetGray2C, blue: kWidgetGray2E) }
+            return Color(red: kWidgetGrayF2, green: kWidgetGrayF2, blue: kWidgetGrayF7)
+        }
+        return Color(red: base, green: base, blue: base)
     }
 
     var title: Color { isDark ? .white : .black }

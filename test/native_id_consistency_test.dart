@@ -7,7 +7,8 @@ import 'package:knue_mate/club_event_alert_service.dart'
     show kClubEventCheckTask;
 import 'package:knue_mate/keyword_alert_service.dart' show kNoticeCheckTask;
 import 'package:knue_mate/meal_widget.dart';
-import 'package:knue_mate/widget_preview.dart' show kWidgetOnWallpaperTransparency;
+import 'package:knue_mate/widget_preview.dart'
+    show kWidgetOnWallpaperTransparency, kWidgetTintDark, kWidgetTintLight;
 
 /// iOS Info.plist / AppDelegate.swift / Android MainActivity.kt / Dart 쪽에
 /// 각각 따로 타이핑된 "서로 같아야 하는" 문자열 식별자들이 실제로 일치하는지
@@ -378,6 +379,20 @@ void main() {
       expect(kotlin, swift);
       // 설정 화면 미리보기(lib/widget_preview.dart)도 같은 기준이어야 한다.
       expect('$kWidgetOnWallpaperTransparency', swift);
+    });
+
+    // iOS 위젯 바탕 스타일 — 키·섞는 비율·회색 값이 Dart(lib/widget_preview.dart)와 같아야 한다.
+    test('iOS 위젯 바탕(bgStyle)이 Dart와 같다', () {
+      final swift = read('ios/MealWidget/WidgetShared.swift');
+      expect(swift, contains('forKey: "bgStyle"'));
+      expect(read('lib/constants.dart'), contains("saveWidgetData<int>('bgStyle'"));
+      double num(String name) =>
+          double.parse(RegExp('let $name = ([0-9.]+)').firstMatch(swift)![1]!);
+      expect(num('kWidgetTintLight'), kWidgetTintLight);
+      expect(num('kWidgetTintDark'), kWidgetTintDark);
+      for (final v in ['31.0 / 255.0', '44.0 / 255.0', '46.0 / 255.0', '242.0 / 255.0', '247.0 / 255.0']) {
+        expect(swift, contains(v), reason: v);
+      }
     });
 
     // 노선 막대 색 — iOS kBusRouteColorIndex와 Kotlin ROUTE_COLOR_INDEX가 같아야 한다.

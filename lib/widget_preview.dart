@@ -6,9 +6,10 @@
 /// 글자는 예시로 고정이다(모양만 보는 곳).
 library;
 
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
-import 'constants.dart' show themeColor, widgetSource, widgetTheme, widgetTransparency;
+import 'constants.dart' show themeColor, widgetBgStyle, widgetSource, widgetTheme, widgetTransparency;
 import 'home_widgets.dart' show widgetAccentHex;
 
 /// 투명도가 이 값 이상이면 배경화면 위 글씨로 보고 흐린 글씨·주황을 진하게 쓴다.
@@ -38,24 +39,52 @@ class WidgetPreviewPalette {
 Color _hexColor(String hex) =>
     Color(0xFF000000 | int.parse(hex.replaceFirst('#', ''), radix: 16));
 
+/// iOS 위젯 바탕 스타일 이름(설정 화면 순서 = 값).
+const kWidgetBgStyleLabels = ['기본', '테마색', '회색'];
+
+/// 테마색 바탕에서 앱 테마 색을 섞는 비율(라이트·다크). iOS `kWidgetTintLight/Dark`와 같다.
+const kWidgetTintLight = 0.10;
+const kWidgetTintDark = 0.18;
+
+/// iOS 위젯 바탕색 — 모두 불투명. iOS `WidgetPalette.background`와 같은 규칙.
+/// 0 기본(흰색 / #1F1F1F), 1 테마색(앱 테마 색을 옅게 섞음), 2 회색(#F2F2F7 / #2C2C2E — iOS 그룹 바탕).
+/// [accent]는 위젯이 쓰는 강조색(`widgetAccentHex`를 거친 라이트·다크 값 중 그 모드 것).
+Color widgetBgColor(int style, {required bool dark, required Color accent}) {
+  final base = dark ? const Color(0xFF1F1F1F) : const Color(0xFFFFFFFF);
+  switch (style) {
+    case 1:
+      return Color.lerp(base, accent, dark ? kWidgetTintDark : kWidgetTintLight)!;
+    case 2:
+      return dark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7);
+    default:
+      return base;
+  }
+}
+
 /// 순수 함수 — 테스트 대상. [transparency]는 0.0(불투명)~1.0, [accent]는 앱 테마 색.
+/// [ios]면 투명도를 쓰지 않고(iOS는 배경화면이 비치지 않는다) [bgStyle] 바탕색을 쓴다.
 WidgetPreviewPalette widgetPreviewPalette({
   required bool dark,
   required double transparency,
   required Color accent,
+  int bgStyle = 0,
+  bool ios = false,
 }) {
-  final t = transparency.clamp(0.0, 1.0);
+  final t = ios ? 0.0 : transparency.clamp(0.0, 1.0);
   final onWallpaper = t >= kWidgetOnWallpaperTransparency;
   final a = widgetAccentHex(accent);
+  final accentColor = _hexColor(dark ? a.dark : a.light);
   final base = dark ? const Color(0xFF1F1F1F) : const Color(0xFFFFFFFF);
   return WidgetPreviewPalette(
-    background: base.withValues(alpha: 1 - t),
+    background: ios
+        ? widgetBgColor(bgStyle, dark: dark, accent: accentColor)
+        : base.withValues(alpha: 1 - t),
     title: dark ? Colors.white : Colors.black,
     body: dark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF333333),
     muted: onWallpaper
         ? (dark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF383838))
         : (dark ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF8C8C8C)),
-    accent: _hexColor(dark ? a.dark : a.light),
+    accent: accentColor,
     highlight: dark
         ? const Color(0xFFFCAD70)
         : (onWallpaper ? const Color(0xFFB84D00) : const Color(0xFFE8710A)),
@@ -71,7 +100,7 @@ class WidgetAppearancePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: Listenable.merge(
-          [widgetTheme, widgetTransparency, themeColor, widgetSource]),
+          [widgetTheme, widgetTransparency, widgetBgStyle, themeColor, widgetSource]),
       builder: (context, _) {
         final dark = switch (widgetTheme.value) {
           ThemeMode.light => false,
@@ -83,6 +112,8 @@ class WidgetAppearancePreview extends StatelessWidget {
           dark: dark,
           transparency: widgetTransparency.value,
           accent: themeColor.value,
+          bgStyle: widgetBgStyle.value,
+          ios: defaultTargetPlatform == TargetPlatform.iOS,
         );
         return Container(
           key: const Key('widget-preview'),

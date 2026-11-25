@@ -2,6 +2,7 @@
 /// (2026-11-25 — 설정 첫 화면의 절반을 차지하던 묶음을 옮겼다).
 library;
 
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import 'constants.dart';
@@ -145,61 +146,92 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  "배경 투명도",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Slider(
-                        value: _localTransparency,
-                        min: 0.0,
-                        max: 0.8,
-                        divisions: 8,
-                        activeColor: currentColor,
-                        onChanged: (v) {
-                          setState(() => _localTransparency = v);
-                          widgetTransparency.value = v;
-                        },
-                        // 손을 뗄 때 한 번, 식단은 다시 안 받는다.
-                        onChangeEnd: (v) =>
-                            applyWidgetAppearance(transparency: v),
-                      ),
+                // iOS는 위젯 뒤 배경화면을 앱에 주지 않는다 — 투명도를 올리면 시스템 회색이 비쳐
+                // 뿌옇게만 됐다(2026-11-25 기기 확인). iOS는 불투명한 바탕 스타일을 고른다.
+                if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                  const Text(
+                    "위젯 바탕",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  ValueListenableBuilder<int>(
+                    valueListenable: widgetBgStyle,
+                    builder: (context, style, _) => Row(
+                      children: [
+                        for (var i = 0; i < kWidgetBgStyleLabels.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 10),
+                          SettingsChoiceOption(
+                            label: kWidgetBgStyleLabels[i],
+                            isSelected: style == i,
+                            onTap: () => applyWidgetAppearance(bgStyle: i),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(width: 16),
-                    Container(
-                      width: 50,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: currentColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        "${(_localTransparency * 100).toInt()}%",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: currentColor,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "iOS는 앱이 위젯을 투명하게 할 수 없어요. 투명하게 쓰려면 홈 화면을 길게 눌러 "
+                    "편집 → 사용자화에서 '착색'이나 '투명'을 고르세요.",
+                    style: hint,
+                  ),
+                ] else ...[
+                  const Text(
+                    "배경 투명도",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Slider(
+                          value: _localTransparency,
+                          min: 0.0,
+                          max: 0.8,
+                          divisions: 8,
+                          activeColor: currentColor,
+                          onChanged: (v) {
+                            setState(() => _localTransparency = v);
+                            widgetTransparency.value = v;
+                          },
+                          // 손을 뗄 때 한 번, 식단은 다시 안 받는다.
+                          onChangeEnd: (v) =>
+                              applyWidgetAppearance(transparency: v),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "투명도가 높을수록 위젯 배경이 투명해집니다. 테마·투명도는 식단·버스·공지 위젯에 모두 적용돼요.",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark
-                        ? Colors.grey
-                        : Colors.grey.shade600,
+                      const SizedBox(width: 16),
+                      Container(
+                        width: 50,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 4,
+                          horizontal: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: currentColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          "${(_localTransparency * 100).toInt()}%",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: currentColor,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "투명도가 높을수록 위젯 배경이 투명해집니다. 테마·투명도는 식단·버스·공지 위젯에 모두 적용돼요.",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? Colors.grey
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,

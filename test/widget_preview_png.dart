@@ -1,6 +1,7 @@
 // 설정 화면의 위젯 미리보기를 그림으로 확인한다(2026-11-25).
 //
-//   flutter test test/widget_preview_png.dart   # → build/widget_preview.png, build/widget_settings_{light,dark}.png
+//   flutter test test/widget_preview_png.dart   # → build/widget_preview.png(Android 투명도), build/widget_bg_ios.png(iOS 바탕),
+//                                                 build/widget_settings_{light,dark,ios}.png
 //
 // 라이트·다크 × 투명도 0·0.5·0.8 여섯 칸을 한 장에. 한글 글꼴은 환경 변수
 // KNUE_FONT_DIR(NotoSansKR_400Regular.ttf 등이 든 폴더)이나 Windows 글꼴에서 읽는다 —
@@ -13,7 +14,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:knue_mate/constants.dart' show widgetTheme, widgetTransparency;
+import 'package:flutter/foundation.dart';
+import 'package:knue_mate/constants.dart' show widgetBgStyle, widgetTheme, widgetTransparency;
 import 'package:knue_mate/widget_preview.dart';
 import 'package:knue_mate/widget_settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,9 +38,10 @@ Future<void> _loadFonts() async {
 
 /// 한 칸: 그 설정으로 그린 미리보기. 위젯 테스트에서 값 하나를 여러 번 바꿔 그릴 수
 /// 없어서(전역 ValueNotifier) 칸마다 따로 찍어 이어 붙인다.
-Future<ui.Image> _shot(WidgetTester tester, ThemeMode mode, double t) async {
+Future<ui.Image> _shot(WidgetTester tester, ThemeMode mode, double t, {int? style}) async {
   widgetTheme.value = mode;
   widgetTransparency.value = t;
+  if (style != null) widgetBgStyle.value = style;
   final key = GlobalKey();
   await tester.pumpWidget(MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -53,7 +56,8 @@ Future<ui.Image> _shot(WidgetTester tester, ThemeMode mode, double t) async {
             padding: const EdgeInsets.all(12),
             color: Colors.white,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text('${mode == ThemeMode.dark ? '다크' : '라이트'} · 투명도 ${(t * 100).round()}%',
+              Text('${mode == ThemeMode.dark ? '다크' : '라이트'} · '
+                  '${style != null ? 'iOS 바탕 ${kWidgetBgStyleLabels[style]}' : '투명도 ${(t * 100).round()}%'}',
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               const WidgetAppearancePreview(),
@@ -91,6 +95,36 @@ void main() {
     final png = await tester.runAsync(() => sheet!.toByteData(format: ui.ImageByteFormat.png));
     Directory('build').createSync(recursive: true);
     File('build/widget_preview.png').writeAsBytesSync(png!.buffer.asUint8List());
+    addTearDown(tester.view.reset);
+  });
+
+  // iOS 위젯 바탕 3가지 × 라이트·다크(투명도 대신, 2026-11-25).
+  testWidgets('iOS 바탕 PNG', (tester) async {
+    await tester.runAsync(_loadFonts);
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final shots = <ui.Image>[];
+    try {
+      for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+        for (var st = 0; st < 3; st++) {
+          shots.add(await _shot(tester, mode, 0, style: st));
+        }
+      }
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      widgetBgStyle.value = 0;
+    }
+    final w = shots.first.width, h = shots.first.height;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    for (var i = 0; i < shots.length; i++) {
+      canvas.drawImage(shots[i], Offset((i ~/ 3) * w.toDouble(), (i % 3) * h.toDouble()), Paint());
+    }
+    final sheet = await tester.runAsync(() => recorder.endRecording().toImage(w * 2, h * 3));
+    final png = await tester.runAsync(() => sheet!.toByteData(format: ui.ImageByteFormat.png));
+    Directory('build').createSync(recursive: true);
+    File('build/widget_bg_ios.png').writeAsBytesSync(png!.buffer.asUint8List());
     addTearDown(tester.view.reset);
   });
 

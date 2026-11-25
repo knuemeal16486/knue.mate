@@ -418,6 +418,11 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   키 이름·kind·Manifest는 `test/native_id_consistency_test.dart`가 확인한다.
 - 테마·투명도(`themeMode`·`transparency`)는 식단 위젯 설정 하나로 세 위젯에 같이. 투명도 0.7 이상이면
   배경화면 위 글씨로 보고 흐린 글씨·주황을 진하게 쓴다(`onWallpaper`, 기준값은 일관성 테스트).
+- **iOS는 투명도를 쓰지 않는다**(2026-11-25 기기 확인). iOS는 위젯 뒤 배경화면을 앱에 주지 않아 반투명 바탕 뒤로
+  시스템 회색이 비쳐 뿌옇게만 됐다. iOS는 불투명한 **위젯 바탕**(`bgStyle` — 0 기본·1 테마색·2 회색, Dart
+  `widgetBgStyle`·`widgetBgColor`, Swift `WidgetPalette.background`)을 고르고, 설정 화면도 iOS면 슬라이더 대신 3칸을
+  보인다. 진짜 투명은 사용자가 홈 화면 편집 → 사용자화(착색·투명)로만 된다. Android는 실제로 비치므로 투명도 그대로.
+  Swift 색 계산은 식을 짧게 나눈다 — 튜플·삼항·나눗셈을 한 식에 섞으면 타입 검사 시간 초과로 빌드가 깨진다.
 - **모양(2026-11-24, 에브리타임식)**: 크고 굵은 머리글("점심"·"버스"·"공지", 제목색) + 흐린 보조 줄,
   항목 왼쪽에 옅은 색 막대(iOS `WidgetBar`·`WidgetBigHeader`, Android `drawable/widget_bar` +
   `WidgetColors.applyBar`). 식단은 세로 막대 대신 "점심" 밑에 가로 막대(앱 테마 색, small 48·medium 72, iOS

@@ -11,6 +11,8 @@ import 'package:knue_mate/constants.dart'
         AppTab,
         applyWidgetAppearance,
         kIosMealWidgetKind,
+        PreferencesService,
+        widgetBgStyle,
         widgetTheme,
         widgetTransparency;
 import 'package:knue_mate/home_widgets.dart';
@@ -274,8 +276,8 @@ void main() {
       if (call.method == 'updateWidget') redrawn.add('${args['ios']}');
       return true;
     });
-    await applyWidgetAppearance(theme: ThemeMode.dark, transparency: 0.5);
-    expect(saved, {'themeMode': ThemeMode.dark.index, 'transparency': '0.5'});
+    await applyWidgetAppearance(theme: ThemeMode.dark, transparency: 0.5, bgStyle: 2);
+    expect(saved, {'themeMode': ThemeMode.dark.index, 'transparency': '0.5', 'bgStyle': 2});
     expect(redrawn, [
       kIosMealWidgetKind,
       kIosBusWidgetKind,
@@ -284,5 +286,9 @@ void main() {
     ]);
     expect(widgetTheme.value, ThemeMode.dark);
     expect(widgetTransparency.value, 0.5);
+    expect(widgetBgStyle.value, 2);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt(PreferencesService.keyWidgetBgStyle), 2);
+    widgetBgStyle.value = 0;
   });
 }

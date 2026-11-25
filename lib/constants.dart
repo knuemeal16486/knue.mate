@@ -34,6 +34,11 @@ final ValueNotifier<MealSource> defaultSourceNotifier = ValueNotifier(
 );
 
 final ValueNotifier<double> widgetTransparency = ValueNotifier(0.0);
+
+/// iOS 위젯 바탕(0 기본·1 테마색·2 회색, `widgetBgColor`). iOS는 위젯 뒤 배경화면을 앱에 주지 않아
+/// 투명도를 올리면 시스템 회색이 비쳐 뿌옇게만 됐다(2026-11-25) — iOS는 투명도 대신 이걸 쓴다.
+/// Android는 실제로 배경화면이 비치므로 투명도 그대로.
+final ValueNotifier<int> widgetBgStyle = ValueNotifier(0);
 final ValueNotifier<ThemeMode> widgetTheme = ValueNotifier(ThemeMode.system);
 final ValueNotifier<MealSource> widgetSource = ValueNotifier(MealSource.a);
 
@@ -1062,6 +1067,7 @@ Future<void> _updateWidgetDataInternal(
       'transparency',
       widgetTransparency.value.toString(),
     );
+    await HomeWidget.saveWidgetData<int>('bgStyle', widgetBgStyle.value);
 
     // [수정] 위젯 업데이트 시 전체 패키지명 사용 (가장 확실한 방법)
     // iOSName은 WidgetKit의 kind 문자열 — ios/MealWidget/MealWidget.swift의
@@ -1084,9 +1090,14 @@ Future<void> _updateWidgetDataInternal(
 /// 위젯 테마·투명도만 바꿀 때. 식단은 다시 받지 않는다 — 값만 넣고 위젯 네 종류를
 /// 바로 다시 그린다. 예전엔 테마 버튼·투명도 슬라이더도 식단을 받아 온 뒤에야 값을
 /// 써서(공용 캐시 최대 1.5초·학교 서버까지) 위젯이 늦게 바뀌었다.
-Future<void> applyWidgetAppearance({ThemeMode? theme, double? transparency}) async {
+Future<void> applyWidgetAppearance({ThemeMode? theme, double? transparency, int? bgStyle}) async {
   if (theme != null) widgetTheme.value = theme;
   if (transparency != null) widgetTransparency.value = transparency;
+  if (bgStyle != null) {
+    widgetBgStyle.value = bgStyle;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(PreferencesService.keyWidgetBgStyle, bgStyle);
+  }
   await PreferencesService.saveWidgetSettings(
     widgetTransparency.value,
     widgetTheme.value,
@@ -1098,6 +1109,7 @@ Future<void> applyWidgetAppearance({ThemeMode? theme, double? transparency}) asy
       'transparency',
       widgetTransparency.value.toString(),
     );
+    await HomeWidget.saveWidgetData<int>('bgStyle', widgetBgStyle.value);
     await HomeWidget.updateWidget(
       name: 'MealWidgetProvider',
       androidName: 'MealWidgetProvider',
@@ -1162,6 +1174,7 @@ class PreferencesService {
   static const String keyThemeMode = 'theme_mode';
   static const String keyMealSource = 'meal_source';
   static const String keyWidgetTrans = 'widget_trans';
+  static const String keyWidgetBgStyle = 'widget_bg_style';
   static const String keyWidgetTheme = 'widget_theme';
   static const String keyWidgetSource = 'widget_source';
   static const String keyTabOrder = 'tab_order_v2'; // v1 → v2
@@ -1253,6 +1266,7 @@ class PreferencesService {
       defaultSourceNotifier.value = MealSource.values[sourceIndex];
 
     widgetTransparency.value = prefs.getDouble(keyWidgetTrans) ?? 0.0;
+    widgetBgStyle.value = prefs.getInt(keyWidgetBgStyle) ?? 0;
     final int? wTheme = prefs.getInt(keyWidgetTheme);
     if (wTheme != null) widgetTheme.value = ThemeMode.values[wTheme];
     final int? wSource = prefs.getInt(keyWidgetSource);
@@ -1438,6 +1452,7 @@ class PreferencesService {
     keyThemeMode,
     keyMealSource,
     keyWidgetTrans,
+    keyWidgetBgStyle,
     keyWidgetTheme,
     keyWidgetSource,
     keyTabOrder,
@@ -1460,6 +1475,7 @@ class PreferencesService {
     rainbowModeNotifier.value = false;
     themeModeNotifier.value = ThemeMode.system;
     widgetTransparency.value = 0.0;
+    widgetBgStyle.value = 0;
     widgetTheme.value = ThemeMode.system;
     widgetSource.value = MealSource.a;
     defaultSourceNotifier.value = MealSource.a;
