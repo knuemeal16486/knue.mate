@@ -449,6 +449,10 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
   Swift·Kotlin 포트는 Linux에서도 돌려 볼 수 있다: swift.org 툴체인·kotlinc로 순수 함수만 떼어 같은 표를 넣는다.
 - 위젯 **테마·투명도**는 `applyWidgetAppearance()` — 식단을 다시 받지 않고 값 두 개만 넣고 위젯 네 종류를 다시
   그린다(2026-11-25). 예전엔 테마 버튼·투명도 슬라이더도 식단을 받은 뒤에야 적용돼 늦게 바뀌었다.
+- **설정 화면 위젯 미리보기**(2026-11-25, `lib/widget_preview.dart`): "위젯 설정" 카드 맨 위. 배경화면 같은 판 위에
+  식단·버스 small 두 개를 예시 글자로 그리고, 테마·투명도(슬라이더를 끄는 동안에도)·앱 테마 색·식당을 바로 따른다.
+  색은 `widgetPreviewPalette` — iOS `WidgetPalette`·Android `WidgetColors`와 같은 값이라 위젯 색을 바꾸면 여기도.
+  그림 확인: `KNUE_FONT_DIR=<NotoSansKR_*.ttf 폴더> flutter test test/widget_preview_png.dart` → build/widget_preview.png.
 - 식단 위젯을 앱에서 고칠 땐 `refreshMealWidgetNow()`를 부른다. `fetchMealApi`는 네트워크로 받았을 때만
   위젯을 쓰고 캐시면 그냥 돌려줘서, "위젯 데이터 즉시 업데이트"가 아무것도 안 바꿨다(2026-11-25).
   위젯 식당은 `widgetSource`다 — 식단 탭에서 다른 식당을 열어도 위젯은 안 바뀐다.

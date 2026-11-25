@@ -18,6 +18,7 @@ import 'club_event_admin_screen.dart';
 import 'housing_admin_screen.dart';
 import 'sponsor_admin_screen.dart';
 import 'native_ad_card.dart';
+import 'widget_preview.dart';
 
 // [개편] 식단 탭 전용 페이지 (기존 MealMainScreen)
 // [복원] 식단 탭 전용 페이지 (기존 스타일 복구)
@@ -1909,6 +1910,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // 테마·투명도를 바꾸면 홈 화면에 나가지 않고 바로 본다.
+                          const WidgetAppearancePreview(),
+                          const SizedBox(height: 16),
                           const Text(
                             "표시할 식당",
                             style: TextStyle(fontWeight: FontWeight.bold),

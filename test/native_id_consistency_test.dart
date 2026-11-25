@@ -7,6 +7,7 @@ import 'package:knue_mate/club_event_alert_service.dart'
     show kClubEventCheckTask;
 import 'package:knue_mate/keyword_alert_service.dart' show kNoticeCheckTask;
 import 'package:knue_mate/meal_widget.dart';
+import 'package:knue_mate/widget_preview.dart' show kWidgetOnWallpaperTransparency;
 
 /// iOS Info.plist / AppDelegate.swift / Android MainActivity.kt / Dart 쪽에
 /// 각각 따로 타이핑된 "서로 같아야 하는" 문자열 식별자들이 실제로 일치하는지
@@ -375,6 +376,8 @@ void main() {
           .firstMatch(read('$ktDir/WidgetTheme.kt'))?[1];
       expect(swift, isNotNull);
       expect(kotlin, swift);
+      // 설정 화면 미리보기(lib/widget_preview.dart)도 같은 기준이어야 한다.
+      expect('$kWidgetOnWallpaperTransparency', swift);
     });
 
     // 노선 막대 색 — iOS kBusRouteColorIndex와 Kotlin ROUTE_COLOR_INDEX가 같아야 한다.
