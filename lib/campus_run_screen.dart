@@ -7,6 +7,14 @@ import 'ui_utils.dart';
 
 const String _kFavoriteClassroomsKey = 'campus_run_favorite_names';
 
+/// 1초 틱마다 화면을 다시 그릴지. 달리는 중이면 매초(경과 시간), 아니면 시각의
+/// 분이 바뀔 때만. 순수 함수 — 테스트 대상.
+bool runTickNeedsRebuild(DateTime prev, DateTime now, {required bool running}) =>
+    running ||
+    prev.minute != now.minute ||
+    prev.hour != now.hour ||
+    prev.day != now.day;
+
 class Classroom {
   final String name;
   final double lat;
@@ -95,15 +103,18 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     _loadFavorites();
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _currentTime = DateTime.now();
-          if (_isRunning && _runStartTime != null) {
-            _elapsedDuration = DateTime.now().difference(_runStartTime!);
-            if (_targetDurationSeconds != null) _updateRequiredSpeedOnly();
-          }
-        });
-      }
+      if (!mounted) return;
+      final now = DateTime.now();
+      // 달리지 않을 땐 화면에 "현재 시각 HH:MM"뿐이라 분이 바뀔 때만 다시 그린다
+      // (예전엔 매초 화면 전체를 다시 그렸다).
+      if (!runTickNeedsRebuild(_currentTime, now, running: _isRunning)) return;
+      setState(() {
+        _currentTime = now;
+        if (_isRunning && _runStartTime != null) {
+          _elapsedDuration = now.difference(_runStartTime!);
+          if (_targetDurationSeconds != null) _updateRequiredSpeedOnly();
+        }
+      });
     });
   }
 
