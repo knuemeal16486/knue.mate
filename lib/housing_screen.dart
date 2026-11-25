@@ -677,13 +677,13 @@ class _HousingScreenState extends State<HousingScreen>
     if (mounted) {
       setState(() {
         _transformController.value = Matrix4.identity()
-          ..translate(tx, ty)
-          ..scale(currentScale);
+          ..translateByDouble(tx, ty, 0, 1)
+          ..scaleByDouble(currentScale, currentScale, currentScale, 1);
       });
     } else {
       _transformController.value = Matrix4.identity()
-        ..translate(tx, ty)
-        ..scale(currentScale);
+        ..translateByDouble(tx, ty, 0, 1)
+        ..scaleByDouble(currentScale, currentScale, currentScale, 1);
     }
   }
 
@@ -701,8 +701,8 @@ class _HousingScreenState extends State<HousingScreen>
         center.dy - (center.dy - matrix.getTranslation().y) * scaleChange;
 
     _transformController.value = Matrix4.identity()
-      ..translate(tx, ty)
-      ..scale(targetScale);
+      ..translateByDouble(tx, ty, 0, 1)
+      ..scaleByDouble(targetScale, targetScale, targetScale, 1);
   }
 
   // ── 다시 그리기 캐시 ──
@@ -1097,7 +1097,7 @@ class _HousingScreenState extends State<HousingScreen>
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<HousingZone>(
-                value: selectedZone,
+                initialValue: selectedZone,
                 decoration: const InputDecoration(labelText: '구역', border: OutlineInputBorder(), isDense: true),
                 items: HousingZone.values.map((z) => DropdownMenuItem(value: z, child: Text(z.label))).toList(),
                 onChanged: (v) => setDlgState(() => selectedZone = v ?? selectedZone),
@@ -1248,7 +1248,7 @@ class _HousingScreenState extends State<HousingScreen>
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<HousingZone>(
-                        value: selectedZone,
+                        initialValue: selectedZone,
                         decoration: const InputDecoration(labelText: '구역', border: OutlineInputBorder(), isDense: true),
                         items: HousingZone.values.map((z) => DropdownMenuItem(value: z, child: Text(z.label))).toList(),
                         onChanged: (v) => setDlgState(() => selectedZone = v ?? selectedZone),
@@ -1527,8 +1527,8 @@ class _HousingScreenState extends State<HousingScreen>
     final ty = (size.height * 0.35) - (pt.dy * targetScale);
 
     _transformController.value = Matrix4.identity()
-      ..translate(tx, ty)
-      ..scale(targetScale);
+      ..translateByDouble(tx, ty, 0, 1)
+      ..scaleByDouble(targetScale, targetScale, targetScale, 1);
 
     if (openDetail) {
       _showDetail(b);
@@ -3516,7 +3516,7 @@ class _HousingScreenState extends State<HousingScreen>
                 const SizedBox(height: 14),
 
                 DropdownButtonFormField<HousingZone>(
-                  value: selectedZone,
+                  initialValue: selectedZone,
                   decoration: const InputDecoration(labelText: "원룸 구역", border: OutlineInputBorder(), isDense: true),
                   items: HousingZone.values.map((z) => DropdownMenuItem(value: z, child: Text(z.label))).toList(),
                   onChanged: (v) => setSheetState(() => selectedZone = v ?? HousingZone.values.first),
@@ -3776,7 +3776,7 @@ class _HousingScreenState extends State<HousingScreen>
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<HousingZone>(
-                  value: selectedZone,
+                  initialValue: selectedZone,
                   decoration: const InputDecoration(labelText: "원룸 구역", border: OutlineInputBorder(), isDense: true),
                   items: HousingZone.values.map((z) => DropdownMenuItem(value: z, child: Text(z.label))).toList(),
                   onChanged: (v) => setDlgState(() => selectedZone = v ?? HousingZone.values.first),

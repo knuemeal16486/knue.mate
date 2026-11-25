@@ -55,7 +55,7 @@ void main() {
     final b = boundsOf(blds, roads);
     final origin = Offset(-b.left + 80, -b.top + 80);
     final size = Size(b.width + 160, b.height + 160);
-    final view = TransformationController(Matrix4.identity()..scale(1.5));
+    final view = TransformationController(Matrix4.identity()..scaleByDouble(1.5, 1.5, 1.5, 1));
 
     HousingMapPainter painter() => HousingMapPainter(
           buildings: blds,

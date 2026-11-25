@@ -136,7 +136,7 @@ class _HousingDetailSheetState extends State<HousingDetailSheet> {
       buffer.writeln('💬 학생 후기: "${s.recentReviews.first}"');
     }
 
-    Share.share(buffer.toString());
+    SharePlus.instance.share(ShareParams(text: buffer.toString()));
   }
 
   /// 외벽 현수막/관리인/집주인 복수 연락처 (보통 최대 2개).

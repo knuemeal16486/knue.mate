@@ -577,8 +577,10 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
         await Geolocator.requestPermission();
       }
       final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 5),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 5),
+        ),
       );
       if (mounted) setState(() => _userPosition = pos);
     } catch (e) {
