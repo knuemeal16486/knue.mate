@@ -1941,9 +1941,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                 child: ReorderableListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   itemCount: tempOrder.length,
-                  onReorder: (oldIdx, newIdx) {
+                  onReorderItem: (oldIdx, newIdx) {
                     setLocalState(() {
-                      if (newIdx > oldIdx) newIdx--;
                       final item = tempOrder.removeAt(oldIdx);
                       tempOrder.insert(newIdx, item);
                     });
@@ -2754,9 +2753,8 @@ class _CampusMapScreenState extends State<CampusMapScreen>
                 child: ReorderableListView.builder(
                   padding: const EdgeInsets.only(bottom: 24),
                   itemCount: tempOrder.length,
-                  onReorder: (o, n) {
+                  onReorderItem: (o, n) {
                     setLocalState(() {
-                      if (n > o) n--;
                       final t = tempOrder.removeAt(o);
                       tempOrder.insert(n, t);
                     });
