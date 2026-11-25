@@ -3479,7 +3479,7 @@ class _HousingScreenState extends State<HousingScreen>
                       }),
                     ),
                     ...colorPresets.map((clr) {
-                      final isSel = !systemColor && selectedColor != null && selectedColor!.value == clr.value;
+                      final isSel = !systemColor && selectedColor != null && selectedColor!.toARGB32() == clr.toARGB32();
                       return GestureDetector(
                         onTap: () => setSheetState(() {
                           selectedColor = clr;
@@ -3682,7 +3682,7 @@ class _HousingScreenState extends State<HousingScreen>
                           final colorHex = systemColor
                               ? HousingBuildingOverride.systemColor
                               : selectedColor != null
-                                  ? '#${selectedColor!.value.toRadixString(16).padLeft(8, '0').substring(2)}'
+                                  ? '#${selectedColor!.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}'
                                   : null;
                           final override = HousingBuildingOverride(
                             buildingId: b.id,
@@ -3784,7 +3784,7 @@ class _HousingScreenState extends State<HousingScreen>
                   spacing: 8,
                   runSpacing: 6,
                   children: colorPresets.map((clr) {
-                    final isSel = selectedColor.value == clr.value;
+                    final isSel = selectedColor.toARGB32() == clr.toARGB32();
                     return GestureDetector(
                       onTap: () => setDlgState(() => selectedColor = clr),
                       child: Container(
@@ -3854,7 +3854,7 @@ class _HousingScreenState extends State<HousingScreen>
                   ring: ring,
                   isCampus: false,
                 );
-                final colorHex = '#${selectedColor.value.toRadixString(16).padLeft(8, '0').substring(2)}';
+                final colorHex = '#${selectedColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
                 final override = HousingBuildingOverride(
                   buildingId: newId,
                   name: name,

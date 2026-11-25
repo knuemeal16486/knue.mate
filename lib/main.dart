@@ -584,7 +584,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: color,
                   primary: color,
-                  secondary: color.withOpacity(0.8),
+                  secondary: color.withValues(alpha: 0.8),
                   brightness: Brightness.light,
                 ),
                 textTheme: _applyLetterSpacingDelta(
@@ -597,7 +597,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 cardColor: Colors.white,
                 cardTheme: CardThemeData(
                   elevation: 8,
-                  shadowColor: Colors.black.withOpacity(0.04),
+                  shadowColor: Colors.black.withValues(alpha: 0.04),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),
@@ -630,7 +630,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: color,
                   primary: color,
-                  secondary: color.withOpacity(0.8),
+                  secondary: color.withValues(alpha: 0.8),
                   brightness: Brightness.dark,
                   surface: const Color(0xFF161618),
                 ),
@@ -644,7 +644,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 cardColor: const Color(0xFF1E1E22),
                 cardTheme: CardThemeData(
                   elevation: 8,
-                  shadowColor: Colors.black.withOpacity(0.2),
+                  shadowColor: Colors.black.withValues(alpha: 0.2),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),

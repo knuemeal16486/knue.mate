@@ -714,7 +714,7 @@ void showToastOn(ScaffoldMessengerState messenger, String msg) {
       duration: const Duration(seconds: 1),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-      backgroundColor: Colors.grey.withOpacity(0.9),
+      backgroundColor: Colors.grey.withValues(alpha: 0.9),
     ),
   );
 }
@@ -1381,7 +1381,7 @@ class PreferencesService {
 
   static Future<void> saveThemeColor(Color color) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(keyThemeColor, color.value);
+    await prefs.setInt(keyThemeColor, color.toARGB32());
   }
 
   /// 무지개 모드 토글. 켜면 오늘의 색을 즉시 적용하고, 끄면 저장해둔

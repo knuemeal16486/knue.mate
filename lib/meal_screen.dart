@@ -483,7 +483,7 @@ class _TodayMealPageState extends State<TodayMealPage>
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.1),
+                              color: Colors.black.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Row(
@@ -538,12 +538,12 @@ class _TodayMealPageState extends State<TodayMealPage>
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [primaryColor, primaryColor.withOpacity(0.8)],
+                        colors: [primaryColor, primaryColor.withValues(alpha: 0.8)],
                       ),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: primaryColor.withOpacity(0.3),
+                          color: primaryColor.withValues(alpha: 0.3),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -649,7 +649,7 @@ class _TodayMealPageState extends State<TodayMealPage>
           child: Text(
             title,
             style: TextStyle(
-              color: isSel ? Colors.black87 : Colors.white.withOpacity(0.7),
+              color: isSel ? Colors.black87 : Colors.white.withValues(alpha: 0.7),
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -856,7 +856,7 @@ class _TodayMealPageState extends State<TodayMealPage>
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.grey.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   alignment: Alignment.center,
@@ -1024,7 +1024,7 @@ class MealDateSwitcher extends StatelessWidget {
               Text(
                 "${wd[date.weekday]}요일",
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1212,7 +1212,7 @@ class _MonthlyMealPageState extends State<MonthlyMealPage>
                 boxShadow: [
                   BoxShadow(
                     blurRadius: 20,
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                   ),
                 ],
               ),
@@ -1543,7 +1543,7 @@ class _MealTabs extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           border: isDark ? null : Border.all(color: Colors.grey.shade300),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10),
           ],
         ),
         child: Row(
@@ -2226,11 +2226,11 @@ class _MealDetailCardState extends State<_MealDetailCard> {
     final aiIconColor = isDark ? Colors.purpleAccent : Colors.purple;
     final boxBorder = isDark
         ? (widget.isToday
-              ? Border.all(color: primary.withOpacity(0.5), width: 2)
+              ? Border.all(color: primary.withValues(alpha: 0.5), width: 2)
               : Border.all(color: Colors.transparent))
         : Border.all(
             color: widget.isToday
-                ? primary.withOpacity(0.5)
+                ? primary.withValues(alpha: 0.5)
                 : Colors.grey.shade300,
             width: widget.isToday ? 2 : 1,
           );
@@ -2279,20 +2279,20 @@ class _MealDetailCardState extends State<_MealDetailCard> {
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
         color: isDark
-            ? const Color(0xFF1E1E22).withOpacity(0.85)
-            : Colors.white.withOpacity(0.95),
+            ? const Color(0xFF1E1E22).withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(28),
         border: boxBorder,
         boxShadow: [
           BoxShadow(
             color: widget.isToday
-                ? primary.withOpacity(isDark ? 0.1 : 0.05)
-                : Colors.black.withOpacity(isDark ? 0.05 : 0.015),
+                ? primary.withValues(alpha: isDark ? 0.1 : 0.05)
+                : Colors.black.withValues(alpha: isDark ? 0.05 : 0.015),
             blurRadius: widget.isToday ? 32 : 12,
             offset: const Offset(0, 6),
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.1 : 0.01),
+            color: Colors.black.withValues(alpha: isDark ? 0.1 : 0.01),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -2305,7 +2305,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
               color: widget.isToday
-                  ? primary.withOpacity(0.03)
+                  ? primary.withValues(alpha: 0.03)
                   : Colors.transparent,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(28),
@@ -2359,10 +2359,10 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                                 vertical: 6,
                               ),
                               decoration: BoxDecoration(
-                                color: statusColor.withOpacity(0.08),
+                                color: statusColor.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: statusColor.withOpacity(0.1),
+                                  color: statusColor.withValues(alpha: 0.1),
                                   width: 1,
                                 ),
                               ),
@@ -2399,10 +2399,10 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.amber.withOpacity(0.1),
+                                      color: Colors.amber.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: Colors.amber.withOpacity(0.2),
+                                        color: Colors.amber.withValues(alpha: 0.2),
                                         width: 1,
                                       ),
                                     ),
@@ -2585,7 +2585,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                                   decoration: BoxDecoration(
                                     color: isBold || idx == 0
                                         ? primary
-                                        : primary.withOpacity(0.4),
+                                        : primary.withValues(alpha: 0.4),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -2634,8 +2634,8 @@ class _MealDetailCardState extends State<_MealDetailCard> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: BoxDecoration(
                 color: isDark
-                    ? Colors.white.withOpacity(0.02)
-                    : primary.withOpacity(0.015),
+                    ? Colors.white.withValues(alpha: 0.02)
+                    : primary.withValues(alpha: 0.015),
                 borderRadius: const BorderRadius.vertical(
                   bottom: Radius.circular(28),
                 ),
@@ -2658,9 +2658,9 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: aiTextColor.withOpacity(0.1),
+                        color: aiTextColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: aiTextColor.withOpacity(0.3)),
+                        border: Border.all(color: aiTextColor.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         children: [
@@ -2843,10 +2843,10 @@ class AppSwitchOption extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? activeColor.withOpacity(0.1) : Colors.transparent,
+          color: isSelected ? activeColor.withValues(alpha: 0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? activeColor : Colors.grey.withOpacity(0.2),
+            color: isSelected ? activeColor : Colors.grey.withValues(alpha: 0.2),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -2855,7 +2855,7 @@ class AppSwitchOption extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: activeColor.withOpacity(0.1),
+                color: activeColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: activeColor, size: 24),

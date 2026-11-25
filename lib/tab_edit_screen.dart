@@ -128,7 +128,7 @@ class _TabEditScreenState extends State<TabEditScreen> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+                          color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -142,7 +142,7 @@ class _TabEditScreenState extends State<TabEditScreen> {
                       leading: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: tab.color.withOpacity(0.15),
+                          color: tab.color.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Icon(tab.icon, color: tab.color),

@@ -152,7 +152,7 @@ class _SettingsPageState extends State<SettingsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -170,7 +170,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
+                    color: iconColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: iconColor, size: 24),
@@ -383,7 +383,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                         _ColorPickerItem(
                                           color: c,
                                           isSelected: !rainbowOn &&
-                                              c.value == currentColor.value,
+                                              c.toARGB32() == currentColor.toARGB32(),
                                         ),
                                     ],
                                   ),
@@ -723,7 +723,7 @@ class DeveloperInfoPage extends StatelessWidget {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: primary.withOpacity(0.1),
+                color: primary.withValues(alpha: 0.1),
                 border: Border.all(color: primary, width: 3),
               ),
               child: Icon(Icons.person, size: 60, color: primary),
@@ -748,7 +748,7 @@ class DeveloperInfoPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                     ),
                   ],
@@ -804,7 +804,7 @@ class DeveloperInfoPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                     ),
                   ],
@@ -843,7 +843,7 @@ class DeveloperInfoPage extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, size: 24, color: color),
@@ -897,7 +897,7 @@ class SettingsThemeOption extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: selected ? Colors.grey.withOpacity(0.2) : null,
+          color: selected ? Colors.grey.withValues(alpha: 0.2) : null,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(children: [Icon(icon), Text(label)]),
@@ -929,7 +929,7 @@ class SettingsChoiceOption extends StatelessWidget {
           border: Border.all(
             color: isSelected
                 ? Theme.of(context).primaryColor
-                : Colors.grey.withOpacity(0.5),
+                : Colors.grey.withValues(alpha: 0.5),
           ),
         ),
         alignment: Alignment.center,

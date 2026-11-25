@@ -176,7 +176,7 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
                         horizontal: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: currentColor.withOpacity(0.1),
+                        color: currentColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
