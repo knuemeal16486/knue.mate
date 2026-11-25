@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -76,7 +77,9 @@ class GeminiService {
           return calories;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('gemini_service 칼로리 캐시 읽기 실패: $e');
+    }
 
     // 3. Gemini API 호출 (첫 번째 사용자만)
     final prompt = _buildPrompt(validItems);

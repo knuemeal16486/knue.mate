@@ -489,7 +489,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _weather = info;
         _greeting = pickGreeting(DateTime.now(), weather: info);
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('home_screen 날씨 불러오기 실패: $e');
+    }
   }
 
   // ---------------------------------------------------------------------

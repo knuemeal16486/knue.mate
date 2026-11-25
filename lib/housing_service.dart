@@ -462,7 +462,9 @@ class HousingBuildingOverride {
       } else if (hex.length == 8) {
         return Color(int.parse('0x$hex'));
       }
-    } catch (_) {}
+    } catch (_) {
+      // 색 코드가 틀리면 아래 기본색.
+    }
     return null;
   }
 

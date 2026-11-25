@@ -184,7 +184,9 @@ class _TodayMealPageState extends State<TodayMealPage>
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(kStaffMenuInfoSeenKey, true);
-    } catch (_) {}
+    } catch (_) {
+      // 화면엔 이미 반영 — 기록만 못 하면 다음에 점이 한 번 더 보일 뿐.
+    }
   }
 
   void _updateSelectionByTime() {

@@ -529,7 +529,9 @@ class _HousingScreenState extends State<HousingScreen>
       final prefs = await SharedPreferences.getInstance();
       final v = prefs.getBool(_noticeDismissedKey) ?? false;
       if (mounted && v) setState(() => _noticeDismissed = true);
-    } catch (_) {}
+    } catch (_) {
+      // 안내를 닫았는지 기록 — 못 읽으면 다시 보여 줄 뿐이다.
+    }
   }
 
   Future<void> _dismissNotice() async {
@@ -537,7 +539,9 @@ class _HousingScreenState extends State<HousingScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_noticeDismissedKey, true);
-    } catch (_) {}
+    } catch (_) {
+      // 화면에선 이미 닫혔다 — 기록만 못 하면 다음에 한 번 더 보일 뿐.
+    }
   }
 
   /// 폰 세로처럼 좁은 화면. 지도 도구를 접고 안내를 짧게 한다.

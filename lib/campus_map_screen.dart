@@ -542,7 +542,9 @@ class _CampusMapScreenState extends State<CampusMapScreen>
           (k, v) => MapEntry(int.parse(k), v.toString()),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('campus_map_screen 시설 이름 저장값 읽기 실패: $e');
+    }
     if (mounted) setState(() {});
   }
 

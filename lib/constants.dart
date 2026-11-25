@@ -370,7 +370,9 @@ Future<KnueWeatherInfo?> fetchGangnaeWeather() async {
         windSpeed: (cw['windspeed'] as num).toDouble(),
       );
     }
-  } catch (_) {}
+  } catch (e) {
+    debugPrint('fetchGangnaeWeather 실패: $e');
+  }
   return null;
 }
 
@@ -1491,7 +1493,9 @@ class NotificationService {
     tz.initializeTimeZones();
     try {
       tz.setLocalLocation(tz.getLocation('Asia/Seoul'));
-    } catch (_) {}
+    } catch (_) {
+      // 시간대를 못 찾으면 기기 기본값을 쓴다.
+    }
 
     // flutter_local_notifications는 아이콘 이름을 drawable 타입으로만 찾는다
     // (res/drawable-*/ic_stat_notify.png). "@mipmap/..." 같은 XML 참조 문법이

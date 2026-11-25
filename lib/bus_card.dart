@@ -581,7 +581,9 @@ class _RouteDetailSheetState extends State<_RouteDetailSheet> {
         timeLimit: const Duration(seconds: 5),
       );
       if (mounted) setState(() => _userPosition = pos);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('bus_card 내 위치 못 받음(권한·시간 초과): $e');
+    }
   }
 
   String? _getNearestStopName(List<String> stops, [List<RouteStop>? routeStops]) {
