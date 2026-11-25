@@ -424,6 +424,12 @@ gh workflow disable collect-notices.yml                       # 멈추기(배포
 - 식단 medium은 메뉴 하나에 한 줄, 넘치면 두 열(`mealMenuColumns`, 두 열에도 넘치면 "외 N개").
   small은 다 들어가면 한 줄에 하나씩, 넘치면 줄 폭에 맞춰 " · "로 묶는다(`mealMenuFlowLines`,
   메뉴가 줄 끝에서 끊기지 않고 마지막 줄은 "외 N개").
+- iOS 위젯에 `Text(date, style: .relative)`(문자열 끼워 넣기 포함)를 쓰지 않는다 — 그걸 쓰던 버스 위젯
+  (노선별 medium·곧 떠나는 차 둘 다)이 iPad에서 흰 화면이었다(2026-11-25). "N분 뒤"는 엔트리 시각 기준
+  고정 글자(`busEtaLabel`)이고, 타임라인에 앞으로 120분 동안 매 분 엔트리를 넣어 줄인다.
+- 식단 위젯을 앱에서 고칠 땐 `refreshMealWidgetNow()`를 부른다. `fetchMealApi`는 네트워크로 받았을 때만
+  위젯을 쓰고 캐시면 그냥 돌려줘서, "위젯 데이터 즉시 업데이트"가 아무것도 안 바꿨다(2026-11-25).
+  위젯 식당은 `widgetSource`다 — 식단 탭에서 다른 식당을 열어도 위젯은 안 바뀐다.
 - iOS 위젯은 모두 `MealWidget` 확장 하나(`MealWidgetBundle`)에 들어 있다 — 새 파일은
   MealWidget 타깃 Sources에도 넣는다.
 - Android 위젯 확인: 에뮬레이터 `HomeWidgetPreferences.xml`을 `run-as`로 덮고

@@ -1529,11 +1529,13 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
     try {
-      await fetchMealApi(DateTime.now(), widgetSource.value);
-      showToastOn(messenger, "위젯 업데이트 완료!");
+      final hasMenu = await refreshMealWidgetNow();
+      showToastOn(
+        messenger,
+        hasMenu ? "위젯 업데이트 완료!" : "위젯 업데이트 완료 (등록된 메뉴 없음)",
+      );
     } catch (e) {
-      await forceUpdateWidgetWithCurrentSettings();
-      showToastOn(messenger, "위젯 설정 업데이트 완료!");
+      showToastOn(messenger, "식단을 불러오지 못했어요");
     }
   }
 

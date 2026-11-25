@@ -50,8 +50,8 @@ void callbackDispatcher() {
       } else if (task == kClubEventCheckTask) {
         await ClubEventAlertService.checkAndNotify();
       } else {
-        final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
-        await fetchMealApi(targetDate, defaultSourceNotifier.value);
+        // 위젯 설정의 식당으로 받고, 캐시로 끝나도 위젯을 다시 쓴다.
+        await refreshMealWidgetNow();
       }
     } catch (e) {
       debugPrint("Workmanager error: $e");

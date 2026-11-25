@@ -74,6 +74,21 @@ func busRouteColor(_ route: Int, isDark: Bool) -> Color {
     return widgetRGB(isDark ? pair.dark : pair.light)
 }
 
+/// 앞으로 몇 분 동안 매 분 엔트리를 넣는지("N분 뒤"가 줄어드는 구간).
+let kBusMinuteEntries = 120
+
+/// 남은 분 → "N분 뒤" / "H시간 M분 뒤". Kotlin BusWidgetProvider.etaText와 같다
+/// (0 이하는 "곧" — 떠나는 분엔 다음 엔트리로 넘어가므로 거의 안 보인다).
+///
+/// | 분 | 결과 |
+/// |---|---|
+/// | 7 | 7분 뒤 |
+/// | 75 | 1시간 15분 뒤 |
+func busEtaLabel(_ minutes: Int) -> String {
+    if minutes <= 0 { return "곧" }
+    return minutes >= 60 ? "\(minutes / 60)시간 \(minutes % 60)분 뒤" : "\(minutes)분 뒤"
+}
+
 /// 앱 버스 화면과 같다: 토·일이면 주말 시간표.
 func isBusHoliday(_ date: Date) -> Bool {
     let wd = Calendar.current.component(.weekday, from: date)  // 1 = 일, 7 = 토
@@ -119,6 +134,14 @@ struct BusProvider: TimelineProvider {
         let midnight = cal.date(byAdding: .day, value: 1, to: startOfDay) ?? now.addingTimeInterval(3600)
 
         var dates: Set<Date> = [now]
+        // "N분 뒤"는 엔트리마다 고정 글자로 그린다(아래 eta). 앞으로
+        // [kBusMinuteEntries]분은 매 분 엔트리를 넣어 저절로 줄어들게 한다.
+        let thisMinute = cal.dateInterval(of: .minute, for: now)?.start ?? now
+        for k in 1...kBusMinuteEntries {
+            if let d = cal.date(byAdding: .minute, value: k, to: thisMinute), d < midnight {
+                dates.insert(d)
+            }
+        }
         for route in routes ?? [] {
             for t in route.times(on: now) {
                 guard let m = busMinutes(t),
@@ -130,8 +153,11 @@ struct BusProvider: TimelineProvider {
         }
         dates.insert(midnight)
         let entries = dates.sorted().map { BusEntry(date: $0, routes: routes, theme: theme) }
-        // 자정 엔트리 뒤에 다시 만든다(그날 요일로).
-        completion(Timeline(entries: entries, policy: .atEnd))
+        // 한 시간 뒤 다시 만든다(하루 24번 — 갱신 예산 안). 시스템이 늦게 불러도
+        // 출발 시각 엔트리가 자정까지 있어 다음 차는 맞게 넘어간다. 자정이 먼저면
+        // 그날 요일로 다시 만든다.
+        let reload = min(cal.date(byAdding: .hour, value: 1, to: now) ?? midnight, midnight)
+        completion(Timeline(entries: entries, policy: .after(reload)))
     }
 
     private func read() -> ([BusRoute]?, WidgetThemeSettings) {
@@ -323,12 +349,14 @@ struct BusWidgetEntryView: View {
         }
     }
 
-    /// "N분 뒤" — 다음 엔트리를 기다리지 않고 분 단위로 저절로 줄어든다.
+    /// "N분 뒤". 엔트리 시각 기준 고정 글자다 — 매 분 엔트리(getTimeline)로 줄어든다.
+    /// 예전엔 `Text(date, style: .relative)`를 문자열에 끼워 넣었는데, 이걸 쓰는
+    /// 위젯(노선별 medium·곧 떠나는 차 둘 다)만 iPad에서 통째로 흰 화면이었다.
     @ViewBuilder
     private func eta(_ hhmm: String, strong: Bool) -> some View {
         if let d = departureDate(hhmm) {
-            Text("\(Text(d, style: .relative)) 뒤")
-                .font(.system(size: 11, weight: strong ? .bold : .regular))
+            Text(busEtaLabel(Int((d.timeIntervalSince(entry.date) / 60).rounded(.up))))
+                .font(.system(size: 11, weight: strong ? .bold : .regular).monospacedDigit())
                 .foregroundColor(strong ? palette.highlight : palette.muted)
                 .fixedSize()
         }

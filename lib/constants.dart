@@ -891,7 +891,7 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
       // Firestore 문서에는 lastUpdated(Timestamp)처럼 JSON으로 못 바꾸는 값이
       // 섞여 있다. 통째로 캐시에 넣으면 jsonEncode가 터지므로 메뉴만 남긴다.
       MealCache.save(date, source, {'meals': cachedMeal['meals']});
-      if (DateUtils.isSameDay(date, getWidgetTargetDate(source))) {
+      if (_isWidgetMeal(date, source)) {
         // 위젯 업데이트는 비동기로 진행하고 데이터를 즉시 반환
         _updateWidgetDataInternal(cachedMeal, source, date);
       }
@@ -930,7 +930,7 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
       FirebaseSyncService.saveMealWeekToFirestore(source, byDate); // await 없이
 
       final result = <String, dynamic>{'meals': week.mealsOn(date)};
-      if (DateUtils.isSameDay(date, getWidgetTargetDate(source))) {
+      if (_isWidgetMeal(date, source)) {
         _updateWidgetDataInternal(result, source, date);
       }
       return result;
@@ -941,6 +941,29 @@ Future<dynamic> _fetchMealFromNetwork(DateTime date, MealSource source) async {
     debugPrint('fetchMealApi error: $e');
   }
   return _emptyMeals();
+}
+
+/// 받아 온 식단이 위젯이 보여 줄 식단(위젯 설정의 식당 · 위젯 끼니의 날)인지.
+/// 예전엔 식당을 안 봐서, 식단 탭에서 다른 식당을 열면 위젯이 그 식당으로 바뀌었다.
+bool _isWidgetMeal(DateTime date, MealSource source) =>
+    source == widgetSource.value &&
+    DateUtils.isSameDay(date, getWidgetTargetDate(source));
+
+/// 홈 위젯 식단을 지금 다시 채운다. 메뉴가 있으면 true.
+///
+/// [fetchMealApi]는 네트워크로 받았을 때만 위젯을 고친다 — 캐시가 있으면 캐시만
+/// 돌려주고 끝이라, "위젯 데이터 즉시 업데이트"·위젯 설정 변경이 위젯을 안
+/// 고쳤다(설정 변경은 먼저 넣은 "불러오는 중..."이 그대로 남았다). 그리고 저녁
+/// 이후엔 위젯이 내일 끼니를 보여 주는데 오늘 날짜로 받고 있었다.
+/// 여기서는 위젯 날짜로 받고, 받은 값(캐시든 네트워크든)으로 항상 다시 쓴다.
+Future<bool> refreshMealWidgetNow([MealSource? source]) async {
+  final s = source ?? widgetSource.value;
+  final date = getWidgetTargetDate(s);
+  final data = await fetchMealApi(date, s);
+  if (data is! Map) return false;
+  final meals = Map<String, dynamic>.from(data);
+  await _updateWidgetDataInternal(meals, s, date);
+  return mealHasMenu(meals);
 }
 
 Map<String, dynamic> _emptyMeals() => {
@@ -1046,21 +1069,9 @@ Future<void> saveWidgetSettingsAndUpdate(
   await PreferencesService.saveWidgetSettings(trans, theme, source);
 
   try {
-    // 로딩 상태 먼저 표시
-    await HomeWidget.saveWidgetData<String>(
-      'widget_menu',
-      "데이터를 불러오는 중...\n(최대 30초 소요)",
-    );
-    await HomeWidget.updateWidget(
-      name: 'MealWidgetProvider',
-      androidName: 'MealWidgetProvider',
-      iOSName: kIosMealWidgetKind,
-    );
-
-    // 실제 데이터 호출
-    final targetDate = getWidgetTargetDate(source);
-    await fetchMealApi(targetDate, source);
-
+    // 예전엔 "불러오는 중..."을 먼저 넣었는데, 캐시로 끝나면 위젯이 그 글자에
+    // 머물렀다. 받은 값으로 바로 덮는다.
+    await refreshMealWidgetNow(source);
     if (context.mounted) showToast(context, "위젯 설정이 적용되었습니다.");
   } catch (e) {
     if (context.mounted) showToast(context, "데이터 갱신 실패");
@@ -1069,8 +1080,7 @@ Future<void> saveWidgetSettingsAndUpdate(
 
 Future<void> forceUpdateWidgetWithCurrentSettings() async {
   await PreferencesService.loadSettings();
-  final targetDate = getWidgetTargetDate(defaultSourceNotifier.value);
-  await fetchMealApi(targetDate, defaultSourceNotifier.value);
+  await refreshMealWidgetNow();
 }
 
 Future<void> testBasicWidgetFunction() async {
