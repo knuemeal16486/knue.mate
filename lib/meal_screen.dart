@@ -1689,6 +1689,16 @@ class _MealDetailCardState extends State<_MealDetailCard> {
   bool _isRatingSubmitting = false;
   int? _boldItemIndex;
 
+  /// 지금 카드의 메뉴 묶음. 칼로리 결과가 도착했을 때 메뉴가 바뀌었으면 버린다 — 월간 화면은
+  /// 날짜·끼니를 바꿔도 이 카드를 다시 쓰므로, 예전엔 이전 메뉴의 칼로리가 남아 공유 글에 붙었다.
+  String? get _menuKey => GeminiService.menuKey(widget.items);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCachedCalories();
+  }
+
   @override
   void didUpdateWidget(_MealDetailCard oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -1697,6 +1707,20 @@ class _MealDetailCardState extends State<_MealDetailCard> {
         oldWidget.source != widget.source) {
       _boldItemIndex = null;
     }
+    if (GeminiService.menuKey(oldWidget.items) != _menuKey) {
+      _caloriesInfo = null;
+      _isCalorieLoading = false;
+      _loadCachedCalories();
+    }
+  }
+
+  /// 한 번 계산한 메뉴는 버튼을 누르지 않아도 바로 띄운다(기기에 둔 값만 — 네트워크 없음).
+  Future<void> _loadCachedCalories() async {
+    final key = _menuKey;
+    if (key == null) return;
+    final cached = await GeminiService.cachedCalories(widget.items);
+    if (!mounted || cached == null || _menuKey != key || _caloriesInfo != null) return;
+    setState(() => _caloriesInfo = cached);
   }
 
   /// 별점을 **새로** 남길 수 있는 시간인지.
@@ -2172,32 +2196,34 @@ class _MealDetailCardState extends State<_MealDetailCard> {
   }
 
   Future<void> _fetchCalories() async {
-    if (widget.items.isEmpty) return;
-    if (mounted) {
-      setState(() {
-        _isCalorieLoading = true;
-        _caloriesInfo = null;
-      });
-    }
+    final key = _menuKey;
+    if (key == null) return;
+    setState(() {
+      _isCalorieLoading = true;
+      _caloriesInfo = null;
+    });
 
+    String result;
     try {
-      await Future.delayed(const Duration(milliseconds: 500));
-      String result = await GeminiService.estimateCalories(widget.items);
-      if (mounted) {
-        setState(() {
-          _caloriesInfo = result;
-          _isCalorieLoading = false;
-        });
-      }
+      result = await GeminiService.estimateCalories(widget.items);
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _caloriesInfo = "측정 불가";
-          _isCalorieLoading = false;
-        });
-      }
+      debugPrint('칼로리 계산 실패: $e');
+      result = "측정 불가";
     }
+    // 기다리는 사이 다른 날짜·끼니로 바뀌었으면 이 결과는 그 메뉴 것이 아니다.
+    if (!mounted || _menuKey != key) return;
+    setState(() {
+      _caloriesInfo = result.isEmpty ? null : result;
+      _isCalorieLoading = false;
+    });
   }
+
+  /// AI 값이 이미 있으면 다시 누를 필요가 없다. 추정값·실패면 다시 시도할 수 있다.
+  bool get _canTapCalories =>
+      !_isCalorieLoading &&
+      (_caloriesInfo == null ||
+          GeminiService.isEstimate(_caloriesInfo) ||
+          _caloriesInfo == "측정 불가");
 
   String _getTimeRangeText() {
     if (widget.source == MealSource.b) {
@@ -2652,7 +2678,7 @@ class _MealDetailCardState extends State<_MealDetailCard> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   InkWell(
-                    onTap: _isCalorieLoading ? null : _fetchCalories,
+                    onTap: _canTapCalories ? _fetchCalories : null,
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
