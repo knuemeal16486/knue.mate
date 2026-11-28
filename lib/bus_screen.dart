@@ -15,6 +15,7 @@ import 'ui_utils.dart';
 import 'native_ad_card.dart';
 import 'nearby_stop.dart';
 import 'nearby_stop_card.dart';
+import 'root_screen.dart';
 import 'features/bus/bus_last_update_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -100,6 +101,8 @@ class _BusAppScreenState extends State<BusAppScreen>
     WidgetsBinding.instance.addObserver(this);
 
     _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
+    RootNavigationScreen.busSubTabRequest.addListener(_onSubTabRequest);
+    _applyPendingSubTab();
     final weekday = DateTime.now().weekday;
     _isWeekend = (weekday == 6 || weekday == 7);
 
@@ -125,6 +128,19 @@ class _BusAppScreenState extends State<BusAppScreen>
 
   void _onFavoritesChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onSubTabRequest() => _applyPendingSubTab();
+
+  void _applyPendingSubTab() {
+    final req = RootNavigationScreen.busSubTabRequest.value;
+    if (req == null) return;
+    RootNavigationScreen.busSubTabRequest.value = null;
+    if (req.tabIndex >= 0 &&
+        req.tabIndex < _tabController.length &&
+        _tabController.index != req.tabIndex) {
+      _tabController.animateTo(req.tabIndex);
+    }
   }
 
   /// 즐겨찾기(고정)한 노선을 앞으로 빼고, 각 묶음 안에서는 원래 순서를
@@ -229,6 +245,7 @@ class _BusAppScreenState extends State<BusAppScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    RootNavigationScreen.busSubTabRequest.removeListener(_onSubTabRequest);
     FavoriteService.favoritesNotifier.removeListener(_onFavoritesChanged);
     _timer?.cancel();
     _busSub?.cancel();
@@ -376,7 +393,9 @@ class _BusAppScreenState extends State<BusAppScreen>
       valueListenable: themeColor,
       builder: (context, color, child) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final onBrand = KnueTokens.onAccent(color);
         return Scaffold(
+          backgroundColor: KnueTokens.bg(isDark),
           appBar: AppBar(
             title: const Text("청람버스"),
             backgroundColor: Colors.transparent,
@@ -384,15 +403,31 @@ class _BusAppScreenState extends State<BusAppScreen>
               themeColor: color,
               isDark: isDark,
             ),
-            iconTheme: const IconThemeData(color: Colors.white),
+            iconTheme: IconThemeData(color: onBrand),
             leading: null, // 햄버거 메뉴 제거
             actions: [
               IconButton(
                 // 실시간 탭에선 가까운 정류장 카드도 같이 새로 받는다.
-                onPressed: () => _tabController.index == 1
-                    ? _refreshRealtime()
-                    : _fetchBusData(),
-                icon: const Icon(Icons.refresh),
+                onPressed: _isRefreshing
+                    ? null
+                    : () {
+                        KnueHaptics.light();
+                        if (_tabController.index == 1) {
+                          _refreshRealtime();
+                        } else {
+                          _fetchBusData();
+                        }
+                      },
+                icon: _isRefreshing
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: onBrand,
+                        ),
+                      )
+                    : const Icon(Icons.refresh),
                 tooltip: "새로고침",
               ),
               IconButton(
@@ -403,9 +438,9 @@ class _BusAppScreenState extends State<BusAppScreen>
             ],
             bottom: TabBar(
               controller: _tabController,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white60,
-              indicatorColor: Colors.white,
+              labelColor: onBrand,
+              unselectedLabelColor: onBrand.withValues(alpha: 0.62),
+              indicatorColor: onBrand,
               indicatorWeight: 2,
               indicatorSize: TabBarIndicatorSize.label,
               dividerColor: Colors.transparent,
@@ -440,7 +475,7 @@ class _BusAppScreenState extends State<BusAppScreen>
   // [수정] 실시간 탭 - FutureBuilder 대신 상태 변수 기반 렌더링
   Widget _buildRealtimeTab(bool isDark) {
     return Container(
-      color: isDark ? Colors.black12 : const Color(0xFFF9FAFB),
+      color: KnueTokens.bg(isDark),
       child: _buildRealtimeContent(isDark),
     );
   }

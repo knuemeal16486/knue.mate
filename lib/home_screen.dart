@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -15,6 +19,7 @@ import 'constants.dart';
 import 'favorite_service.dart';
 import 'housing_screen.dart';
 import 'legal_tips_screen.dart';
+import 'notice_alert_settings_screen.dart';
 import 'notice_feed.dart';
 import 'notice_model.dart';
 import 'notice_screen.dart';
@@ -70,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _busError = false;
   String _busLabel = "운행 종료";
   String _busRemainingHint = "";
+
   /// 지금 _busLabel이 어느 노선 얘기인지("513" 등). null이면 운행 종료라
   /// 특정 노선을 안 가리킨다. 칩 문구(routeLabels)를 그 노선에 맞게 고르는 데 쓴다.
   String? _busRoute;
@@ -109,12 +115,17 @@ class _HomeScreenState extends State<HomeScreen> {
   // 강내면 실시간 날씨
   KnueWeatherInfo? _weather;
 
+  // Firebase 실시간 홈 문구 오버라이드 (`app_settings/home_greeting`)
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _greetingSub;
+  String? _remoteGreeting;
+
   @override
   void initState() {
     super.initState();
     _currentMealSource = defaultSourceNotifier.value;
     _refreshAll();
     _scroll.addListener(_onScroll);
+    _subscribeRemoteGreeting();
 
     // 리스너 연결.
     // 각 카드는 캐시를 먼저 그리고 네트워크 갱신은 뒤에서 돈다. 갱신이 끝나면
@@ -131,6 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _greetingSub?.cancel();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     _overscroll.dispose();
@@ -143,6 +155,26 @@ class _HomeScreenState extends State<HomeScreen> {
     CalendarCache.revision.removeListener(_loadUpcoming);
     FavoriteService.favoritesNotifier.removeListener(_onBusFavoritesChanged);
     super.dispose();
+  }
+
+  void _subscribeRemoteGreeting() {
+    if (Firebase.apps.isEmpty) return;
+    _greetingSub = FirebaseFirestore.instance
+        .collection('app_settings')
+        .doc('home_greeting')
+        .snapshots()
+        .listen(
+          (snap) {
+            if (!mounted) return;
+            final next = parseRemoteHomeGreeting(snap.data(), DateTime.now());
+            if (next != _remoteGreeting) {
+              setState(() => _remoteGreeting = next);
+            }
+          },
+          onError: (Object e) {
+            debugPrint('home_greeting 구독 오류: $e');
+          },
+        );
   }
 
   void _onBusFavoritesChanged() {
@@ -518,95 +550,101 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _buildOverscrollBackdrop(color, isDark),
               ),
               RefreshIndicator(
-            onRefresh: _pullToRefresh,
-            color: color,
-            edgeOffset: 120,
-            child: SingleChildScrollView(
-              controller: _scroll,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.zero,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. 브랜드 히어로 헤더 (청람 그라디언트 + 오늘의 브리핑)
-                  //    — 청람밥상/청람버스 헤더와 같은 색 공식을 써서 첫 화면부터
-                  //    같은 앱이라는 감각을 만든다.
-                  _buildHeroHeader(color, isDark),
+                onRefresh: _pullToRefresh,
+                color: color,
+                edgeOffset: 120,
+                child: SingleChildScrollView(
+                  controller: _scroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 1. 브랜드 히어로 헤더 (청람 그라디언트 + 오늘의 브리핑)
+                      //    — 청람밥상/청람버스 헤더와 같은 색 공식을 써서 첫 화면부터
+                      //    같은 앱이라는 감각을 만든다.
+                      _buildHeroHeader(color, isDark),
 
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 2. 주요 서비스 빠른 실행 (테마색 단일 톤)
-                        const KnueSectionHeader(title: "빠른 실행"),
-                        _buildQuickActionsGrid(color, isDark),
-                        const SizedBox(height: 22),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 2. 주요 서비스 빠른 실행 (테마색 단일 톤)
+                            const KnueSectionHeader(title: "빠른 실행"),
+                            _buildQuickActionsGrid(color, isDark),
+                            const SizedBox(height: 22),
 
-                        // 3. 학사일정 및 D-Day
-                        KnueSectionHeader(
-                          title: "학사일정 & D-DAY",
-                          actionText: "전체보기",
-                          actionColor: color,
-                          onAction: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const CalendarScreen(),
+                            // 3. 학사일정 및 D-Day
+                            KnueSectionHeader(
+                              title: "학사일정 & D-DAY",
+                              actionText: "전체보기",
+                              actionColor: color,
+                              onAction: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const CalendarScreen(),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        _buildUpcomingInsetGroup(color, isDark),
-                        const SizedBox(height: 20),
+                            _buildUpcomingInsetGroup(color, isDark),
+                            const SizedBox(height: 20),
 
-                        // 스폰서 / 추천 네이티브 카드
-                        const KnueNativeAdCard(placement: 'home'),
-                        const SizedBox(height: 22),
+                            // 스폰서 / 추천 네이티브 카드
+                            const KnueNativeAdCard(placement: 'home'),
+                            const SizedBox(height: 22),
 
-                        // 4. 키워드 맞춤 알림
-                        KnueSectionHeader(
-                          title: "키워드 알림",
-                          actionText: "설정",
-                          actionColor: color,
-                          onAction: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const NoticeScreen(),
+                            // 4. 키워드 맞춤 알림
+                            KnueSectionHeader(
+                              title: "키워드 알림",
+                              actionText: "설정",
+                              actionColor: color,
+                              onAction: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const NoticeAlertSettingsScreen(),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        _buildKeywordInsetGroup(color, isDark),
-                        const SizedBox(height: 22),
+                            _buildKeywordInsetGroup(color, isDark),
+                            const SizedBox(height: 22),
 
-                        // 5. 청람 공지사항
-                        KnueSectionHeader(
-                          title: "청람 공지사항",
-                          actionText: "전체보기",
-                          actionColor: color,
-                          onAction: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const NoticeScreen(),
+                            // 5. 청람 공지사항
+                            KnueSectionHeader(
+                              title: "청람 공지사항",
+                              actionText: "전체보기",
+                              actionColor: color,
+                              onAction: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const NoticeScreen(),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        _buildNoticeInsetGroup(color, isDark),
-                        const SizedBox(height: 22),
+                            _buildNoticeInsetGroup(color, isDark),
+                            const SizedBox(height: 22),
 
-                        // 6. 자취방 시세 제보 독려 카드
-                        KnueSectionHeader(
-                          title: '🏠 자취방 시세 제보',
-                          actionText: '지도 열기',
-                          actionColor: color,
-                          onAction: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HousingScreen())),
+                            // 6. 자취방 시세 제보 독려 카드
+                            KnueSectionHeader(
+                              title: '자취방 시세 제보',
+                              actionText: '지도 열기',
+                              actionColor: color,
+                              onAction: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const HousingScreen(),
+                                ),
+                              ),
+                            ),
+                            _buildHousingCurationCard(color, isDark),
+                          ],
                         ),
-                        _buildHousingCurationCard(color, isDark),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
             ],
           ),
         );
@@ -660,24 +698,25 @@ class _HomeScreenState extends State<HomeScreen> {
           // KnueWeatherAtmosphere가 날씨별로 조색해 두므로, 여기서는 움직임만
           // 더한다.
           Positioned.fill(child: WeatherParticlesOverlay(weather: _weather)),
-          _buildHeroHeaderContent(),
+          _buildHeroHeaderContent(color),
         ],
       ),
     );
   }
 
-  Widget _buildHeroHeaderContent() {
+  Widget _buildHeroHeaderContent(Color color) {
     final now = DateTime.now();
     final dateStr = DateFormat('M월 d일 EEEE', 'ko_KR').format(now);
+    final onBrand = KnueTokens.onAccent(color);
+    final shadows = KnueTokens.headerShadows(color);
     return SafeArea(
       bottom: false,
-      // 헤더 안의 모든 흰 글씨·아이콘에 그림자를 한 번에 건다. 개별 Text가
-      // shadows를 지정하지 않으면 이 값이 상속되므로, 색을 밝은 노랑으로
-      // 바꿔도 글씨가 묻히지 않는다.
+      // 헤더 안의 모든 글씨·아이콘에 테마 대비에 맞는 전경색과 그림자를 건다.
+      // 노랑·라임처럼 밝은 색에서는 진한 잉크색으로 자동 전환되어 또렷하다.
       child: DefaultTextStyle.merge(
-        style: TextStyle(shadows: KnueTokens.headerTextShadow),
+        style: TextStyle(color: onBrand, shadows: shadows),
         child: IconTheme.merge(
-          data: IconThemeData(shadows: KnueTokens.headerTextShadow),
+          data: IconThemeData(color: onBrand, shadows: shadows),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
             child: Column(
@@ -695,8 +734,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
                             letterSpacing: -0.1,
-                            color: Colors.white.withValues(alpha: 0.9),
-                            shadows: KnueTokens.headerTextShadow,
+                            color: onBrand.withValues(alpha: 0.9),
+                            shadows: shadows,
                           ),
                         ),
                         if (_weather != null)
@@ -707,10 +746,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               vertical: 2.5,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.18),
+                              color: onBrand.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
+                                color: onBrand.withValues(alpha: 0.24),
                                 width: 0.8,
                               ),
                             ),
@@ -719,7 +758,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.white.withValues(alpha: 0.95),
+                                color: onBrand.withValues(alpha: 0.95),
                                 fontFeatures: KnueTokens.tabularFigures,
                               ),
                             ),
@@ -732,7 +771,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
+                        color: onBrand.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -741,7 +780,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.6,
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: onBrand.withValues(alpha: 0.9),
                         ),
                       ),
                     ),
@@ -749,13 +788,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _greeting,
+                  _remoteGreeting ?? _greeting,
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.6,
-                    color: Colors.white,
-                    shadows: KnueTokens.headerTextShadow,
+                    color: onBrand,
+                    shadows: shadows,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -764,9 +803,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 단일 패스 높이를 써서 스크롤 프레임 드롭과 글꼴 확대 오버플로를 방지한다.
                 Builder(
                   builder: (context) {
-                    final textScale = MediaQuery.textScalerOf(context)
-                        .scale(1.0)
-                        .clamp(1.0, 1.45);
+                    final textScale = MediaQuery.textScalerOf(
+                      context,
+                    ).scale(1.0).clamp(1.0, 1.45);
                     final tileHeight = 152.0 * textScale;
                     return SizedBox(
                       height: tileHeight,
@@ -780,11 +819,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               chip:
                                   "${_nextMealType.label} · ${_currentMealSource.shortLabel}",
                               footer: "식단 상세",
-                              extra: _buildHeroMealRating(),
+                              extra: _buildHeroMealRating(onBrand, shadows),
                               weather: _weather,
+                              foregroundColor: onBrand,
+                              textShadows: shadows,
                               onTap: () =>
                                   RootNavigationScreen.switchTab(AppTab.meal),
-                              body: _buildHeroMealBody(),
+                              body: _buildHeroMealBody(onBrand),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -803,9 +844,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                   : (BusRouteData.routeLabels[_busRoute] ?? ""),
                               footer: "실시간 위치",
                               weather: _weather,
-                              onTap: () =>
-                                  RootNavigationScreen.switchTab(AppTab.bus),
-                              body: _buildHeroBusBody(),
+                              foregroundColor: onBrand,
+                              textShadows: shadows,
+                              onTap: () => RootNavigationScreen.switchTab(
+                                AppTab.bus,
+                                subTabIndex: 1,
+                              ),
+                              body: _buildHeroBusBody(onBrand),
                             ),
                           ),
                         ],
@@ -821,29 +866,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 히어로 위 흰 글씨용 그림자. 유리 타일은 반투명 흰색을 덧씌워 배경을 더
-  /// 밝게 만들기 때문에, 헤더 본문보다 오히려 대비가 불리하다 — 같은 그림자를
-  /// 타일 글씨에도 깐다.
-  List<Shadow> get _heroShadow => KnueTokens.headerTextShadow;
-
   /// 식단 타일의 별점 줄. 평가가 하나도 없거나 불러오지 못했으면 아무것도
   /// 그리지 않는다 — "0.0점" 같은 표시가 오히려 오해를 부른다.
-  Widget? _buildHeroMealRating() {
+  Widget? _buildHeroMealRating(Color onBrand, List<Shadow> shadows) {
     final s = _mealRating;
     if (s == null || !s.hasRatings) return null;
     final style = s.majorityStyle;
     return Row(
       children: [
-        const Icon(Icons.star_rounded, size: 13, color: Colors.white),
+        Icon(Icons.star_rounded, size: 13, color: onBrand),
         const SizedBox(width: 3),
         Text(
           s.average.toStringAsFixed(1),
           style: TextStyle(
             fontSize: 11.5,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: onBrand,
             fontFeatures: KnueTokens.tabularFigures,
-            shadows: _heroShadow,
+            shadows: shadows,
           ),
         ),
         const SizedBox(width: 3),
@@ -855,7 +895,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.8),
+              color: onBrand.withValues(alpha: 0.8),
               fontFeatures: KnueTokens.tabularFigures,
             ),
           ),
@@ -864,14 +904,31 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildHeroMealBody() {
+  Widget _buildHeroMealBody(Color onBrand) {
     if (_mealLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 10,
+              width: 82,
+              decoration: BoxDecoration(
+                color: onBrand.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              height: 10,
+              width: 62,
+              decoration: BoxDecoration(
+                color: onBrand.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -880,7 +937,7 @@ class _HomeScreenState extends State<HomeScreen> {
         "불러오기 실패 · 당겨서 새로고침",
         style: TextStyle(
           fontSize: 11,
-          color: Colors.white.withValues(alpha: 0.75),
+          color: onBrand.withValues(alpha: 0.78),
         ),
       );
     }
@@ -889,7 +946,7 @@ class _HomeScreenState extends State<HomeScreen> {
         "등록된 식단 없음",
         style: TextStyle(
           fontSize: 11.5,
-          color: Colors.white.withValues(alpha: 0.7),
+          color: onBrand.withValues(alpha: 0.72),
         ),
       );
     }
@@ -897,24 +954,41 @@ class _HomeScreenState extends State<HomeScreen> {
       _nextMealItems.take(3).join('\n'),
       maxLines: 3,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11.5,
         height: 1.45,
         fontWeight: FontWeight.w500,
         letterSpacing: -0.1,
-        color: Colors.white,
+        color: onBrand,
       ),
     );
   }
 
-  Widget _buildHeroBusBody() {
+  Widget _buildHeroBusBody(Color onBrand) {
     if (_busLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 14,
+              width: 58,
+              decoration: BoxDecoration(
+                color: onBrand.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              height: 10,
+              width: 92,
+              decoration: BoxDecoration(
+                color: onBrand.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -923,7 +997,7 @@ class _HomeScreenState extends State<HomeScreen> {
         "불러오기 실패 · 당겨서 새로고침",
         style: TextStyle(
           fontSize: 11,
-          color: Colors.white.withValues(alpha: 0.75),
+          color: onBrand.withValues(alpha: 0.78),
         ),
       );
     }
@@ -933,11 +1007,11 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Text(
             _busLabel,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.4,
-              color: Colors.white,
+              color: onBrand,
               fontFeatures: KnueTokens.tabularFigures,
             ),
           ),
@@ -947,11 +1021,13 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildHeroBusDirectionRow(
             busDirectionLabel(_busRoute ?? '', BusDirection.outbound),
             _busUpNext,
+            onBrand,
           ),
           const SizedBox(height: 2),
           _buildHeroBusDirectionRow(
             busDirectionLabel(_busRoute ?? '', BusDirection.inbound),
             _busDownNext,
+            onBrand,
           ),
         ],
       );
@@ -962,11 +1038,11 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Text(
           _busLabel,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 19,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.4,
-            color: Colors.white,
+            color: onBrand,
             fontFeatures: KnueTokens.tabularFigures,
           ),
         ),
@@ -975,7 +1051,7 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(
             fontSize: 11.5,
             fontWeight: FontWeight.w500,
-            color: Colors.white.withValues(alpha: 0.8),
+            color: onBrand.withValues(alpha: 0.8),
             fontFeatures: KnueTokens.tabularFigures,
           ),
         ),
@@ -986,20 +1062,18 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 실시간 타일의 방향 한 줄: "↑ 4분 · 석소".
   /// 그 방향으로 오는 차가 없으면 흐리게 "-"만 남겨, 두 줄 높이를 유지한다
   /// (한쪽만 있을 때 타일 높이가 들쭉날쭉하지 않게).
-  Widget _buildHeroBusDirectionRow(String label, BusArrival? arrival) {
-    final faded = Colors.white.withValues(alpha: 0.45);
+  Widget _buildHeroBusDirectionRow(
+    String label,
+    BusArrival? arrival,
+    Color onBrand,
+  ) {
+    final faded = onBrand.withValues(alpha: 0.48);
     if (arrival == null) {
       return Row(
         children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 10.5, color: faded),
-          ),
+          Text(label, style: TextStyle(fontSize: 10.5, color: faded)),
           const SizedBox(width: 4),
-          Text(
-            "운행 없음",
-            style: TextStyle(fontSize: 10.5, color: faded),
-          ),
+          Text("운행 없음", style: TextStyle(fontSize: 10.5, color: faded)),
         ],
       );
     }
@@ -1013,19 +1087,19 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 10.5,
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: onBrand,
           ),
         ),
         const SizedBox(width: 4),
         Text(
           timeText,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: onBrand,
             fontFeatures: KnueTokens.tabularFigures,
           ),
         ),
@@ -1038,7 +1112,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w500,
-              color: Colors.white.withValues(alpha: 0.75),
+              color: onBrand.withValues(alpha: 0.78),
             ),
           ),
         ),
@@ -1173,8 +1247,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.2,
-                color:
-                    isDark ? const Color(0xFFE5E5EA) : const Color(0xFF1C1C1E),
+                color: isDark
+                    ? const Color(0xFFE5E5EA)
+                    : const Color(0xFF1C1C1E),
               ),
             ),
           ),
@@ -1310,45 +1385,64 @@ class _HomeScreenState extends State<HomeScreen> {
                       final event = _upcomingAcademic[index];
                       final dateStr =
                           "${event.startDate.month}/${event.startDate.day}";
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
+                      return InkWell(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                CalendarScreen(initialDate: event.startDate),
+                          ),
                         ),
-                        child: Row(
-                          children: [
-                            _TintSquircle(
-                              icon: Icons.event_note_rounded,
-                              tint: themeClr,
-                              isDark: isDark,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                event.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: isDark
-                                      ? Colors.white
-                                      : const Color(0xFF000000),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: [
+                              _TintSquircle(
+                                icon: Icons.event_note_rounded,
+                                tint: KnueTokens.accentForeground(
+                                  themeClr,
+                                  isDark,
+                                ),
+                                isDark: isDark,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  event.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF000000),
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              dateStr,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isDark
-                                    ? const Color(0xFF8E8E93)
-                                    : const Color(0xFF8E8E93),
+                              const SizedBox(width: 8),
+                              Text(
+                                dateStr,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  fontFeatures: KnueTokens.tabularFigures,
+                                  color: KnueTokens.caption(isDark),
+                                ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 15,
+                                color: isDark
+                                    ? const Color(0xFF48484A)
+                                    : const Color(0xFFC7C7CC),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -1409,27 +1503,30 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const NoticeScreen(),
-                            ),
-                          ),
+                          onTap: () {
+                            KnueHaptics.selection();
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: Colors.transparent,
+                              isScrollControlled: true,
+                              builder: (_) => KeywordSheet(color: themeClr),
+                            );
+                          },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
+                              horizontal: 12,
+                              vertical: 6,
                             ),
                             decoration: BoxDecoration(
                               color: themeClr,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Text(
+                            child: Text(
                               "등록",
                               style: TextStyle(
-                                fontSize: 11.5,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                                color: KnueTokens.onAccent(themeClr),
                               ),
                             ),
                           ),
@@ -1699,77 +1796,53 @@ class _HomeScreenState extends State<HomeScreen> {
   // -----------------------------------------------------------------------
 
   Widget _buildHousingCurationCard(Color themeClr, bool isDark) {
-    final cardColor = themeClr;
+    final accentFg = KnueTokens.accentForeground(themeClr, isDark);
+    final onBrand = KnueTokens.onAccent(themeClr);
 
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HousingScreen())),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              cardColor.withValues(alpha: isDark ? 0.25 : 0.12),
-              cardColor.withValues(alpha: isDark ? 0.08 : 0.03),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: cardColor.withValues(alpha: isDark ? 0.35 : 0.22),
-            width: 1.2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
+    return AnimatedScaleButton(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const HousingScreen()),
+      ),
+      scaleFactor: 0.98,
+      semanticLabel: '살고 계신 자취방 시세 제보하러 가기',
+      child: KnueCard(
+        isDark: isDark,
+        padding: const EdgeInsets.all(16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
-                color: cardColor.withValues(alpha: isDark ? 0.25 : 0.15),
-                borderRadius: BorderRadius.circular(12),
+                color: accentFg.withValues(alpha: isDark ? 0.18 : 0.10),
+                borderRadius: BorderRadius.circular(11),
               ),
-              child: const Center(
-                child: Text('📢', style: TextStyle(fontSize: 24)),
+              child: Icon(
+                Icons.apartment_rounded,
+                size: 21,
+                color: accentFg,
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.25 : 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          '익명 보장 · 30초 완료',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF10B981),
-                          ),
-                        ),
+                      KnueStatusChip(
+                        label: '익명 · 30초 완료',
+                        isDark: isDark,
+                        warm: true,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         '학우 참여 프로젝트',
                         style: TextStyle(
-                          fontSize: 10.5,
-                          color: isDark ? Colors.white38 : Colors.black38,
+                          fontSize: 11,
+                          color: KnueTokens.caption(isDark),
                         ),
                       ),
                     ],
@@ -1778,48 +1851,48 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     '살고 계신 자취방 시세를 알려주세요!',
                     style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
-                      color: isDark ? Colors.white : Colors.black87,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : const Color(0xFF1C1C1E),
                       letterSpacing: -0.3,
                     ),
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 4),
                   Text(
-                    '학우님의 제보 하나가 다음 학기 집을 구하는 동기와 후배들에게 소중한 나침반이 됩니다. 원룸/1.5룸/2룸 실제 보증금·월세와 외벽 연락처를 함께 공유해주세요 🤝',
+                    '원룸·1.5룸·2룸 실제 보증금과 월세 제보가 다음 학기 집을 구하는 학우들에게 큰 도움이 돼요.',
                     style: TextStyle(
-                      fontSize: 12.5,
-                      color: isDark ? Colors.white60 : Colors.black54,
+                      fontSize: 12,
+                      color: KnueTokens.caption(isDark),
                       height: 1.45,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: cardColor,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: cardColor.withValues(alpha: 0.35),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 11,
+                          vertical: 6,
                         ),
-                        child: const Row(
+                        decoration: BoxDecoration(
+                          color: themeClr,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.edit_note_rounded, size: 16, color: Colors.white),
-                            SizedBox(width: 5),
+                            Icon(
+                              Icons.edit_note_rounded,
+                              size: 15,
+                              color: onBrand,
+                            ),
+                            const SizedBox(width: 4),
                             Text(
                               '시세 제보하러 가기',
                               style: TextStyle(
                                 fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                color: onBrand,
                               ),
                             ),
                           ],
@@ -1831,7 +1904,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white38 : Colors.black38,
+                          color: KnueTokens.caption(isDark),
                         ),
                       ),
                     ],
@@ -1844,7 +1917,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
 }
 
 // ===========================================================================
@@ -1887,14 +1959,45 @@ class _AppleLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 14),
-      child: Center(
-        child: SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              KnueSkeleton(width: 28, height: 28, radius: 8, isDark: isDark),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    KnueSkeleton(width: 140, height: 11, radius: 5, isDark: isDark),
+                    const SizedBox(height: 6),
+                    KnueSkeleton(width: double.infinity, height: 12, radius: 5, isDark: isDark),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              KnueSkeleton(width: 28, height: 28, radius: 8, isDark: isDark),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    KnueSkeleton(width: 110, height: 11, radius: 5, isDark: isDark),
+                    const SizedBox(height: 6),
+                    KnueSkeleton(width: double.infinity, height: 12, radius: 5, isDark: isDark),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1924,5 +2027,4 @@ class _AppleErrorRetry extends StatelessWidget {
       ),
     );
   }
-
 }

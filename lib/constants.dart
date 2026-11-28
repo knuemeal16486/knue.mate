@@ -20,6 +20,7 @@ import 'meal_widget.dart'
 import 'meal_api.dart';
 import 'offline_cache.dart';
 import 'schedule_model.dart';
+import 'features/notice/notice_bookmark_service.dart';
 
 // [1] 전역 설정
 const String kBaseUrl = "https://knue-meal-api.onrender.com";
@@ -381,6 +382,32 @@ Future<KnueWeatherInfo?> fetchGangnaeWeather() async {
   return null;
 }
 
+/// Firestore `app_settings/home_greeting` 문서에서 홈 인사말을 읽는다. 순수 함수.
+///
+/// - `text`: 표시할 문구(비어 있으면 무시 → 기본 인사말 사용)
+/// - `date`: 선택 필드 `"YYYY-MM-DD"`. 지정하면 해당 날짜 하루만 표시.
+/// - `endDate`: 선택 필드 `"YYYY-MM-DD"`. 지정하면 해당 날짜(포함)까지만 표시되고
+///   다음 날(예: 11/30)부터 자동으로 원래 시간대/날씨 인사말로 돌아간다.
+String? parseRemoteHomeGreeting(Map<String, dynamic>? data, DateTime now) {
+  final raw = data?['text'];
+  if (raw is! String) return null;
+  final text = raw.trim();
+  if (text.isEmpty) return null;
+  final today =
+      '${now.year.toString().padLeft(4, '0')}-'
+      '${now.month.toString().padLeft(2, '0')}-'
+      '${now.day.toString().padLeft(2, '0')}';
+  final dateStr = data?['date'];
+  if (dateStr is String && dateStr.trim().isNotEmpty) {
+    if (dateStr.trim() != today) return null;
+  }
+  final endStr = data?['endDate'];
+  if (endStr is String && endStr.trim().isNotEmpty) {
+    if (today.compareTo(endStr.trim()) > 0) return null;
+  }
+  return text;
+}
+
 /// [now]의 시간대, 요일, [weather] 날씨에 맞는 인사말 하나를 무작위로 고른다.
 /// [random]을 주면 결과가 고정되므로 테스트에서 쓸 수 있다.
 String pickGreeting(
@@ -388,6 +415,10 @@ String pickGreeting(
   KnueWeatherInfo? weather,
   Random? random,
 }) {
+  // 2026-11-28 ~ 2026-11-29 임용 1차 특별 응원 문구 (11/30 자동 해제)
+  if (now.year == 2026 && now.month == 11 && (now.day == 28 || now.day == 29)) {
+    return '임용 1차 모두 고생하셨어요';
+  }
   final rng = random ?? Random();
   final hour = now.hour;
   final weekday = now.weekday; // 1: 월, ..., 5: 금, 6: 토, 7: 일
@@ -1329,6 +1360,7 @@ class PreferencesService {
     } catch (e) {
       debugPrint('personal event load error: $e');
     }
+    await NoticeBookmarkService.load();
   }
 
   static Future<void> saveTabOrder(List<AppTab> order) async {
@@ -1632,7 +1664,7 @@ class NotificationService {
         matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {
-      print("알림 예약 실패: $e");
+      debugPrint("알림 예약 실패: $e");
     }
   }
 

@@ -1,8 +1,18 @@
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'constants.dart';
+
+/// 앱 전역의 절제된 햅틱 피드백 헬퍼.
+class KnueHaptics {
+  KnueHaptics._();
+
+  static void selection() => HapticFeedback.selectionClick();
+  static void light() => HapticFeedback.lightImpact();
+  static void medium() => HapticFeedback.mediumImpact();
+}
 
 /// 누르면 살짝 작아졌다가 돌아오는(Scale-down) 마이크로 인터랙션을 제공하는 래퍼 위젯.
 class AnimatedScaleButton extends StatefulWidget {
@@ -34,9 +44,10 @@ class _AnimatedScaleButtonState extends State<AnimatedScaleButton>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: widget.duration);
-    _scaleAnimation = Tween<double>(begin: 1.0, end: widget.scaleFactor).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: widget.scaleFactor,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -60,22 +71,25 @@ class _AnimatedScaleButtonState extends State<AnimatedScaleButton>
 
   @override
   Widget build(BuildContext context) {
+    final disableMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return Semantics(
       button: true,
       label: widget.semanticLabel,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: _onTapDown,
-        onTapUp: _onTapUp,
-        onTapCancel: _onTapCancel,
-        child: AnimatedBuilder(
-          animation: _scaleAnimation,
-          builder: (context, child) => Transform.scale(
-            scale: _scaleAnimation.value,
-            child: child,
-          ),
-          child: widget.child,
-        ),
+        onTapDown: disableMotion ? null : _onTapDown,
+        onTapUp: disableMotion ? (_) => widget.onTap() : _onTapUp,
+        onTapCancel: disableMotion ? null : _onTapCancel,
+        child: disableMotion
+            ? widget.child
+            : AnimatedBuilder(
+                animation: _scaleAnimation,
+                builder: (context, child) => Transform.scale(
+                  scale: _scaleAnimation.value,
+                  child: child,
+                ),
+                child: widget.child,
+              ),
       ),
     );
   }
@@ -118,7 +132,8 @@ class GlassContainer extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: opacity),
               borderRadius: borderRadius,
-              border: border ??
+              border:
+                  border ??
                   Border.all(
                     color: Colors.white.withValues(alpha: 0.2),
                     width: 1.0,
@@ -206,11 +221,11 @@ Gradient stretchedHeaderGradient(
 }) {
   if (gradient is! LinearGradient) return gradient;
   Alignment move(AlignmentGeometry g) => stretchedHeaderAlignment(
-        g.resolve(TextDirection.ltr),
-        overscroll: overscroll,
-        headerHeight: headerHeight,
-        boxHeight: boxHeight,
-      );
+    g.resolve(TextDirection.ltr),
+    overscroll: overscroll,
+    headerHeight: headerHeight,
+    boxHeight: boxHeight,
+  );
   return LinearGradient(
     begin: move(gradient.begin),
     end: move(gradient.end),
@@ -265,17 +280,17 @@ class KnueTokens {
 
   /// 이중 소프트 섀도 — 카드가 떠 보이지 않게 아주 옅은 두 겹.
   static List<BoxShadow> cardShadow(bool isDark) => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
-          blurRadius: 10,
-          offset: const Offset(0, 2),
-        ),
-        BoxShadow(
-          color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
-          blurRadius: 24,
-          offset: const Offset(0, 8),
-        ),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
+      blurRadius: 10,
+      offset: const Offset(0, 2),
+    ),
+    BoxShadow(
+      color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
+      blurRadius: 24,
+      offset: const Offset(0, 8),
+    ),
+  ];
 
   /// 시각·D-Day·평점 등 숫자에 일괄 적용 — 자리수가 바뀌어도 폭이 안 흔들린다.
   static const List<FontFeature> tabularFigures = [
@@ -294,18 +309,53 @@ class KnueTokens {
   static const double _shadowAlpha = 0.22;
 
   static List<Shadow> get headerTextShadow => [
-        // 넓게 퍼지는 겹 — 글자 주변을 은은히 눌러준다.
-        Shadow(
-          color: Color.fromRGBO(0, 0, 0, _shadowAlpha),
-          blurRadius: 3,
-          offset: Offset(0, 1),
-        ),
-        // 좁은 겹 — 글자 가장자리를 또렷하게 만든다.
-        Shadow(
-          color: Color.fromRGBO(0, 0, 0, _shadowAlpha * 0.7),
-          blurRadius: 1,
-        ),
-      ];
+    // 넓게 퍼지는 겹 — 글자 주변을 은은히 눌러준다.
+    Shadow(
+      color: Color.fromRGBO(0, 0, 0, _shadowAlpha),
+      blurRadius: 3,
+      offset: Offset(0, 1),
+    ),
+    // 좁은 겹 — 글자 가장자리를 또렷하게 만든다.
+    Shadow(color: Color.fromRGBO(0, 0, 0, _shadowAlpha * 0.7), blurRadius: 1),
+  ];
+
+  /// 테마색(CTA·헤더·선택 알약) 위에 올리는 전경색(텍스트/아이콘).
+  /// 노랑·라임·앰버처럼 밝은 테마색 위에서는 진한 잉크색을 써서 팔레트의
+  /// 선명함을 지키면서도 WCAG AA 이상 대비를 확보한다.
+  static Color onAccent(Color seed) =>
+      seed.computeLuminance() > 0.52 ? const Color(0xFF1C1C1E) : Colors.white;
+
+  /// 헤더 배경([seed]) 위 전경색에 어울리는 그림자.
+  /// 어두운 잉크 전경일 때는 그림자를 끄고, 흰 글씨일 때만 옅은 그림자를 깐다.
+  static List<Shadow> headerShadows(Color seed) =>
+      onAccent(seed) == Colors.white ? headerTextShadow : const [];
+
+  /// 카드/배경 위에서 테마색을 **글씨·아이콘·링크**로 쓸 때의 대비 보정색.
+  /// - 라이트 모드에서 노랑/라임/시안 같은 밝은 색은 명도를 낮춰 흰 카드 위에서 또렷하게.
+  /// - 다크 모드에서 파랑/검정/갈색 같은 어두운 색은 명도를 올려 어두운 카드 위에서 또렷하게.
+  static Color accentForeground(Color seed, bool isDark) {
+    final lum = seed.computeLuminance();
+    if (isDark) {
+      if (lum >= 0.24) return seed;
+      final hsl = HSLColor.fromColor(seed);
+      if (hsl.saturation < 0.08) {
+        return const Color(0xFFE5E5EA);
+      }
+      return hsl
+          .withLightness(math.max(hsl.lightness, 0.68))
+          .withSaturation((hsl.saturation * 0.92).clamp(0.0, 1.0))
+          .toColor();
+    } else {
+      if (lum <= 0.28) return seed;
+      var hsl = HSLColor.fromColor(seed);
+      var out = hsl.withLightness(math.min(hsl.lightness, 0.34)).toColor();
+      while (out.computeLuminance() > 0.24 && hsl.lightness > 0.16) {
+        hsl = hsl.withLightness((hsl.lightness - 0.04).clamp(0.16, 1.0));
+        out = hsl.toColor();
+      }
+      return out;
+    }
+  }
 
   // ── 카테고리 식별색 ──────────────────────────────────────────────────
   //
@@ -418,8 +468,10 @@ class KnuePearl {
         .withSaturation((hsl.saturation - 0.06 * intensity).clamp(0.0, 1.0))
         // 남은 여유(1-lightness)에 비례해 올린다 — 이미 밝은 색은 조금만.
         .withLightness(
-          (hsl.lightness + 0.14 * intensity * (1.0 - hsl.lightness))
-              .clamp(0.0, 1.0),
+          (hsl.lightness + 0.14 * intensity * (1.0 - hsl.lightness)).clamp(
+            0.0,
+            1.0,
+          ),
         )
         .toColor();
     return _capLuminance(candidate, seed);
@@ -428,8 +480,7 @@ class KnuePearl {
   /// [candidate]의 밝기가 기존 공식의 상한을 넘으면 [seed] 쪽으로 되돌려 맞춘다.
   /// 색상 회전은 최대한 살리면서 밝기만 깎기 위해 이분 탐색을 쓴다.
   static Color _capLuminance(Color candidate, Color seed) {
-    final ceiling =
-        Color.lerp(seed, Colors.white, 0.08)!.computeLuminance();
+    final ceiling = Color.lerp(seed, Colors.white, 0.08)!.computeLuminance();
     if (candidate.computeLuminance() <= ceiling) return candidate;
     var lo = 0.0, hi = 1.0;
     for (var i = 0; i < 6; i++) {
@@ -505,14 +556,14 @@ class KnuePearl {
 
   /// 스와치 위에 겹치는 하이라이트 반사. 진주 특유의 "빛 고인 점"을 만든다.
   static RadialGradient sheen() => RadialGradient(
-        center: const Alignment(-0.45, -0.55),
-        radius: 0.9,
-        colors: [
-          Colors.white.withValues(alpha: kPearlTheme ? 0.42 : 0.0),
-          Colors.white.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 1.0],
-      );
+    center: const Alignment(-0.45, -0.55),
+    radius: 0.9,
+    colors: [
+      Colors.white.withValues(alpha: kPearlTheme ? 0.42 : 0.0),
+      Colors.white.withValues(alpha: 0.0),
+    ],
+    stops: const [0.0, 1.0],
+  );
 }
 
 /// 날씨(비, 바람, 눈, 기온 등)에 따라 헤더와 카드의 앰비언스를 은은하게 조색하는 유틸리티
@@ -556,8 +607,10 @@ class KnueWeatherAtmosphere {
       return KnuePearl.headerGradient(seed, isDark);
     }
 
-    final baseHighlight =
-        KnuePearl.highlight(seed, intensity: isDark ? 0.65 : 1.0);
+    final baseHighlight = KnuePearl.highlight(
+      seed,
+      intensity: isDark ? 0.65 : 1.0,
+    );
     final baseShade = KnuePearl.shade(seed, intensity: isDark ? 0.65 : 1.0);
 
     final tintedHighlight = Color.lerp(baseHighlight, tintColor, tintStrength)!;
@@ -567,11 +620,7 @@ class KnueWeatherAtmosphere {
     return LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [
-        tintedHighlight,
-        tintedSeed,
-        tintedShade,
-      ],
+      colors: [tintedHighlight, tintedSeed, tintedShade],
       stops: const [0.0, 0.52, 1.0],
     );
   }
@@ -790,6 +839,9 @@ class _WeatherParticlesOverlayState extends State<WeatherParticlesOverlay>
   Widget build(BuildContext context) {
     final kind = _kind;
     if (kind == null || _particles.isEmpty) return const SizedBox.shrink();
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+      return const SizedBox.shrink();
+    }
     // 헤더 콘텐츠(텍스트·버튼)의 탭을 가로채면 안 되고, 자주 다시 그리는
     // 레이어라 RepaintBoundary로 나머지 트리와 리페인트를 분리한다.
     return IgnorePointer(
@@ -860,8 +912,8 @@ class _WeatherParticlePainter extends CustomPainter {
     for (final p in particles) {
       final t = (progress * p.speed + p.phase) % 1.0;
       final y = t * (size.height + p.size * 2) - p.size;
-      final x = p.x * size.width +
-          math.sin(t * 2 * math.pi + p.phase * 10) * p.drift;
+      final x =
+          p.x * size.width + math.sin(t * 2 * math.pi + p.phase * 10) * p.drift;
       paint.color = Colors.white.withValues(alpha: p.opacity);
       canvas.drawCircle(Offset(x, y), p.size, paint);
     }
@@ -877,11 +929,7 @@ class _WeatherParticlePainter extends CustomPainter {
       final headX = t * travel - p.size;
       final y = p.x * size.height; // x를 세로 위치로 재사용
       paint.color = Colors.white.withValues(alpha: p.opacity);
-      canvas.drawLine(
-        Offset(headX - p.size, y),
-        Offset(headX, y),
-        paint,
-      );
+      canvas.drawLine(Offset(headX - p.size, y), Offset(headX, y), paint);
     }
   }
 
@@ -908,9 +956,11 @@ class KnueSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = actionColor ?? Theme.of(context).primaryColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final rawColor = actionColor ?? Theme.of(context).primaryColor;
+    final color = KnueTokens.accentForeground(rawColor, isDark);
     return Padding(
-      padding: const EdgeInsets.only(left: 8, right: 8, bottom: 7),
+      padding: const EdgeInsets.only(left: 8, right: 4, bottom: 5),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -918,11 +968,11 @@ class KnueSectionHeader extends StatelessWidget {
             header: true,
             child: Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.1,
-                color: KnueTokens.captionDark, // 라이트/다크 공용 중간 그레이
+                color: KnueTokens.caption(isDark),
               ),
             ),
           ),
@@ -932,25 +982,31 @@ class KnueSectionHeader extends StatelessWidget {
               excludeSemantics: true,
               label: '$title $actionText',
               child: GestureDetector(
-                onTap: onAction,
+                onTap: () {
+                  KnueHaptics.selection();
+                  onAction!();
+                },
                 behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        actionText!,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: -0.1,
-                          color: color,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 36, minWidth: 44),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          actionText!,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.1,
+                            color: color,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(Icons.chevron_right_rounded, size: 14, color: color),
-                    ],
+                        const SizedBox(width: 2),
+                        Icon(Icons.chevron_right_rounded, size: 15, color: color),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1075,10 +1131,12 @@ class _KnueSkeletonState extends State<KnueSkeleton>
 
   @override
   Widget build(BuildContext context) {
-    final base =
-        widget.isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEEEEEE);
-    final hi =
-        widget.isDark ? const Color(0xFF3A3A3A) : const Color(0xFFF7F7F7);
+    final base = widget.isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFEEEEEE);
+    final hi = widget.isDark
+        ? const Color(0xFF3A3A3A)
+        : const Color(0xFFF7F7F7);
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) => Container(
@@ -1124,6 +1182,13 @@ class _KnueLiveDotState extends State<KnueLiveDot>
   @override
   Widget build(BuildContext context) {
     final warm = KnueTokens.warm(widget.isDark);
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+      return Container(
+        width: 7,
+        height: 7,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: warm),
+      );
+    }
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) => Container(
@@ -1132,6 +1197,333 @@ class _KnueLiveDotState extends State<KnueLiveDot>
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: warm.withValues(alpha: 0.45 + 0.55 * _c.value),
+        ),
+      ),
+    );
+  }
+}
+
+/// 앱 공용 분할 세그먼트 컨트롤 (연락처·법률상식·설정 등에서 통일).
+class KnueSegmentedControl<T> extends StatelessWidget {
+  final List<({T value, String label})> items;
+  final T selected;
+  final ValueChanged<T> onChanged;
+  final Color accentColor;
+  final bool isDark;
+  final EdgeInsetsGeometry margin;
+  const KnueSegmentedControl({
+    super.key,
+    required this.items,
+    required this.selected,
+    required this.onChanged,
+    required this.accentColor,
+    required this.isDark,
+    this.margin = const EdgeInsets.fromLTRB(16, 0, 16, 8),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = KnueTokens.accentForeground(accentColor, isDark);
+    return Container(
+      margin: margin,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFE9E9EE),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Row(
+        children: items.map((item) {
+          final active = item.value == selected;
+          return Expanded(
+            child: Semantics(
+              button: true,
+              selected: active,
+              label: item.label,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (active) return;
+                  KnueHaptics.selection();
+                  onChanged(item.value);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: active
+                        ? (isDark ? const Color(0xFF3A3A3C) : Colors.white)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8.5),
+                    boxShadow: active
+                        ? [
+                            BoxShadow(
+                              color: Colors.black
+                                  .withValues(alpha: isDark ? 0.3 : 0.07),
+                              blurRadius: 6,
+                              offset: const Offset(0, 1.5),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                          color: active
+                              ? fg
+                              : (isDark ? Colors.white60 : Colors.black54),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+/// 앱 공용 검색창 (공지·연락처·법률상식 등에서 통일).
+class KnueSearchBar extends StatelessWidget {
+  final TextEditingController? controller;
+  final String query;
+  final String hintText;
+  final ValueChanged<String> onChanged;
+  final VoidCallback? onClear;
+  final Color accentColor;
+  final bool isDark;
+  final EdgeInsetsGeometry padding;
+
+  const KnueSearchBar({
+    super.key,
+    this.controller,
+    required this.query,
+    required this.hintText,
+    required this.onChanged,
+    this.onClear,
+    required this.accentColor,
+    required this.isDark,
+    this.padding = const EdgeInsets.fromLTRB(16, 10, 16, 8),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final focusColor = KnueTokens.accentForeground(accentColor, isDark);
+    final borderColor = KnueTokens.hairline(isDark);
+    return Padding(
+      padding: padding,
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(
+            fontSize: 13.5,
+            color: KnueTokens.caption(isDark),
+          ),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: 20,
+            color: KnueTokens.caption(isDark),
+          ),
+          suffixIcon: query.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  tooltip: '검색어 지우기',
+                  onPressed: () {
+                    controller?.clear();
+                    if (onClear != null) {
+                      onClear!();
+                    } else {
+                      onChanged('');
+                    }
+                  },
+                ),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 11),
+          filled: true,
+          fillColor: KnueTokens.surface(isDark),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: borderColor, width: 0.8),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: borderColor, width: 0.8),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: focusColor, width: 1.4),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 앱 공용 빈 상태 뷰.
+class KnueEmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final bool isDark;
+
+  const KnueEmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.actionLabel,
+    this.onAction,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).primaryColor;
+    final fg = KnueTokens.accentForeground(primary, isDark);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.04),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 28, color: KnueTokens.caption(isDark)),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                subtitle!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.45,
+                  color: KnueTokens.caption(isDark),
+                ),
+              ),
+            ],
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 14),
+              TextButton(
+                onPressed: onAction,
+                style: TextButton.styleFrom(foregroundColor: fg),
+                child: Text(actionLabel!),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 앱 공용 오류 상태 뷰.
+class KnueErrorState extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final VoidCallback onRetry;
+  final bool isDark;
+
+  const KnueErrorState({
+    super.key,
+    this.title = '불러오지 못했어요',
+    this.subtitle = '네트워크 연결을 확인한 뒤 다시 시도해 주세요',
+    required this.onRetry,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).primaryColor;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: isDark ? 0.16 : 0.10),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.wifi_off_rounded,
+                size: 28,
+                color: Colors.redAccent,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                subtitle!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.45,
+                  color: KnueTokens.caption(isDark),
+                ),
+              ),
+            ],
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('다시 시도'),
+              style: FilledButton.styleFrom(
+                backgroundColor: primary,
+                foregroundColor: KnueTokens.onAccent(primary),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

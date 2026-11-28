@@ -18,7 +18,6 @@ import 'package:workmanager/workmanager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
-import 'firebase_sync_service.dart';
 import 'root_screen.dart';
 import 'ui_utils.dart';
 import 'keyword_alert_service.dart';
@@ -89,7 +88,11 @@ class StartupErrorApp extends StatelessWidget {
                 const SizedBox(height: 16),
                 const Text(
                   "앱 초기화 오류",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -105,7 +108,11 @@ class StartupErrorApp extends StatelessWidget {
                   ),
                   child: Text(
                     "$error\n\n$stackTrace",
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.redAccent),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      color: Colors.redAccent,
+                    ),
                   ),
                 ),
               ],
@@ -121,7 +128,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
-    return StartupErrorApp(details.exception, details.stack ?? StackTrace.empty);
+    return StartupErrorApp(
+      details.exception,
+      details.stack ?? StackTrace.empty,
+    );
   };
 
   try {
@@ -189,7 +199,6 @@ Future<void> _initializeServicesInBackground() async {
   unawaited(ExitPromoSettings.refresh());
   unawaited(NoticeFeedSettings.refresh());
   unawaited(AppAnalytics.initialize());
-  _initializeBackgroundTasks();
 
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     unawaited(
@@ -244,17 +253,19 @@ Future<void> _initializeServicesInBackground() async {
 Future<void> _initializeFirebase() async {
   try {
     await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ).timeout(
-      const Duration(seconds: 3),
-      onTimeout: () {
-        debugPrint("Firebase.initializeApp 타임아웃");
-        return Firebase.app(); // 또는 이미 초기화된 default app
-      },
-    ).catchError((e) {
-      debugPrint("Firebase.initializeApp error: $e");
-      return Firebase.app();
-    });
+          options: DefaultFirebaseOptions.currentPlatform,
+        )
+        .timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            debugPrint("Firebase.initializeApp 타임아웃");
+            return Firebase.app(); // 또는 이미 초기화된 default app
+          },
+        )
+        .catchError((e) {
+          debugPrint("Firebase.initializeApp error: $e");
+          return Firebase.app();
+        });
     // 익명 로그인. Firestore 쓰기 규칙이 로그인을 요구하므로 제보·별점 같은
     // 기본 기능보다 먼저 끝나 있어야 한다. 실패해도 읽기는 되므로 앱은 뜬다.
     await AdminAuthService.initialize().timeout(
@@ -264,7 +275,9 @@ Future<void> _initializeFirebase() async {
       },
     );
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(
+        _firebaseMessagingBackgroundHandler,
+      );
       await _setupFirebaseMessaging().timeout(
         const Duration(seconds: 2),
         onTimeout: () {
@@ -284,9 +297,9 @@ Future<void> _setupFirebaseMessaging() async {
     try {
       // 첫 부팅 직후 맥락 없는 OS 권한 팝업을 띄우지 않도록, 현재 권한 상태만
       // 먼저 조회한다(권한 요청은 사용자가 알림을 켤 때 맥락에 맞게 수행).
-      settings = await messaging
-          .getNotificationSettings()
-          .timeout(const Duration(seconds: 2));
+      settings = await messaging.getNotificationSettings().timeout(
+        const Duration(seconds: 2),
+      );
     } catch (e) {
       debugPrint("Firebase Messaging getNotificationSettings error: $e");
       return;
@@ -316,7 +329,9 @@ Future<void> _setupFirebaseMessaging() async {
           onTimeout: () => null,
         );
         if (fcmToken != null) {
-          final displayToken = fcmToken.length > 20 ? fcmToken.substring(0, 20) : fcmToken;
+          final displayToken = fcmToken.length > 20
+              ? fcmToken.substring(0, 20)
+              : fcmToken;
           debugPrint("FCM Token: $displayToken...");
         }
       } on PlatformException catch (e) {
@@ -335,21 +350,12 @@ Future<void> _setupFirebaseMessaging() async {
         }
       });
     } else {
-      debugPrint("FCM 알림 권한 없음 (status: ${settings.authorizationStatus}). 포그라운드 알림 비활성화.");
+      debugPrint(
+        "FCM 알림 권한 없음 (status: ${settings.authorizationStatus}). 포그라운드 알림 비활성화.",
+      );
     }
   } catch (e) {
     debugPrint("Firebase messaging setup error: $e");
-  }
-}
-
-void _initializeBackgroundTasks() {
-  try {
-    // 백그라운드 건물 데이터 업로드 (에러 발생 시 무시)
-    FirebaseSyncService.uploadBuildingsToFirestore().catchError((e) {
-      debugPrint("uploadBuildingsToFirestore background error: $e");
-    });
-  } catch (e) {
-    debugPrint("Background tasks init error: $e");
   }
 }
 
@@ -365,8 +371,10 @@ void _handleWidgetUri(Uri? uri) {
   final link = noticeLinkFromWidgetUri(uri);
   if (link != null) {
     unawaited(
-      launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication)
-          .catchError((Object e) {
+      launchUrl(
+        Uri.parse(link),
+        mode: LaunchMode.externalApplication,
+      ).catchError((Object e) {
         debugPrint('위젯 공지 링크 열기 실패: $e');
         return false;
       }),
@@ -405,9 +413,8 @@ Future<void> _initializeHomeWidget() async {
 /// 대체된다). 웹 빌드의 타이포그래피는 일부 스타일의 letterSpacing이 null이라
 /// 그대로 쓰면 시작하자마자 깨진다. null은 0으로 보고 델타를 직접 더한다.
 TextTheme _applyLetterSpacingDelta(TextTheme base, double delta) {
-  TextStyle? tighten(TextStyle? style) => style?.copyWith(
-        letterSpacing: (style.letterSpacing ?? 0) + delta,
-      );
+  TextStyle? tighten(TextStyle? style) =>
+      style?.copyWith(letterSpacing: (style.letterSpacing ?? 0) + delta);
   return base.copyWith(
     displayLarge: tighten(base.displayLarge),
     displayMedium: tighten(base.displayMedium),
@@ -492,19 +499,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   );
 
   /// 팝업 하단 버튼. 기본 TextButton은 글씨가 얇고 터치 영역이 들쭉날쭉해서
-  /// "취소/확인"이 본문보다 눈에 덜 들어왔다.
-  TextButtonThemeData _textButtonTheme(Color seed) => TextButtonThemeData(
-    style: TextButton.styleFrom(
-      foregroundColor: seed,
-      textStyle: GoogleFonts.notoSansKr(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.2,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ),
-  );
+  /// "취소/확인"이 본문보다 눈에 덜 들어왔다. 밝은/검정 테마색에서도 대비를 보정한다.
+  TextButtonThemeData _textButtonTheme(Color seed, bool isDark) =>
+      TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: KnueTokens.accentForeground(seed, isDark),
+          textStyle: GoogleFonts.notoSansKr(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -514,6 +524,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         return ValueListenableBuilder<Color>(
           valueListenable: themeColor,
           builder: (context, color, child) {
+            final onBrand = KnueTokens.onAccent(color);
+            final brandShadows = KnueTokens.headerShadows(color);
             return MaterialApp(
               title: 'KNUE Mate',
               debugShowCheckedModeBanner: false,
@@ -524,8 +536,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: color,
                   primary: color,
+                  onPrimary: onBrand,
                   secondary: color.withValues(alpha: 0.8),
                   brightness: Brightness.light,
+                  surface: KnueTokens.surfaceLight,
                 ),
                 textTheme: _applyLetterSpacingDelta(
                   GoogleFonts.notoSansKrTextTheme(
@@ -533,35 +547,36 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   ),
                   -0.4,
                 ),
-                scaffoldBackgroundColor: const Color(0xFFF8F9FE),
-                cardColor: Colors.white,
+                scaffoldBackgroundColor: KnueTokens.bgLight,
+                cardColor: KnueTokens.surfaceLight,
                 cardTheme: CardThemeData(
-                  elevation: 8,
+                  elevation: 0,
                   shadowColor: Colors.black.withValues(alpha: 0.04),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(KnueTokens.radiusCard),
                   ),
-                  color: Colors.white,
+                  color: KnueTokens.surfaceLight,
                   surfaceTintColor: Colors.transparent,
                 ),
                 appBarTheme: AppBarTheme(
                   backgroundColor: color,
-                  foregroundColor: Colors.white,
+                  foregroundColor: onBrand,
+                  iconTheme: IconThemeData(color: onBrand),
                   elevation: 0,
                   scrolledUnderElevation: 0,
                   // iOS는 AppBar 제목을 가운데로 보내는 게 기본이라, 화면마다
                   // 따로 끄던 것을 여기서 한 번에 끈다(안 끈 화면이 8개 있었다).
                   centerTitle: false,
                   titleTextStyle: GoogleFonts.notoSansKr(
-                    color: Colors.white,
+                    color: onBrand,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
-                    shadows: KnueTokens.headerTextShadow,
+                    shadows: brandShadows,
                   ),
                 ),
                 dialogTheme: _dialogTheme(false),
                 bottomSheetTheme: _bottomSheetTheme(false),
-                textButtonTheme: _textButtonTheme(color),
+                textButtonTheme: _textButtonTheme(color, false),
               ),
               darkTheme: ThemeData(
                 useMaterial3: true,
@@ -570,9 +585,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: color,
                   primary: color,
+                  onPrimary: onBrand,
                   secondary: color.withValues(alpha: 0.8),
                   brightness: Brightness.dark,
-                  surface: const Color(0xFF161618),
+                  surface: KnueTokens.surfaceDark,
                 ),
                 textTheme: _applyLetterSpacingDelta(
                   GoogleFonts.notoSansKrTextTheme(
@@ -580,33 +596,34 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   ),
                   -0.4,
                 ),
-                scaffoldBackgroundColor: const Color(0xFF0D0D0F),
-                cardColor: const Color(0xFF1E1E22),
+                scaffoldBackgroundColor: KnueTokens.bgDark,
+                cardColor: KnueTokens.surfaceDark,
                 cardTheme: CardThemeData(
-                  elevation: 8,
-                  shadowColor: Colors.black.withValues(alpha: 0.2),
+                  elevation: 0,
+                  shadowColor: Colors.black.withValues(alpha: 0.25),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(KnueTokens.radiusCard),
                   ),
-                  color: const Color(0xFF1E1E22),
+                  color: KnueTokens.surfaceDark,
                   surfaceTintColor: Colors.transparent,
                 ),
                 appBarTheme: AppBarTheme(
                   backgroundColor: color,
-                  foregroundColor: Colors.white,
+                  foregroundColor: onBrand,
+                  iconTheme: IconThemeData(color: onBrand),
                   elevation: 0,
                   scrolledUnderElevation: 0,
                   centerTitle: false,
                   titleTextStyle: GoogleFonts.notoSansKr(
-                    color: Colors.white,
+                    color: onBrand,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
-                    shadows: KnueTokens.headerTextShadow,
+                    shadows: brandShadows,
                   ),
                 ),
                 dialogTheme: _dialogTheme(true),
                 bottomSheetTheme: _bottomSheetTheme(true),
-                textButtonTheme: _textButtonTheme(color),
+                textButtonTheme: _textButtonTheme(color, true),
               ),
               themeMode: mode,
               home: RootNavigationScreen(key: RootNavigationScreen.navKey),

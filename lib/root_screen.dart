@@ -13,6 +13,7 @@ import 'bus_screen.dart';
 import 'campus_map_screen.dart';
 import 'campus_run_screen.dart';
 import 'home_screen.dart';
+import 'onboarding_screen.dart';
 import 'ui_utils.dart';
 export 'features/root/exit_promo_sponsor_box.dart';
 
@@ -25,13 +26,21 @@ class RootNavigationScreen extends StatefulWidget {
   @override
   State<RootNavigationScreen> createState() => RootNavigationScreenState();
 
+  /// 탭 전환 시 특정 서브 탭(예: 버스 탭의 실시간 위치 = 1)으로 바로 이동하기 위한 요청.
+  static final ValueNotifier<({int tabIndex, int seq})?> busSubTabRequest =
+      ValueNotifier(null);
+  static int _subTabSeq = 0;
+
   /// 탭을 옮긴다. 아직 화면이 안 만들어졌거나(앱이 막 켜지는 중) 그 탭을
   /// 숨겨 뒀으면 false — 호출부가 나중에 다시 시도할지 정할 수 있게 한다.
-  static bool switchTab(AppTab tab) {
+  static bool switchTab(AppTab tab, {int? subTabIndex}) {
     final state = navKey.currentState;
     if (state == null) return false;
     final index = PreferencesService.tabOrder.value.indexOf(tab);
     if (index == -1) return false;
+    if (tab == AppTab.bus && subTabIndex != null) {
+      busSubTabRequest.value = (tabIndex: subTabIndex, seq: ++_subTabSeq);
+    }
     state._onTabTapped(index);
     return true;
   }
@@ -67,9 +76,13 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
 
     WidgetsBinding.instance.addObserver(this);
 
-    // 새 버전이 나왔으면 업데이트를 강제한다(app_update.dart).
+    // 새 버전이 나왔으면 업데이트를 강제하고, 신규 설치 사용자는 15초 맞춤 설정을 안내한다.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) AppUpdateGate.check(context, force: true);
+      if (!mounted) return;
+      AppUpdateGate.check(context, force: true);
+      if (pendingWidgetTab == null) {
+        unawaited(KnueOnboardingSheet.maybeShow(context));
+      }
     });
 
     // 처음 보이는 탭도 센다(탭을 누르지 않고 끄는 사람이 대부분이다).
@@ -245,7 +258,7 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
         ),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
-            color: theme.cardColor,
+            color: KnueTokens.surface(isDark),
             // 카드와 같은 이중 섀도를 위로 뒤집어 쓴다 — 앱 전체 재질 통일.
             boxShadow: KnueTokens.cardShadow(isDark)
                 .map(
@@ -263,12 +276,18 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   for (int i = 0; i < tabs.length; i++)
-                    _buildNavItem(tabs[i], i, theme.primaryColor, isDark),
+                    Expanded(
+                      child: _buildNavItem(
+                        tabs[i],
+                        i,
+                        theme.primaryColor,
+                        isDark,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -278,9 +297,12 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
     );
   }
 
-  /// 3월 원본 pill 스타일 항목 — 선택 탭은 컬러 알약(아이콘+라벨), 비선택은 아이콘만.
+  /// 5탭 상시 라벨 내비게이션 항목 — 비선택 탭도 라벨을 보여 탐색 비용을 줄이고,
+  /// 선택 탭은 대비가 보정된 은은한 틴트 알약으로 또렷하게 강조한다.
   Widget _buildNavItem(AppTab tab, int index, Color color, bool isDark) {
     final isSel = index == _currentIndex;
+    final accentFg = KnueTokens.accentForeground(color, isDark);
+    final inactiveColor = isDark ? Colors.white54 : const Color(0xFF6E6E73);
     return Semantics(
       button: true,
       selected: isSel,
@@ -292,35 +314,35 @@ class RootNavigationScreenState extends State<RootNavigationScreen>
           behavior: HitTestBehavior.opaque,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
             decoration: BoxDecoration(
-              color: isSel ? color : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
+              color: isSel
+                  ? accentFg.withValues(alpha: isDark ? 0.18 : 0.11)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: Row(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   tab.icon,
                   size: 22,
-                  color: isSel
-                      ? Colors.white
-                      : (isDark ? Colors.white38 : Colors.grey),
+                  color: isSel ? accentFg : inactiveColor,
                 ),
-                if (isSel) ...[
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      tab.label,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
+                const SizedBox(height: 2),
+                Text(
+                  tab.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isSel ? accentFg : inactiveColor,
+                    fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 10.5,
+                    letterSpacing: -0.2,
                   ),
-                ],
+                ),
               ],
             ),
           ),

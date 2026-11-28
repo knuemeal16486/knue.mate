@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import 'constants.dart';
 import 'settings_screen.dart' show SettingsChoiceOption, SettingsThemeOption;
+import 'ui_utils.dart';
 import 'widget_preview.dart';
 
 class WidgetSettingsScreen extends StatefulWidget {
@@ -43,28 +44,33 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
   Widget build(BuildContext context) {
     final currentColor = themeColor.value;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final boxBorder = isDark ? null : Border.all(color: Colors.grey.shade300);
+    final onBrand = KnueTokens.onAccent(currentColor);
+    final accentFg = KnueTokens.accentForeground(currentColor, isDark);
     final hint = TextStyle(
       fontSize: 12,
       height: 1.5,
-      color: isDark ? Colors.grey : Colors.grey.shade600,
+      color: KnueTokens.caption(isDark),
     );
-    BoxDecoration card() => BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: boxBorder,
-        );
     return Scaffold(
-      appBar: AppBar(title: const Text("홈 위젯")),
+      backgroundColor: KnueTokens.bg(isDark),
+      appBar: AppBar(
+        title: const Text("홈 위젯"),
+        backgroundColor: Colors.transparent,
+        flexibleSpace: AppleAppBarFlexibleSpace(
+          themeColor: currentColor,
+          isDark: isDark,
+        ),
+        iconTheme: IconThemeData(color: onBrand),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // 테마·투명도를 바꾸면 홈 화면에 나가지 않고 바로 본다.
           const WidgetAppearancePreview(),
           const SizedBox(height: 16),
-          Container(
+          KnueCard(
+            isDark: isDark,
             padding: const EdgeInsets.all(16),
-            decoration: card(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -189,7 +195,7 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
                           min: 0.0,
                           max: 0.8,
                           divisions: 8,
-                          activeColor: currentColor,
+                          activeColor: accentFg,
                           onChanged: (v) {
                             setState(() => _localTransparency = v);
                             widgetTransparency.value = v;
@@ -207,7 +213,7 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
                           horizontal: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: currentColor.withValues(alpha: 0.1),
+                          color: accentFg.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -215,7 +221,8 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: currentColor,
+                            color: accentFg,
+                            fontFeatures: KnueTokens.tabularFigures,
                           ),
                         ),
                       ),
@@ -224,12 +231,7 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
                   const SizedBox(height: 8),
                   Text(
                     "투명도가 높을수록 위젯 배경이 투명해집니다. 테마·투명도는 식단·버스·공지 위젯에 모두 적용돼요.",
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark
-                          ? Colors.grey
-                          : Colors.grey.shade600,
-                    ),
+                    style: hint,
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -241,9 +243,12 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
                     label: const Text("위젯 데이터 즉시 업데이트"),
                     style: FilledButton.styleFrom(
                       backgroundColor: currentColor,
-                      foregroundColor: Colors.white,
+                      foregroundColor: onBrand,
                       padding: const EdgeInsets.symmetric(
                         vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
@@ -252,9 +257,9 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Container(
+          KnueCard(
+            isDark: isDark,
             padding: const EdgeInsets.all(16),
-            decoration: card(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

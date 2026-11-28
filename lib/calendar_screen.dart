@@ -11,7 +11,8 @@ import 'ui_utils.dart';
 /// 청람일정 화면. 학사일정(월별 크롤링 캐시) + 개인일정을 캘린더에 표시하고,
 /// 하단에는 D-day 카드 목록을 보여준다.
 class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({super.key});
+  final DateTime? initialDate;
+  const CalendarScreen({super.key, this.initialDate});
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
 }
@@ -19,8 +20,8 @@ class CalendarScreen extends StatefulWidget {
 class _CalendarScreenState extends State<CalendarScreen> {
   final _scraper = KnueScraper();
 
-  DateTime _focusedDay = DateTime.now();
-  DateTime _selectedDay = DateTime.now();
+  late DateTime _focusedDay = widget.initialDate ?? DateTime.now();
+  late DateTime _selectedDay = widget.initialDate ?? DateTime.now();
 
   /// 월별 학사일정 캐시. 키는 year * 100 + month.
   final Map<int, List<CalendarEvent>> _academicCache = {};
@@ -242,13 +243,56 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return daysLeft > 0 ? "D-$daysLeft" : "D+${-daysLeft}";
   }
 
+  void _showAddChoiceSheet(Color color, bool isDark) {
+    KnueHaptics.selection();
+    final accentFg = KnueTokens.accentForeground(color, isDark);
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.event_note_rounded, color: accentFg),
+              title: Text(
+                "${_formatShortDate(_selectedDay)} 개인 일정 추가",
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text("선택한 날짜에 개인 메모·일정 기록"),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _showAddPersonalEventDialog(color);
+              },
+            ),
+            Divider(height: 0.5, indent: 56, color: KnueTokens.hairline(isDark)),
+            ListTile(
+              leading: Icon(Icons.add_alarm_rounded, color: KnueTokens.warm(isDark)),
+              title: const Text(
+                "D-day 추가",
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text("시험·과제·종강까지 남은 날 카운트다운"),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _showAddDdayDialog(color);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<Color>(
       valueListenable: themeColor,
       builder: (context, color, child) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final onBrand = KnueTokens.onAccent(color);
         return Scaffold(
+          backgroundColor: KnueTokens.bg(isDark),
           appBar: AppBar(
             title: const Text("청람일정"),
             backgroundColor: Colors.transparent,
@@ -256,7 +300,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               themeColor: color,
               isDark: isDark,
             ),
-            iconTheme: const IconThemeData(color: Colors.white),
+            iconTheme: IconThemeData(color: onBrand),
             actions: [
               IconButton(
                 onPressed: () => _showAddDdayDialog(color),
@@ -289,10 +333,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
             },
           ),
           floatingActionButton: FloatingActionButton(
-            onPressed: () => _showAddPersonalEventDialog(color),
+            onPressed: () => _showAddChoiceSheet(color, isDark),
             backgroundColor: color,
-            tooltip: "개인일정 추가",
-            child: const Icon(Icons.add, color: Colors.white),
+            foregroundColor: onBrand,
+            tooltip: "일정·D-day 추가",
+            child: Icon(Icons.add, color: onBrand),
           ),
         );
       },
@@ -300,16 +345,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildCalendarCard(Color color, bool isDark) {
-    return Container(
+    return KnueCard(
+      isDark: isDark,
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
       padding: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
-        ),
-      ),
       child: TableCalendar<Object>(
         locale: 'ko_KR',
         firstDay: DateTime(2000, 1, 1),

@@ -139,11 +139,6 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     await prefs.setStringList(_kFavoriteClassroomsKey, _favoriteNames.toList());
   }
 
-  Color _getNeonVariant(Color baseColor) {
-    final hsv = HSVColor.fromColor(baseColor);
-    return hsv.withSaturation(1.0).withValue(1.0).toColor();
-  }
-
   void _showClassroomSelector(Color neonColor) {
     if (_isRunning) return;
 
@@ -211,46 +206,81 @@ class _CampusRunScreenState extends State<CampusRunScreen>
     );
   }
 
-  void _showTargetSettingDialog(Color neonColor) {
+  void _showTargetSettingDialog(Color accentColor) {
     if (_isRunning) return;
-    int inputMinutes = 5;
+    int inputMinutes = _targetDurationSeconds != null
+        ? (_targetDurationSeconds! / 60).round().clamp(1, 60)
+        : 5;
     showDialog(
       context: context,
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final fg = KnueTokens.accentForeground(accentColor, isDark);
         return AlertDialog(
-          backgroundColor: isDark ? Colors.grey[900] : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text("목표 시간 설정", style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+          title: const Text("목표 시간 설정"),
           content: StatefulBuilder(
             builder: (context, setStateSB) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              return Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: Icon(Icons.remove_circle_outline, color: neonColor),
-                    onPressed: () {
-                      if (inputMinutes > 1) setStateSB(() => inputMinutes--);
-                    },
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [3, 5, 10, 15].map((preset) {
+                      final active = inputMinutes == preset;
+                      return ChoiceChip(
+                        label: Text('$preset분'),
+                        selected: active,
+                        selectedColor: accentColor,
+                        labelStyle: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: active
+                              ? KnueTokens.onAccent(accentColor)
+                              : (isDark ? Colors.white70 : Colors.black87),
+                        ),
+                        onSelected: (_) {
+                          KnueHaptics.selection();
+                          setStateSB(() => inputMinutes = preset);
+                        },
+                      );
+                    }).toList(),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      "$inputMinutes분",
-                      style: TextStyle(
-                        color: isDark ? Colors.white : Colors.black87,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.remove_circle_outline, color: fg),
+                        onPressed: () {
+                          if (inputMinutes > 1) {
+                            KnueHaptics.selection();
+                            setStateSB(() => inputMinutes--);
+                          }
+                        },
                       ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.add_circle_outline, color: neonColor),
-                    onPressed: () {
-                      if (inputMinutes < 60) setStateSB(() => inputMinutes++);
-                    },
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          "$inputMinutes분",
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black87,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            fontFeatures: KnueTokens.tabularFigures,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.add_circle_outline, color: fg),
+                        onPressed: () {
+                          if (inputMinutes < 60) {
+                            KnueHaptics.selection();
+                            setStateSB(() => inputMinutes++);
+                          }
+                        },
+                      ),
+                    ],
                   ),
                 ],
               );
@@ -262,16 +292,17 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                 setState(() => _targetDurationSeconds = null);
                 Navigator.pop(context);
               },
-              child: Text("해제", style: TextStyle(color: isDark ? Colors.grey : Colors.grey[600])),
+              child: Text("해제", style: TextStyle(color: KnueTokens.caption(isDark))),
             ),
             TextButton(
               onPressed: () {
+                KnueHaptics.light();
                 setState(() => _targetDurationSeconds = inputMinutes * 60);
                 Navigator.pop(context);
               },
               child: Text(
                 "설정",
-                style: TextStyle(color: neonColor, fontWeight: FontWeight.bold),
+                style: TextStyle(color: fg, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -282,9 +313,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
 
   Future<void> _toggleTracking() async {
     if (_targetClassroom == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("먼저 목표 강의실을 선택해주세요!")));
+      showToast(context, "먼저 목표 강의실을 선택해주세요!");
       return;
     }
 
@@ -342,7 +371,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
               _updateMetrics(position);
             },
             onError: (error) {
-              print("위치 오류: $error");
+              debugPrint("위치 오류: $error");
               if (mounted) {
                 setState(() {
                   _statusMessage = "위치 정보를 가져올 수 없습니다";
@@ -443,10 +472,11 @@ class _CampusRunScreenState extends State<CampusRunScreen>
       valueListenable: themeColor,
       builder: (builderContext, primaryColor, child) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        final neonColor = _getNeonVariant(primaryColor);
-        final bgBase = isDark ? const Color(0xFF121212) : const Color(0xFFF5F6FA);
-        final textMain = isDark ? Colors.white : Colors.black87;
-        final textSub = isDark ? Colors.white70 : Colors.black54;
+        final neonColor = KnueTokens.accentForeground(primaryColor, isDark);
+        final onBrand = KnueTokens.onAccent(primaryColor);
+        final bgBase = KnueTokens.bg(isDark);
+        final textMain = isDark ? Colors.white : const Color(0xFF1C1C1E);
+        final textSub = KnueTokens.caption(isDark);
 
         final bool isTargetSelected = _targetClassroom != null;
         final isArrived = _distanceRemaining < 20 && _distanceRemaining > 0;
@@ -454,38 +484,46 @@ class _CampusRunScreenState extends State<CampusRunScreen>
         return Scaffold(
           backgroundColor: bgBase,
           appBar: AppBar(
-            backgroundColor: bgBase,
+            backgroundColor: Colors.transparent,
+            flexibleSpace: AppleAppBarFlexibleSpace(
+              themeColor: primaryColor,
+              isDark: isDark,
+            ),
+            iconTheme: IconThemeData(color: onBrand),
             elevation: 0,
-            leading: null, // 햄버거 메뉴 제거
             title: Text(
-              "CAMPUS RUN",
+              "캠퍼스런",
               style: TextStyle(
-                color: textMain,
-                fontWeight: FontWeight.w900,
-                fontStyle: FontStyle.italic,
+                color: onBrand,
+                fontWeight: FontWeight.w800,
+                shadows: KnueTokens.headerShadows(primaryColor),
               ),
             ),
-            centerTitle: true,
           ),
           body: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
             child: Column(
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 16,
+                    vertical: 7,
+                    horizontal: 14,
                   ),
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                    color: KnueTokens.surface(isDark),
                     borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: KnueTokens.hairline(isDark),
+                      width: 0.5,
+                    ),
                   ),
                   child: Text(
                     "현재 시각  ${_formatTimeHHMM(_currentTime)}",
                     style: TextStyle(
                       color: textSub,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: KnueTokens.tabularFigures,
                     ),
                   ),
                 ),
@@ -493,30 +531,28 @@ class _CampusRunScreenState extends State<CampusRunScreen>
 
                 // 강의실 선택
                 GestureDetector(
-                  onTap: () => _showClassroomSelector(neonColor),
+                  onTap: () {
+                    KnueHaptics.selection();
+                    _showClassroomSelector(neonColor);
+                  },
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
+                    duration: const Duration(milliseconds: 250),
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: isTargetSelected ? 12 : 18,
+                      horizontal: 18,
+                      vertical: isTargetSelected ? 12 : 16,
                     ),
-                    margin: const EdgeInsets.symmetric(vertical: 10),
+                    margin: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.grey[900] : Colors.white,
-                      borderRadius: BorderRadius.circular(20),
+                      color: KnueTokens.surface(isDark),
+                      borderRadius: BorderRadius.circular(KnueTokens.radiusCard),
                       border: Border.all(
                         color: isTargetSelected
-                            ? neonColor.withValues(alpha: 0.5)
-                            : (isDark ? Colors.white10 : Colors.black12),
+                            ? neonColor.withValues(alpha: 0.6)
+                            : KnueTokens.hairline(isDark),
+                        width: isTargetSelected ? 1.2 : 0.6,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isDark ? Colors.black.withValues(alpha: 0.5) : Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      boxShadow: KnueTokens.cardShadow(isDark),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -526,21 +562,21 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "목표",
+                                "목표 강의실",
                                 style: TextStyle(
-                                  color: isDark ? Colors.grey[500] : Colors.grey[600],
+                                  color: textSub,
                                   fontSize: 12,
                                 ),
                               ),
-                              if (!isTargetSelected) const SizedBox(height: 4),
+                              if (!isTargetSelected) const SizedBox(height: 3),
                               Text(
                                 _targetClassroom?.name ?? "강의실을 선택하세요",
                                 style: TextStyle(
                                   color: _targetClassroom == null
-                                      ? Colors.grey
+                                      ? textSub
                                       : textMain,
-                                  fontSize: isTargetSelected ? 16 : 18,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: isTargetSelected ? 16 : 17,
+                                  fontWeight: FontWeight.w700,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -548,7 +584,7 @@ class _CampusRunScreenState extends State<CampusRunScreen>
                             ],
                           ),
                         ),
-                        Icon(Icons.location_on, color: neonColor),
+                        Icon(Icons.location_on_rounded, color: neonColor),
                       ],
                     ),
                   ),
@@ -556,40 +592,48 @@ class _CampusRunScreenState extends State<CampusRunScreen>
 
                 if (!_isRunning)
                   GestureDetector(
-                    onTap: () => _showTargetSettingDialog(neonColor),
+                    onTap: () {
+                      KnueHaptics.selection();
+                      _showTargetSettingDialog(primaryColor);
+                    },
                     child: Container(
-                      margin: const EdgeInsets.only(bottom: 20),
+                      margin: const EdgeInsets.only(bottom: 16),
                       padding: const EdgeInsets.symmetric(
-                        vertical: 10,
-                        horizontal: 16,
+                        vertical: 9,
+                        horizontal: 15,
                       ),
                       decoration: BoxDecoration(
-                        border: Border.all(color: neonColor.withValues(alpha: 0.5)),
+                        border: Border.all(
+                          color: _targetDurationSeconds != null
+                              ? neonColor.withValues(alpha: 0.5)
+                              : KnueTokens.hairline(isDark),
+                        ),
                         borderRadius: BorderRadius.circular(20),
                         color: _targetDurationSeconds != null
-                            ? neonColor.withValues(alpha: 0.1)
-                            : Colors.transparent,
+                            ? neonColor.withValues(alpha: 0.10)
+                            : KnueTokens.surface(isDark),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            Icons.timer,
-                            size: 18,
+                            Icons.timer_outlined,
+                            size: 17,
                             color: _targetDurationSeconds != null
                                 ? neonColor
-                                : Colors.grey,
+                                : textSub,
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 7),
                           Text(
                             _targetDurationSeconds != null
                                 ? "목표: ${(_targetDurationSeconds! / 60).round()}분 안에 도착하기"
-                                : "타이머 설정 (선택)",
+                                : "목표 시간 설정 (선택)",
                             style: TextStyle(
+                              fontSize: 13,
                               color: _targetDurationSeconds != null
                                   ? neonColor
-                                  : Colors.grey,
-                              fontWeight: FontWeight.bold,
+                                  : textSub,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],

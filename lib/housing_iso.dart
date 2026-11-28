@@ -5,9 +5,21 @@ import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'campus_greenery.dart';
 import 'housing_model.dart' show IsochroneCenter;
 import 'stall_align.dart';
 import 'ui_utils.dart' show KnueTokens;
+
+export 'campus_greenery.dart'
+    show
+        CampusGreenKind,
+        CampusGreenZone,
+        CampusTree,
+        CampusTreeKind,
+        kCampusGreenZones,
+        kRoundaboutCenter,
+        kRoundaboutIslandRadius,
+        generateCampusTrees;
 
 /// 건물 용도 — 지붕 색이 여기서 갈린다.
 ///
@@ -433,6 +445,8 @@ class BaseTerrain {
   final List<BaseCrosswalk> crosswalks;
   final List<BaseRoundaboutIsland> roundaboutIslands;
   final List<Offset> trees;
+  final List<CampusGreenZone> campusGreenZones;
+  final List<CampusTree> campusTrees;
 
   const BaseTerrain({
     this.traced = TracedGround.empty,
@@ -452,6 +466,8 @@ class BaseTerrain {
     this.crosswalks = const [],
     this.roundaboutIslands = const [],
     this.trees = const [],
+    this.campusGreenZones = const [],
+    this.campusTrees = const [],
   });
 
   static const empty = BaseTerrain();
@@ -725,6 +741,58 @@ class CampusBase {
           use: BuildingUse.from(b['use'] as String?),
         ),
     ];
+
+    // 위성사진 실사 기반 캠퍼스 녹지·로터리 화단·수목 군락 생성 (건물·도로·주차장·코트 회피)
+    final osmRoadsForTrees = await loadOsmRoads();
+    final generatedTrees = generateCampusTrees(
+      campusOutline: traced.campusOutline,
+      buildingRings: [for (final b in tracedBuildings) b.ring],
+      osmRoads: [
+        for (final r in osmRoadsForTrees)
+          (kind: r.kind, widthM: r.widthM, points: r.points),
+      ],
+      courts: [
+        for (final c in traced.courts)
+          (center: c.center, length: c.length, width: c.width, angle: c.angle),
+      ],
+      sportsFacilities: traced.sportsFacilities,
+      stallBoxes: [
+        for (final s in [...traced.stallStrips, ...traced.stallAisles])
+          (center: s.center, length: s.length, width: s.width, angle: s.angle),
+      ],
+      waterAreas: traced.waterAreas,
+    );
+    final mergedRoundabouts = <BaseRoundaboutIsland>[
+      ...parsedTerrain.roundaboutIslands,
+      if (!parsedTerrain.roundaboutIslands.any(
+        (ri) => (ri.center - kRoundaboutCenter).distance < 5.0,
+      ))
+        const BaseRoundaboutIsland(
+          center: kRoundaboutCenter,
+          radius: kRoundaboutIslandRadius,
+        ),
+    ];
+    parsedTerrain = BaseTerrain(
+      traced: parsedTerrain.traced,
+      campusBoundary: parsedTerrain.campusBoundary,
+      athleticTrack: parsedTerrain.athleticTrack,
+      athleticPitch: parsedTerrain.athleticPitch,
+      grandstand: parsedTerrain.grandstand,
+      pond: parsedTerrain.pond,
+      pondBridge: parsedTerrain.pondBridge,
+      centralPlaza: parsedTerrain.centralPlaza,
+      dormCourtyard: parsedTerrain.dormCourtyard,
+      basketballCourt: parsedTerrain.basketballCourt,
+      tennisCourt: parsedTerrain.tennisCourt,
+      forestAreas: parsedTerrain.forestAreas,
+      contours: parsedTerrain.contours,
+      parkingLots: parsedTerrain.parkingLots,
+      crosswalks: parsedTerrain.crosswalks,
+      roundaboutIslands: mergedRoundabouts,
+      trees: parsedTerrain.trees,
+      campusGreenZones: kCampusGreenZones,
+      campusTrees: generatedTrees,
+    );
 
     return CampusBase(
       buildings: tracedBuildings,
@@ -1005,7 +1073,13 @@ class IsoTerrain {
   final List<MapEntry<String, Offset>> pois;
   final Path greens;
   final Path greensWood;
+  final Path campusPineForest;
+  final Path campusWoodland;
+  final Path campusLawns;
   final Path sportsFacilities;
+  final Path athleticStadiumTrack;
+  final Path athleticStadiumLanes;
+  final Path tennisCourts;
   final Path parking;
   final Path waterAreas;
 
@@ -1052,6 +1126,10 @@ class IsoTerrain {
   final Path treeCherryHighlightPath;
   final Path treePineBasePath;
   final Path treePineTopPath;
+  final Path treeOliveBasePath;
+  final Path treeOliveHighlightPath;
+  final Path treeStreetBasePath;
+  final Path treeStreetHighlightPath;
 
   /// 주차장 P 심볼 뱃지 투영 중심점 목록
   final List<Offset> parkingBadgeCenters;
@@ -1067,7 +1145,13 @@ class IsoTerrain {
     required this.pois,
     required this.greens,
     required this.greensWood,
+    required this.campusPineForest,
+    required this.campusWoodland,
+    required this.campusLawns,
     required this.sportsFacilities,
+    required this.athleticStadiumTrack,
+    required this.athleticStadiumLanes,
+    required this.tennisCourts,
     required this.parking,
     required this.waterAreas,
     required this.campusBoundary,
@@ -1100,6 +1184,10 @@ class IsoTerrain {
     required this.treeCherryHighlightPath,
     required this.treePineBasePath,
     required this.treePineTopPath,
+    required this.treeOliveBasePath,
+    required this.treeOliveHighlightPath,
+    required this.treeStreetBasePath,
+    required this.treeStreetHighlightPath,
     this.parkingBadgeCenters = const [],
   });
 
@@ -1114,7 +1202,13 @@ class IsoTerrain {
     pois: const [],
     greens: Path(),
     greensWood: Path(),
+    campusPineForest: Path(),
+    campusWoodland: Path(),
+    campusLawns: Path(),
     sportsFacilities: Path(),
+    athleticStadiumTrack: Path(),
+    athleticStadiumLanes: Path(),
+    tennisCourts: Path(),
     parking: Path(),
     waterAreas: Path(),
     campusBoundary: Path(),
@@ -1147,6 +1241,10 @@ class IsoTerrain {
     treeCherryHighlightPath: Path(),
     treePineBasePath: Path(),
     treePineTopPath: Path(),
+    treeOliveBasePath: Path(),
+    treeOliveHighlightPath: Path(),
+    treeStreetBasePath: Path(),
+    treeStreetHighlightPath: Path(),
     parkingBadgeCenters: const [],
   );
 }
@@ -1284,16 +1382,17 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
   final roundaboutCombined = Path();
   for (final ri in terrain.roundaboutIslands) {
     final islandPts = <Offset>[];
-    for (var deg = 0; deg < 360; deg += 30) {
+    for (var deg = 0; deg < 360; deg += 15) {
       final rad = deg * math.pi / 180;
       islandPts.add(
-        Offset(
+        projectOnRoadLevel(
+          p,
           ri.center.dx + ri.radius * math.cos(rad),
           ri.center.dy + ri.radius * math.sin(rad),
         ),
       );
     }
-    roundaboutCombined.addPath(_poly(projPts(islandPts)), Offset.zero);
+    roundaboutCombined.addPath(_poly(islandPts), Offset.zero);
   }
 
   final forestCombined = Path();
@@ -1317,7 +1416,7 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
   // P 마크 제거: 빈 리스트 유지
   final parkingBadges = <Offset>[];
 
-  // 네이버 지도 스타일 정갈한 3D 수목 (Soft Shadow, Trunk, Crisp Foliage)
+  // 위성사진 실사 기반 2.5D / 평면 수목 렌더링 (Soft Shadow, Trunk, Layered Foliage)
   final treeShadows = Path();
   final treeTrunks = Path();
   final zelkovaBase = Path();
@@ -1328,11 +1427,96 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
   final cherryHighlight = Path();
   final pineBase = Path();
   final pineTop = Path();
+  final oliveBase = Path();
+  final oliveHighlight = Path();
+  final streetBase = Path();
+  final streetHighlight = Path();
 
+  // 1) 부드러운 파스텔 구름형 수관 군락 (점 무늬·뾰족한 가시 느낌 제거, 애플/네이버 3D 지도 감성)
+  final treeScale = p.topDown ? 0.7071 * p.scale : 0.56 * p.scale;
+  for (final ct in terrain.campusTrees) {
+    final t = p.topDown
+        ? p.project(ct.position.dx, ct.position.dy)
+        : projectOnRoadLevel(p, ct.position.dx, ct.position.dy);
+    final r = (ct.radiusM * treeScale).clamp(1.6, 28.0);
+
+    // 겹치는 원들이 단일 Path(nonZero) 안에서 자연스럽게 하나의 뭉게구름 수관으로 합쳐진다.
+    if (p.topDown) {
+      treeShadows.addOval(
+        Rect.fromCircle(
+          center: Offset(t.dx + r * 0.16, t.dy + r * 0.18),
+          radius: r * 1.0,
+        ),
+      );
+      final hiCenter = Offset(t.dx - r * 0.16, t.dy - r * 0.16);
+      final hiR = r * 0.84;
+      switch (ct.kind) {
+        case CampusTreeKind.pine:
+          pineBase.addOval(Rect.fromCircle(center: t, radius: r));
+          pineTop.addOval(Rect.fromCircle(center: hiCenter, radius: hiR));
+        case CampusTreeKind.broadleaf:
+          zelkovaBase.addOval(Rect.fromCircle(center: t, radius: r));
+          zelkovaHighlight.addOval(Rect.fromCircle(center: hiCenter, radius: hiR));
+        case CampusTreeKind.olive:
+          oliveBase.addOval(Rect.fromCircle(center: t, radius: r));
+          oliveHighlight.addOval(Rect.fromCircle(center: hiCenter, radius: hiR));
+        case CampusTreeKind.street:
+          streetBase.addOval(Rect.fromCircle(center: t, radius: r));
+          streetHighlight.addOval(Rect.fromCircle(center: hiCenter, radius: hiR));
+      }
+    } else {
+      // 2.5D 아이소메트릭 시점: 납작하고 포근한 둥근 수관 덩어리 + 아주 은은한 그림자
+      treeShadows.addOval(
+        Rect.fromCenter(
+          center: Offset(t.dx + r * 0.22, t.dy + r * 0.12),
+          width: r * 2.1,
+          height: r * 1.15,
+        ),
+      );
+      // 가로수처럼 단독 수목만 아주 짧은 줄기를 둬서 숲 군락이 가시처럼 보이지 않게 한다.
+      final lift = ct.kind == CampusTreeKind.street ? r * 0.65 : r * 0.42;
+      if (ct.kind == CampusTreeKind.street) {
+        final trunkW = (r * 0.22).clamp(0.7, 2.2);
+        treeTrunks.addRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(t.dx - trunkW / 2, t.dy - lift, trunkW, lift),
+            Radius.circular(trunkW * 0.4),
+          ),
+        );
+      }
+
+      final cy = t.dy - lift - r * 0.35;
+      final baseOval = Rect.fromCenter(
+        center: Offset(t.dx, cy),
+        width: r * 2.05,
+        height: r * 1.48,
+      );
+      final hiOval = Rect.fromCenter(
+        center: Offset(t.dx - r * 0.14, cy - r * 0.18),
+        width: r * 1.65,
+        height: r * 1.18,
+      );
+      switch (ct.kind) {
+        case CampusTreeKind.pine:
+          pineBase.addOval(baseOval);
+          pineTop.addOval(hiOval);
+        case CampusTreeKind.broadleaf:
+          zelkovaBase.addOval(baseOval);
+          zelkovaHighlight.addOval(hiOval);
+        case CampusTreeKind.olive:
+          oliveBase.addOval(baseOval);
+          oliveHighlight.addOval(hiOval);
+        case CampusTreeKind.street:
+          streetBase.addOval(baseOval);
+          streetHighlight.addOval(hiOval);
+      }
+    }
+  }
+
+  // 2) 레거시 terrain.trees 호환 (외부 테스트/커스텀 데이터가 직접 넘겼을 때만)
   for (var i = 0; i < terrain.trees.length; i++) {
     final t = p.project(terrain.trees[i].dx, terrain.trees[i].dy);
 
-    // 1. 부드러운 타원형 드롭 섀도우
     treeShadows.addOval(
       Rect.fromCenter(
         center: Offset(t.dx + 1.5, t.dy + 2.0),
@@ -1340,8 +1524,6 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
         height: 6,
       ),
     );
-
-    // 2. 나무 기둥 (Trunk)
     treeTrunks.addRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(t.dx - 1.0, t.dy - 5.5, 2.0, 5.5),
@@ -1349,9 +1531,7 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
       ),
     );
 
-    // 3. 수종별 정갈한 네이버 지도 스타일 캐노피
     if (i % 6 == 0) {
-      // 은행나무 (Ginkgo - 화사하고 맑은 골든 옐로우 톤)
       ginkgoBase.addOval(
         Rect.fromCircle(center: Offset(t.dx, t.dy - 6.5), radius: 5.5),
       );
@@ -1359,7 +1539,6 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
         Rect.fromCircle(center: Offset(t.dx - 1.5, t.dy - 8.0), radius: 3.2),
       );
     } else if (i % 8 == 0) {
-      // 벚나무 / 단풍 (Cherry / Maple - 소프트 코랄 핑크 톤)
       cherryBase.addOval(
         Rect.fromCircle(center: Offset(t.dx, t.dy - 6.5), radius: 5.5),
       );
@@ -1367,7 +1546,6 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
         Rect.fromCircle(center: Offset(t.dx - 1.5, t.dy - 8.0), radius: 3.2),
       );
     } else if (i % 3 == 0) {
-      // 소나무 (Pine - 2단 정갈한 상록수 콘)
       pineBase.addPath(
         _poly([
           Offset(t.dx - 5.0, t.dy - 4.5),
@@ -1385,7 +1563,6 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
         Offset.zero,
       );
     } else {
-      // 느티나무 / 활엽수 (Zelkova - 네이버 지도 대표 세이지 그린 돔)
       zelkovaBase.addOval(
         Rect.fromCircle(center: Offset(t.dx, t.dy - 6.5), radius: 5.8),
       );
@@ -1458,6 +1635,92 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     return path;
   }
 
+  // 대운동장 400m 육상 트랙 분리 (면적 11,000㎡ 초과 대형 트랙) & 규격 축구장 라인 생성
+  double polyArea(List<Offset> r) {
+    var a = 0.0;
+    for (var i = 0; i < r.length; i++) {
+      final q = r[i], s = r[(i + 1) % r.length];
+      a += q.dx * s.dy - s.dx * q.dy;
+    }
+    return a.abs() / 2;
+  }
+
+  final stadiumTrackRings = <List<Offset>>[];
+  final otherFacilityRings = <List<Offset>>[];
+  for (final r in terrain.traced.sportsFacilities) {
+    if (polyArea(r) > 11000) {
+      stadiumTrackRings.add(r);
+    } else {
+      otherFacilityRings.add(r);
+    }
+  }
+
+  // 대운동장 안쪽 축구장(규격 박스)과 트랙 레인 타원선
+  final hasMainStadium = stadiumTrackRings.isNotEmpty;
+  const mainStadiumPitchBox = GroundBox(
+    kMainStadiumCenter,
+    kMainStadiumPitchLength,
+    kMainStadiumPitchWidth,
+    kMainStadiumAngle,
+  );
+  const mainStadiumMaskBox = GroundBox(
+    kMainStadiumCenter,
+    126,
+    66,
+    kMainStadiumAngle,
+  );
+  final stadiumLanesPath = Path();
+  if (hasMainStadium) {
+    // 대운동장 내측 잔디(green[8]) 바깥에 2줄의 육상 트랙 레인 타원선 투영
+    List<Offset> stadiumOval(double halfStraight, double radius) {
+      const steps = 16;
+      final out = <Offset>[];
+      final c = math.cos(kMainStadiumAngle), s = math.sin(kMainStadiumAngle);
+      Offset toWorld(double u, double v) => Offset(
+            kMainStadiumCenter.dx + u * c - v * s,
+            kMainStadiumCenter.dy + u * s + v * c,
+          );
+      for (var k = 0; k <= steps; k++) {
+        final a = -math.pi / 2 + math.pi * k / steps;
+        out.add(toWorld(halfStraight + radius * math.cos(a), radius * math.sin(a)));
+      }
+      for (var k = 0; k <= steps; k++) {
+        final a = math.pi / 2 + math.pi * k / steps;
+        out.add(toWorld(-halfStraight + radius * math.cos(a), radius * math.sin(a)));
+      }
+      return out;
+    }
+
+    for (final (hs, rad) in [(36.5, 38.5), (36.5, 42.5)]) {
+      stadiumLanesPath.addPath(_poly(projPts(stadiumOval(hs, rad))), Offset.zero);
+    }
+  }
+
+  bool inMainStadium(List<Offset> ring) {
+    if (!hasMainStadium || ring.isEmpty) return false;
+    var c = Offset.zero;
+    for (final q in ring) {
+      c += q;
+    }
+    c = c / ring.length.toDouble();
+    return mainStadiumMaskBox.contains(c, margin: 2);
+  }
+
+  // 위성사진 실사 기반 캠퍼스 산림·구릉·잔디 구역 투영
+  final campusPineRings = <List<Offset>>[];
+  final campusWoodRings = <List<Offset>>[];
+  final campusLawnRings = <List<Offset>>[];
+  for (final z in terrain.campusGreenZones) {
+    switch (z.kind) {
+      case CampusGreenKind.pineForest:
+        campusPineRings.add(z.ring);
+      case CampusGreenKind.woodland:
+        campusWoodRings.add(z.ring);
+      case CampusGreenKind.lawn:
+        campusLawnRings.add(z.ring);
+    }
+  }
+
   return IsoTerrain(
     campusOutline: merged(terrain.traced.campusOutline),
     pavement: pavement,
@@ -1469,8 +1732,9 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     majorRoads: merged(terrain.traced.majorRoads),
     fieldLines: merged([
       for (final r in terrain.traced.fieldLines)
-        if (!onCourt(r)) r,
+        if (!onCourt(r) && !inMainStadium(r)) r,
       for (final b in courts) ...lineQuads(courtLines(b), 0.45),
+      if (hasMainStadium) ...lineQuads(courtLines(mainStadiumPitchBox), 0.55),
     ]),
     parkingStalls: strips.isEmpty ? _stallPath(terrain.traced, p) : ladders(),
     crosswalkBars: _crosswalkPath(terrain.traced, p),
@@ -1492,7 +1756,16 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
             terrain.traced.greensOutside[i])
           terrain.traced.greens[i],
     ]),
-    sportsFacilities: merged(terrain.traced.sportsFacilities),
+    campusPineForest: merged(campusPineRings),
+    campusWoodland: merged(campusWoodRings),
+    campusLawns: merged(campusLawnRings),
+    sportsFacilities: merged(otherFacilityRings),
+    athleticStadiumTrack: merged(stadiumTrackRings),
+    athleticStadiumLanes: stadiumLanesPath,
+    tennisCourts: merged([
+      for (final b in courts)
+        if (courtKindOf(b) == CourtKind.tennis) b.corners,
+    ]),
     parking: strips.isEmpty ? merged(terrain.traced.parking) : Path(),
     waterAreas: merged(terrain.traced.waterAreas),
     campusBoundary: _poly(projPts(terrain.campusBoundary)),
@@ -1525,6 +1798,10 @@ IsoTerrain projectTerrain(BaseTerrain terrain, IsoProjection p) {
     treeCherryHighlightPath: cherryHighlight,
     treePineBasePath: pineBase,
     treePineTopPath: pineTop,
+    treeOliveBasePath: oliveBase,
+    treeOliveHighlightPath: oliveHighlight,
+    treeStreetBasePath: streetBase,
+    treeStreetHighlightPath: streetHighlight,
     parkingBadgeCenters: parkingBadges,
   );
 }
@@ -2075,10 +2352,11 @@ class HousingMapPainter extends CustomPainter {
       canvas.drawPath(shadowPath, Paint()..color = Colors.black);
       canvas.restore();
     }
+    // 수목은 건물보다 아래 층에 그려 고층 건물(다정관·다감관 등) 지붕 위로 나무가 덮이지 않게 한다.
+    _paintTrees(canvas);
     for (final b in buildings) {
       _paintBuilding(canvas, b);
     }
-    _paintTrees(canvas);
     _paintBuildingNumbers(canvas);
   }
 
@@ -2162,6 +2440,54 @@ class HousingMapPainter extends CustomPainter {
         ..color = isDark ? const Color(0xFF1A2636) : const Color(0xFFDFEAF5),
     );
 
+    // 위성사진 실사 기반 교내 산림·구릉·잔디광장 (부지 경계 안쪽으로 클리핑하여 바깥 침범 방지)
+    if (!terrain.campusWoodland.getBounds().isEmpty ||
+        !terrain.campusPineForest.getBounds().isEmpty ||
+        !terrain.campusLawns.getBounds().isEmpty) {
+      canvas.save();
+      canvas.clipPath(outline);
+      // 1) 구릉지 혼효림 (부드러운 세이지-올리브 그린)
+      if (!terrain.campusWoodland.getBounds().isEmpty) {
+        canvas.drawPath(
+          terrain.campusWoodland,
+          Paint()
+            ..color = isDark
+                ? const Color(0xFF213626)
+                : const Color(0xFFCEE3C3),
+        );
+      }
+      // 2) 상록 소나무숲 (깊이감 있는 포레스트 그린)
+      if (!terrain.campusPineForest.getBounds().isEmpty) {
+        canvas.drawPath(
+          terrain.campusPineForest,
+          Paint()
+            ..color = isDark
+                ? const Color(0xFF193221)
+                : const Color(0xFFBDDAB4),
+        );
+      }
+      // 3) 교내 잔디광장·정원·가로 녹지대 (밝고 정돈된 잔디 톤)
+      if (!terrain.campusLawns.getBounds().isEmpty) {
+        canvas.drawPath(
+          terrain.campusLawns,
+          Paint()
+            ..color = isDark
+                ? const Color(0xFF25442A)
+                : const Color(0xFFCDE9C5),
+        );
+        canvas.drawPath(
+          terrain.campusLawns,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.8
+            ..color = isDark
+                ? const Color(0xFF315A37)
+                : const Color(0xFFA7D39C),
+        );
+      }
+      canvas.restore();
+    }
+
     // 포장면(광장·건물 앞마당·주차장 바닥) — 캡처의 크림색 면. 이게 빠지면
     // 교내가 파란 바탕에 길과 건물만 떠 있는 것처럼 휑하다.
     canvas.drawPath(
@@ -2182,12 +2508,36 @@ class HousingMapPainter extends CustomPainter {
         ..color = isDark ? const Color(0xFF6B5820) : const Color(0xFFFFE682),
     );
 
-    // 체육시설 (대운동장 트랙) — 네이버 지도 실사 샌드베이지 (#E4DFD5)
+    // 야외 체육시설 바탕 (테니스장·운동장 주변 샌드/클레이 베이지)
     canvas.drawPath(
       terrain.sportsFacilities,
       Paint()
-        ..color = isDark ? const Color(0xFF383531) : const Color(0xFFE4DFD5),
+        ..color = isDark ? const Color(0xFF383531) : const Color(0xFFE2D7CB),
     );
+    // 대운동장 400m 육상 트랙 — 실제 Google Earth 실사의 우레탄 테라코타 레드 톤 + 트랙 레인
+    if (!terrain.athleticStadiumTrack.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.athleticStadiumTrack,
+        Paint()
+          ..color = isDark ? const Color(0xFF663830) : const Color(0xFFD98B77),
+      );
+      canvas.drawPath(
+        terrain.athleticStadiumTrack,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0
+          ..color = isDark ? const Color(0xFF7D4A40) : const Color(0xFFC47460),
+      );
+      if (!terrain.athleticStadiumLanes.getBounds().isEmpty) {
+        canvas.drawPath(
+          terrain.athleticStadiumLanes,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.65
+            ..color = Colors.white.withValues(alpha: isDark ? 0.25 : 0.55),
+        );
+      }
+    }
     // 부지 밖 숲 — 파스텔 포레스트 그린 + 정갈한 녹지 경계선
     canvas.drawPath(
       terrain.greensWood,
@@ -2202,26 +2552,34 @@ class HousingMapPainter extends CustomPainter {
         ..color = isDark ? const Color(0xFF28482E) : const Color(0xFF96CC8D),
     );
 
-    // 교내 잔디 — 네이버 지도 파스텔 연녹색 (#C7E7C2) + 정갈한 녹지 경계선
+    // 교내 잔디·운동장 필드 — 산뜻한 스포츠 잔디 그린
     canvas.drawPath(
       terrain.greens,
       Paint()
-        ..color = isDark ? const Color(0xFF254528) : const Color(0xFFC7E7C2),
+        ..color = isDark ? const Color(0xFF254D2B) : const Color(0xFF9FD99B),
     );
     canvas.drawPath(
       terrain.greens,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.9
-        ..color = isDark ? const Color(0xFF335E37) : const Color(0xFFA0D495),
+        ..color = isDark ? const Color(0xFF34683B) : const Color(0xFF7EC279),
     );
-    // 축구장 선·트랙 레인 — 정갈한 화이트 라인
+    // 남동쪽 테니스장 코트 면 (실사 테니스 코트 투톤 그린)
+    if (!terrain.tennisCourts.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.tennisCourts,
+        Paint()
+          ..color = isDark ? const Color(0xFF285538) : const Color(0xFF83C992),
+      );
+    }
+    // 축구장 선·트랙 레인·테니스 코트 선 — 정갈한 화이트 라인
     canvas.drawPath(
       terrain.fieldLines,
       Paint()
         ..color = isDark
-            ? Colors.white.withValues(alpha: 0.30)
-            : Colors.white.withValues(alpha: 0.85),
+            ? Colors.white.withValues(alpha: 0.35)
+            : Colors.white.withValues(alpha: 0.90),
     );
     // 수계 (청람지) — 네이버 지도 시그니처 아쿠아 스카이블루 (#CCE6FA)
     canvas.drawPath(
@@ -2565,16 +2923,24 @@ class HousingMapPainter extends CustomPainter {
             : const Color(0xFFC3CDD8),
     );
 
-    final islandPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = isDark ? const Color(0xFF224424) : const Color(0xFFC6E7C4);
-    final islandBorder = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = isDark ? Colors.white24 : const Color(0xFFA5D698);
+    // 정문 로터리 중앙 원형 화단 (연석 + 잔디 화단)
+    if (!terrain.roundaboutIslandsCombined.getBounds().isEmpty) {
+      final curbPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..color = isDark ? const Color(0xFF3B4754) : const Color(0xFFD5DCE3);
+      final islandPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = isDark ? const Color(0xFF234729) : const Color(0xFFB7DFAF);
+      final islandBorder = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0
+        ..color = isDark ? const Color(0xFF35633C) : const Color(0xFF8CC482);
 
-    canvas.drawPath(terrain.roundaboutIslandsCombined, islandPaint);
-    canvas.drawPath(terrain.roundaboutIslandsCombined, islandBorder);
+      canvas.drawPath(terrain.roundaboutIslandsCombined, curbPaint);
+      canvas.drawPath(terrain.roundaboutIslandsCombined, islandPaint);
+      canvas.drawPath(terrain.roundaboutIslandsCombined, islandBorder);
+    }
   }
 
   void _paintBuilding(Canvas canvas, IsoBuilding b) {
@@ -2664,66 +3030,107 @@ class HousingMapPainter extends CustomPainter {
   }
 
   void _paintTrees(Canvas canvas) {
-    // 1. 네이버 지도 감성의 부드러운 드롭 섀도우
-    canvas.drawPath(
-      terrain.treeShadowsPath,
-      Paint()..color = Colors.black.withValues(alpha: isDark ? 0.25 : 0.09),
-    );
+    // 저대비 파스텔 톤 수관 팔레트 (점 무늬·과도한 명암 대비 없이 부드럽게 어우러지는 숲 표현)
+    // 1. 아주 은은한 지면 그림자
+    if (!terrain.treeShadowsPath.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.treeShadowsPath,
+        Paint()..color = Colors.black.withValues(alpha: isDark ? 0.16 : 0.055),
+      );
+    }
 
-    // 2. 나무 원목 줄기
-    canvas.drawPath(
-      terrain.treeTrunksPath,
-      Paint()
-        ..color = isDark ? const Color(0xFF4A3B32) : const Color(0xFF9E8E81),
-    );
+    // 2. 가로수 원목 줄기 (은은한 연갈색)
+    if (!terrain.treeTrunksPath.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.treeTrunksPath,
+        Paint()
+          ..color = isDark
+              ? const Color(0xFF4A423B).withValues(alpha: 0.7)
+              : const Color(0xFFA79C91).withValues(alpha: 0.7),
+      );
+    }
 
-    // 3. 느티나무 / 활엽수 (네이버 지도 세이지 에메랄드)
-    canvas.drawPath(
-      terrain.treeZelkovaBasePath,
-      Paint()
-        ..color = isDark ? const Color(0xFF1E4620) : const Color(0xFF66BB6A),
-    );
-    canvas.drawPath(
-      terrain.treeZelkovaHighlightPath,
-      Paint()
-        ..color = isDark ? const Color(0xFF2E7D32) : const Color(0xFFA5D6A7),
-    );
+    // 3. 상록 소나무 수관 군락 (차분한 소프트 세이지 포레스트)
+    if (!terrain.treePineBasePath.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.treePineBasePath,
+        Paint()
+          ..color = isDark ? const Color(0xFF21422C) : const Color(0xFF9AC99A),
+      );
+      canvas.drawPath(
+        terrain.treePineTopPath,
+        Paint()
+          ..color = isDark ? const Color(0xFF284F35) : const Color(0xFFA8D4A6),
+      );
+    }
 
-    // 4. 소나무 / 침엽수 (네이버 지도 딥 틸-포레스트)
-    canvas.drawPath(
-      terrain.treePineBasePath,
-      Paint()
-        ..color = isDark ? const Color(0xFF13381B) : const Color(0xFF388E3C),
-    );
-    canvas.drawPath(
-      terrain.treePineTopPath,
-      Paint()
-        ..color = isDark ? const Color(0xFF1E5227) : const Color(0xFF4CAF50),
-    );
+    // 4. 느티나무 / 활엽수 수관 군락 (맑은 소프트 민트-세이지)
+    if (!terrain.treeZelkovaBasePath.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.treeZelkovaBasePath,
+        Paint()
+          ..color = isDark ? const Color(0xFF26492D) : const Color(0xFFA6D3A2),
+      );
+      canvas.drawPath(
+        terrain.treeZelkovaHighlightPath,
+        Paint()
+          ..color = isDark ? const Color(0xFF2F5836) : const Color(0xFFB5DDB0),
+      );
+    }
 
-    // 5. 은행나무 (네이버 지도 웜 골든 앰버)
-    canvas.drawPath(
-      terrain.treeGinkgoBasePath,
-      Paint()
-        ..color = isDark ? const Color(0xFFB45309) : const Color(0xFFFBBF24),
-    );
-    canvas.drawPath(
-      terrain.treeGinkgoHighlightPath,
-      Paint()
-        ..color = isDark ? const Color(0xFFD97706) : const Color(0xFFFDE68A),
-    );
+    // 5. 혼효림 올리브-세이지 수관 (부드러운 톤 변주)
+    if (!terrain.treeOliveBasePath.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.treeOliveBasePath,
+        Paint()
+          ..color = isDark ? const Color(0xFF2A4A2A) : const Color(0xFFB0D6A0),
+      );
+      canvas.drawPath(
+        terrain.treeOliveHighlightPath,
+        Paint()
+          ..color = isDark ? const Color(0xFF335933) : const Color(0xFFBEDFAE),
+      );
+    }
 
-    // 6. 벚나무 / 단풍 (네이버 지도 파스텔 핑크)
-    canvas.drawPath(
-      terrain.treeCherryBasePath,
-      Paint()
-        ..color = isDark ? const Color(0xFF9D174D) : const Color(0xFFF472B6),
-    );
-    canvas.drawPath(
-      terrain.treeCherryHighlightPath,
-      Paint()
-        ..color = isDark ? const Color(0xFFBE185D) : const Color(0xFFFBCFE8),
-    );
+    // 6. 가로수 / 정원수 (정갈한 파스텔 그린)
+    if (!terrain.treeStreetBasePath.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.treeStreetBasePath,
+        Paint()
+          ..color = isDark ? const Color(0xFF285032) : const Color(0xFF96CC97),
+      );
+      canvas.drawPath(
+        terrain.treeStreetHighlightPath,
+        Paint()
+          ..color = isDark ? const Color(0xFF32623E) : const Color(0xFFA7D9A7),
+      );
+    }
+
+    // 7. 레거시 은행나무 / 벚나무 호환
+    if (!terrain.treeGinkgoBasePath.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.treeGinkgoBasePath,
+        Paint()
+          ..color = isDark ? const Color(0xFFB45309) : const Color(0xFFFBBF24),
+      );
+      canvas.drawPath(
+        terrain.treeGinkgoHighlightPath,
+        Paint()
+          ..color = isDark ? const Color(0xFFD97706) : const Color(0xFFFDE68A),
+      );
+    }
+    if (!terrain.treeCherryBasePath.getBounds().isEmpty) {
+      canvas.drawPath(
+        terrain.treeCherryBasePath,
+        Paint()
+          ..color = isDark ? const Color(0xFF9D174D) : const Color(0xFFF472B6),
+      );
+      canvas.drawPath(
+        terrain.treeCherryHighlightPath,
+        Paint()
+          ..color = isDark ? const Color(0xFFBE185D) : const Color(0xFFFBCFE8),
+      );
+    }
   }
 
   /// 교내 건물 번호. 색이 이상한 동을 사람이 "몇 번"이라고 짚으라고 찍는다.

@@ -1583,43 +1583,40 @@ class _HousingScreenState extends State<HousingScreen>
           appBar: widget.isEmbedded
               ? null
               : AppBar(
-                  title: const Text("자취방 구하기"),
+                  title: GestureDetector(
+                    onLongPress: () => _promptDeveloperMode(isDark, color),
+                    child: const Text("자취방 구하기"),
+                  ),
                   backgroundColor: Colors.transparent,
                   flexibleSpace: AppleAppBarFlexibleSpace(
                     themeColor: color,
                     isDark: isDark,
                   ),
-                  iconTheme: const IconThemeData(color: Colors.white),
+                  iconTheme: IconThemeData(color: KnueTokens.onAccent(color)),
                   actions: [
                     ValueListenableBuilder<bool>(
                       valueListenable: AdminAuthService.isAdmin,
                       builder: (context, isAdmin, _) {
-                        if (isAdmin) {
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                onPressed: () => _openAddBuildingDialog(isDark, color),
-                                icon: const Icon(Icons.add_business_rounded),
-                                tooltip: "새 건물 추가 (개발자)",
-                              ),
-                              IconButton(
-                                onPressed: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const HousingAdminScreen(),
-                                  ),
-                                ).then((_) => _load()),
-                                icon: const Icon(Icons.admin_panel_settings_rounded),
-                                tooltip: "자취방 관리 대시보드",
-                              ),
-                            ],
-                          );
-                        }
-                        return IconButton(
-                          onPressed: () => _promptDeveloperMode(isDark, color),
-                          icon: const Icon(Icons.lock_outline_rounded),
-                          tooltip: "개발자 모드 활성화",
+                        if (!isAdmin) return const SizedBox.shrink();
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: () => _openAddBuildingDialog(isDark, color),
+                              icon: const Icon(Icons.add_business_rounded),
+                              tooltip: "새 건물 추가 (개발자)",
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const HousingAdminScreen(),
+                                ),
+                              ).then((_) => _load()),
+                              icon: const Icon(Icons.admin_panel_settings_rounded),
+                              tooltip: "자취방 관리 대시보드",
+                            ),
+                          ],
                         );
                       },
                     ),

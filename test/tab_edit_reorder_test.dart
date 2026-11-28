@@ -21,7 +21,9 @@ void main() {
     await tester.pump();
 
     final list = tester.widget<ReorderableListView>(find.byType(ReorderableListView));
-    list.onReorderItem!(0, 2);
+    // onReorder는 제거 전 인덱스 기준이라 0번을 2번 자리로 옮길 때 newIndex=3을 넘긴다.
+    // ignore: deprecated_member_use
+    list.onReorder!(0, 3);
     await tester.pump();
 
     final expected = List<AppTab>.from(start);

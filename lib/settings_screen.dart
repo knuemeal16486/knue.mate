@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'constants.dart';
+import 'firebase_sync_service.dart';
 import 'meal_widget.dart' show clearMealWidgetSourceOverride;
 import 'package:flutter/foundation.dart';
 import 'tab_edit_screen.dart';
@@ -99,6 +100,18 @@ class _SettingsPageState extends State<SettingsPage> {
                 testBasicWidgetFunction();
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.cloud_upload_outlined),
+              title: const Text("건물 정보 Firestore 동기화"),
+              subtitle: const Text("로컬 건물 JSON을 서버에 반영 (관리자 전용)"),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await FirebaseSyncService.uploadBuildingsToFirestore();
+                if (mounted) {
+                  showToast(context, "건물 정보 동기화를 완료했습니다.");
+                }
+              },
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -136,79 +149,93 @@ class _SettingsPageState extends State<SettingsPage> {
     showToast(context, "초기화되었습니다.");
   }
 
-  Widget _buildAppInfoItem({
+  Widget _buildGroupedRow({
     required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
     required Color iconColor,
     required VoidCallback onTap,
+    bool destructive = false,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    final tint = destructive ? Colors.redAccent : iconColor;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          KnueHaptics.selection();
+          onTap();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: tint.withValues(alpha: isDark ? 0.18 : 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: tint, size: 19),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: destructive
+                            ? Colors.redAccent
+                            : (isDark ? Colors.white : const Color(0xFF1C1C1E)),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: KnueTokens.caption(isDark),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: iconColor, size: 24),
+    );
+  }
+
+  Widget _buildInsetGroup(bool isDark, List<Widget> children) {
+    return KnueCard(
+      isDark: isDark,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(KnueTokens.radiusCard),
+        child: Column(
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0)
+                Divider(
+                  height: 0.5,
+                  thickness: 0.5,
+                  indent: 60,
+                  color: KnueTokens.hairline(isDark),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark
-                              ? Colors.grey.shade400
-                              : Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 16,
-                  color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                ),
-              ],
-            ),
-          ),
+              children[i],
+            ],
+          ],
         ),
       ),
     );
@@ -222,92 +249,100 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final currentColor = themeColor.value;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final boxBorder = isDark ? null : Border.all(color: Colors.grey.shade300);
+    final onBrand = KnueTokens.onAccent(currentColor);
 
     return Scaffold(
+      backgroundColor: KnueTokens.bg(isDark),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight: 80,
             pinned: true,
-            backgroundColor: currentColor,
-            flexibleSpace: FlexibleSpaceBar(
-              // FlexibleSpaceBar는 제목 정렬을 자기가 따로 정한다 —
-              // SliverAppBar.centerTitle도, AppBarTheme.centerTitle도 안 보고
-              // theme.platform만 본다. iOS면 무조건 가운데로 가기 때문에
-              // 여기서 직접 꺼야 다른 탭처럼 왼쪽에 붙는다.
-              centerTitle: false,
-              title: Text(
-                "설정",
-                style: TextStyle(
-                  fontWeight: (!kIsWeb && Platform.isIOS)
-                      ? FontWeight.w800
-                      : FontWeight.bold,
-                  color: Colors.white,
+            backgroundColor: Colors.transparent,
+            flexibleSpace: Stack(
+              fit: StackFit.expand,
+              children: [
+                AppleAppBarFlexibleSpace(
+                  themeColor: currentColor,
+                  isDark: isDark,
                 ),
-              ),
-              titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+                FlexibleSpaceBar(
+                  // FlexibleSpaceBar는 제목 정렬을 자기가 따로 정한다 —
+                  // SliverAppBar.centerTitle도, AppBarTheme.centerTitle도 안 보고
+                  // theme.platform만 본다. iOS면 무조건 가운데로 가기 때문에
+                  // 여기서 직접 꺼야 다른 탭처럼 왼쪽에 붙는다.
+                  centerTitle: false,
+                  title: Text(
+                    "설정",
+                    style: TextStyle(
+                      fontWeight: (!kIsWeb && Platform.isIOS)
+                          ? FontWeight.w800
+                          : FontWeight.bold,
+                      color: onBrand,
+                      shadows: KnueTokens.headerShadows(currentColor),
+                    ),
+                  ),
+                  titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+                ),
+              ],
             ),
           ),
           SliverList(
             delegate: SliverChildListDelegate([
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionTitle("맞춤 설정"),
-                    _buildAppInfoItem(
-                      context: context,
-                      icon: Icons.swap_calls_rounded,
-                      title: "하단 탭 순서 및 시작화면",
-                      subtitle: "내비게이션 탭의 순서를 변경하거나 시작 화면 설정",
-                      iconColor: Colors.deepPurple,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (c) => const TabEditScreen(),
+                    const KnueSectionHeader(title: "맞춤 설정"),
+                    _buildInsetGroup(isDark, [
+                      _buildGroupedRow(
+                        context: context,
+                        icon: Icons.swap_calls_rounded,
+                        title: "하단 탭 순서 및 시작화면",
+                        subtitle: "내비게이션 탭의 순서를 변경하거나 시작 화면 설정",
+                        iconColor: KnueTokens.inkAt(6, isDark),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (c) => const TabEditScreen(),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildAppInfoItem(
-                      context: context,
-                      icon: Icons.notifications_active_rounded,
-                      title: "공지 알림",
-                      subtitle: "알림 켜고 끄기, 알림 받을 키워드 관리",
-                      iconColor: Colors.orange,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (c) => const NoticeAlertSettingsScreen(),
+                      _buildGroupedRow(
+                        context: context,
+                        icon: Icons.notifications_active_rounded,
+                        title: "공지 알림",
+                        subtitle: "알림 켜고 끄기, 알림 받을 키워드 관리",
+                        iconColor: KnueTokens.inkAt(2, isDark),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (c) => const NoticeAlertSettingsScreen(),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildAppInfoItem(
-                      context: context,
-                      icon: Icons.widgets_rounded,
-                      title: "홈 위젯",
-                      subtitle: "식단·버스·공지 위젯 모양과 표시할 식당",
-                      iconColor: Colors.teal,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (c) => const WidgetSettingsScreen(),
+                      _buildGroupedRow(
+                        context: context,
+                        icon: Icons.widgets_rounded,
+                        title: "홈 위젯",
+                        subtitle: "식단·버스·공지 위젯 모양과 표시할 식당",
+                        iconColor: KnueTokens.inkAt(1, isDark),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (c) => const WidgetSettingsScreen(),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildSectionTitle("앱 테마"),
-                    Container(
+                    ]),
+                    const SizedBox(height: 20),
+                    const KnueSectionHeader(title: "앱 테마"),
+                    KnueCard(
+                      isDark: isDark,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(16),
-                        border: boxBorder,
+                        horizontal: 6,
+                        vertical: 6,
                       ),
                       child: ValueListenableBuilder<ThemeMode>(
                         valueListenable: themeModeNotifier,
@@ -315,7 +350,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           children: [
                             SettingsThemeOption(
                               label: "라이트",
-                              icon: Icons.light_mode,
+                              icon: Icons.light_mode_rounded,
                               selected: mode == ThemeMode.light,
                               onTap: () {
                                 themeModeNotifier.value = ThemeMode.light;
@@ -326,7 +361,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             SettingsThemeOption(
                               label: "다크",
-                              icon: Icons.dark_mode,
+                              icon: Icons.dark_mode_rounded,
                               selected: mode == ThemeMode.dark,
                               onTap: () {
                                 themeModeNotifier.value = ThemeMode.dark;
@@ -337,7 +372,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             SettingsThemeOption(
                               label: "시스템",
-                              icon: Icons.settings_brightness,
+                              icon: Icons.settings_brightness_rounded,
                               selected: mode == ThemeMode.system,
                               onTap: () {
                                 themeModeNotifier.value = ThemeMode.system;
@@ -350,20 +385,52 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    _buildSectionTitle("테마 색상"),
-                    Container(
+                    const SizedBox(height: 20),
+                    const KnueSectionHeader(title: "테마 색상"),
+                    KnueCard(
+                      isDark: isDark,
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(16),
-                        border: boxBorder,
-                      ),
                       child: ValueListenableBuilder<bool>(
                         valueListenable: rainbowModeNotifier,
                         builder: (context, rainbowOn, _) => Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // 실시간 테마 헤더 미리보기 — 펄 광택과 글씨 대비를 즉각 확인.
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              margin: const EdgeInsets.only(bottom: 14),
+                              decoration: BoxDecoration(
+                                gradient: KnuePearl.headerGradient(
+                                  currentColor,
+                                  isDark,
+                                ),
+                                borderRadius: BorderRadius.circular(11),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    rainbowOn ? "오늘의 무지개 테마" : "현재 선택된 테마 미리보기",
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: onBrand,
+                                      shadows: KnueTokens.headerShadows(currentColor),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.palette_rounded,
+                                    size: 16,
+                                    color: onBrand,
+                                    shadows: KnueTokens.headerShadows(currentColor),
+                                  ),
+                                ],
+                              ),
+                            ),
                             // 무지개 모드가 켜져 있으면 색을 직접 고를 수 없다는
                             // 걸 흐리게 해서 보여준다(탭은 아래에서 막는다).
                             Opacity(
@@ -391,64 +458,63 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            const Divider(height: 1),
-                            const SizedBox(height: 8),
+                            Divider(height: 0.5, color: KnueTokens.hairline(isDark)),
+                            const SizedBox(height: 10),
                             _RainbowModeTile(isOn: rainbowOn),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
-                    _buildSectionTitle("앱 정보"),
-
-                    _buildAppInfoItem(
-                      context: context,
-                      icon: Icons.face,
-                      title: "개발자 정보",
-                      subtitle: "만든 사람 소개",
-                      iconColor: currentColor,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const DeveloperInfoPage(),
+                    const KnueSectionHeader(title: "앱 정보"),
+                    _buildInsetGroup(isDark, [
+                      _buildGroupedRow(
+                        context: context,
+                        icon: Icons.face_rounded,
+                        title: "개발자 정보",
+                        subtitle: "만든 사람 소개",
+                        iconColor: KnueTokens.inkAt(0, isDark),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const DeveloperInfoPage(),
+                          ),
                         ),
                       ),
-                    ),
-
-                    _buildAppInfoItem(
-                      context: context,
-                      icon: Icons.feedback_outlined,
-                      title: "사용자 의견 보내기",
-                      subtitle: "버그 제보 및 기능 제안",
-                      iconColor: Colors.amber[700]!,
-                      onTap: () => _showFeedbackDialog(context),
-                    ),
-
-                    _buildAppInfoItem(
-                      context: context,
-                      icon: Icons.description_outlined,
-                      title: "오픈소스 라이선스",
-                      subtitle: "사용된 라이브러리 정보",
-                      iconColor: Colors.blueGrey,
-                      onTap: () => showLicensePage(
+                      _buildGroupedRow(
                         context: context,
-                        applicationName: "KNUE Mate",
-                        applicationVersion: appVersionLabel.value,
+                        icon: Icons.feedback_outlined,
+                        title: "사용자 의견 보내기",
+                        subtitle: "버그 제보 및 기능 제안",
+                        iconColor: KnueTokens.inkAt(5, isDark),
+                        onTap: () => _showFeedbackDialog(context),
                       ),
-                    ),
+                      _buildGroupedRow(
+                        context: context,
+                        icon: Icons.description_outlined,
+                        title: "오픈소스 라이선스",
+                        subtitle: "사용된 라이브러리 정보",
+                        iconColor: KnueTokens.inkAt(3, isDark),
+                        onTap: () => showLicensePage(
+                          context: context,
+                          applicationName: "KNUE Mate",
+                          applicationVersion: appVersionLabel.value,
+                        ),
+                      ),
+                      _buildGroupedRow(
+                        context: context,
+                        icon: Icons.refresh_rounded,
+                        title: "설정 초기화",
+                        subtitle: "앱 설정을 기본값으로 되돌리기",
+                        iconColor: Colors.redAccent,
+                        destructive: true,
+                        onTap: () => _confirmReset(context),
+                      ),
+                    ]),
 
-                    _buildAppInfoItem(
-                      context: context,
-                      icon: Icons.refresh_rounded,
-                      title: "설정 초기화",
-                      subtitle: "앱 설정을 기본값으로 되돌리기",
-                      iconColor: Colors.redAccent,
-                      onTap: () => _confirmReset(context),
-                    ),
-
-                    const SizedBox(height: 12),
-                    _buildSectionTitle("스폰서 & 제휴"),
+                    const SizedBox(height: 20),
+                    const KnueSectionHeader(title: "스폰서 & 제휴"),
                     const KnueNativeAdCard(isCompact: true, placement: 'settings'),
                     const SizedBox(height: 18),
 
@@ -456,19 +522,25 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: GestureDetector(
                         onTap: _onVersionTap,
                         behavior: HitTestBehavior.opaque,
-                        child: ValueListenableBuilder<String>(
-                          valueListenable: appVersionLabel,
-                          builder: (context, version, _) => Text(
-                            version.isEmpty ? "버전 정보" : "버전 $version",
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 12,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          child: ValueListenableBuilder<String>(
+                            valueListenable: appVersionLabel,
+                            builder: (context, version, _) => Text(
+                              version.isEmpty ? "버전 정보" : "버전 $version",
+                              style: TextStyle(
+                                color: KnueTokens.caption(isDark),
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 36),
                   ],
                 ),
               ),
@@ -478,17 +550,6 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
   }
-
-  Widget _buildSectionTitle(String title) => Align(
-    alignment: Alignment.centerLeft,
-    child: Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-      ),
-    ),
-  );
 }
 
 // -----------------------------------------------------------------------------
@@ -702,17 +763,24 @@ class DeveloperInfoPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = Theme.of(context).primaryColor;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onBrand = KnueTokens.onAccent(primary);
     return Scaffold(
+      backgroundColor: KnueTokens.bg(isDark),
       appBar: AppBar(
-        backgroundColor: primary,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: AppleAppBarFlexibleSpace(
+          themeColor: primary,
+          isDark: isDark,
+        ),
         title: Text(
           "개발자 정보",
           style: TextStyle(
             fontWeight: (!kIsWeb && Platform.isIOS) ? FontWeight.w800 : FontWeight.bold,
-            color: Colors.white,
+            color: onBrand,
+            shadows: KnueTokens.headerShadows(primary),
           ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: onBrand),
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -885,25 +953,65 @@ class SettingsThemeOption extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   const SettingsThemeOption({
+    super.key,
     required this.label,
     required this.icon,
     required this.selected,
     required this.onTap,
   });
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: selected ? Colors.grey.withValues(alpha: 0.2) : null,
-          borderRadius: BorderRadius.circular(10),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accentFg = KnueTokens.accentForeground(
+      Theme.of(context).primaryColor,
+      isDark,
+    );
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            KnueHaptics.selection();
+            onTap();
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+            decoration: BoxDecoration(
+              color: selected
+                  ? accentFg.withValues(alpha: isDark ? 0.18 : 0.11)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: selected ? accentFg : KnueTokens.caption(isDark),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected
+                        ? accentFg
+                        : (isDark ? Colors.white70 : Colors.black87),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Column(children: [Icon(icon), Text(label)]),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class SettingsChoiceOption extends StatelessWidget {
@@ -911,38 +1019,51 @@ class SettingsChoiceOption extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   const SettingsChoiceOption({
+    super.key,
     required this.label,
     required this.isSelected,
     required this.onTap,
   });
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Theme.of(context).primaryColor
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected
-                ? Theme.of(context).primaryColor
-                : Colors.grey.withValues(alpha: 0.5),
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: isSelected ? Colors.white : Colors.grey,
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).primaryColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onBrand = KnueTokens.onAccent(primary);
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            KnueHaptics.selection();
+            onTap();
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: isSelected ? primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(
+                color: isSelected ? primary : KnueTokens.hairline(isDark),
+                width: isSelected ? 1.2 : 1.0,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: isSelected ? onBrand : KnueTokens.caption(isDark),
+              ),
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// 무지개 모드 토글 한 줄. 오늘 배정된 색을 미리 보여줘서, 켜면 무슨 일이

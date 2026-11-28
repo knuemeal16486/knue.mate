@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'constants.dart';
+import 'ui_utils.dart';
 import 'dart:ui';
 
 class TabEditScreen extends StatefulWidget {
@@ -20,8 +21,8 @@ class _TabEditScreenState extends State<TabEditScreen> {
   }
 
   void _onReorder(int oldIndex, int newIndex) {
-    // onReorderItem은 newIndex를 이미 "뺀 뒤 자리"로 준다 — 따로 1을 빼지 않는다.
     setState(() {
+      if (newIndex > oldIndex) newIndex -= 1;
       final item = _tempOrder.removeAt(oldIndex);
       _tempOrder.insert(newIndex, item);
     });
@@ -49,42 +50,55 @@ class _TabEditScreenState extends State<TabEditScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final color = theme.primaryColor;
+    final onBrand = KnueTokens.onAccent(color);
+    final accentFg = KnueTokens.accentForeground(color, isDark);
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0D0D0F) : const Color(0xFFF2F2F7),
+      backgroundColor: KnueTokens.bg(isDark),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        flexibleSpace: AppleAppBarFlexibleSpace(
+          themeColor: color,
+          isDark: isDark,
+        ),
+        iconTheme: IconThemeData(color: onBrand),
         elevation: 0,
         scrolledUnderElevation: 0,
-        automaticallyImplyLeading: false,
         title: Text(
           "내비게이션 편집",
           style: TextStyle(
-            color: isDark ? Colors.white : Colors.black,
-            fontWeight: FontWeight.w900,
+            color: onBrand,
+            fontWeight: FontWeight.w800,
+            shadows: KnueTokens.headerShadows(color),
           ),
         ),
         actions: [
           TextButton(
             onPressed: _saveAndExit,
-            child: const Text(
+            style: TextButton.styleFrom(foregroundColor: onBrand),
+            child: Text(
               "완료",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+                shadows: KnueTokens.headerShadows(color),
+              ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
         ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
             child: Text(
               "길게 눌러서 순서를 변경하세요.\n첫 번째 탭이 앱의 시작 화면이 됩니다.",
               style: TextStyle(
-                color: isDark ? Colors.white54 : Colors.black54,
-                fontSize: 14,
+                color: KnueTokens.caption(isDark),
+                fontSize: 13.5,
                 height: 1.5,
               ),
             ),
@@ -93,14 +107,15 @@ class _TabEditScreenState extends State<TabEditScreen> {
             child: ReorderableListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: _tempOrder.length,
-              onReorderItem: _onReorder,
+              // ignore: deprecated_member_use
+              onReorder: _onReorder,
               proxyDecorator: (child, index, animation) {
                 return AnimatedBuilder(
                   animation: animation,
                   builder: (context, child) {
                     final animValue = Curves.easeInOut.transform(animation.value);
                     final elevation = lerpDouble(0, 10, animValue)!;
-                    final scale = lerpDouble(1, 1.05, animValue)!;
+                    final scale = lerpDouble(1, 1.03, animValue)!;
                     return Transform.scale(
                       scale: scale,
                       child: Material(
@@ -116,53 +131,64 @@ class _TabEditScreenState extends State<TabEditScreen> {
               itemBuilder: (context, index) {
                 final tab = _tempOrder[index];
                 final isStartTab = index == 0;
+                final ink = KnueTokens.inkAt(tab.index, isDark);
 
                 return Padding(
                   key: ValueKey(tab.name),
-                  padding: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.only(bottom: 10),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: theme.cardColor,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      color: KnueTokens.surface(isDark),
+                      borderRadius: BorderRadius.circular(KnueTokens.radiusCard),
+                      boxShadow: KnueTokens.cardShadow(isDark),
                       border: isStartTab
-                          ? Border.all(color: theme.primaryColor, width: 2)
-                          : null,
+                          ? Border.all(color: accentFg, width: 1.8)
+                          : Border.all(
+                              color: KnueTokens.hairline(isDark),
+                              width: 0.5,
+                            ),
                     ),
                     child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
                       leading: Container(
-                        padding: const EdgeInsets.all(12),
+                        width: 40,
+                        height: 40,
                         decoration: BoxDecoration(
-                          color: tab.color.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(14),
+                          color: ink.withValues(alpha: isDark ? 0.18 : 0.10),
+                          borderRadius: BorderRadius.circular(11),
                         ),
-                        child: Icon(tab.icon, color: tab.color),
+                        child: Icon(tab.icon, color: ink, size: 21),
                       ),
                       title: Text(
                         tab.label,
                         style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       subtitle: isStartTab
                           ? Text(
                               "시작 화면으로 지정됨",
                               style: TextStyle(
-                                color: theme.primaryColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                                color: accentFg,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12.5,
                               ),
                             )
-                          : const Text("길게 눌러서 이동"),
-                      trailing: const Icon(Icons.drag_handle_rounded, color: Colors.grey),
+                          : Text(
+                              "길게 눌러서 이동",
+                              style: TextStyle(
+                                color: KnueTokens.caption(isDark),
+                                fontSize: 12.5,
+                              ),
+                            ),
+                      trailing: Icon(
+                        Icons.drag_handle_rounded,
+                        color: KnueTokens.caption(isDark),
+                      ),
                     ),
                   ),
                 );

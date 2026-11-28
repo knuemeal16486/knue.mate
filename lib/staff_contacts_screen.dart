@@ -116,7 +116,9 @@ class _StaffContactsScreenState extends State<StaffContactsScreen> {
         final grouped = _grouped;
         final groups = grouped.keys.toList();
 
+        final onBrand = KnueTokens.onAccent(color);
         return Scaffold(
+          backgroundColor: KnueTokens.bg(isDark),
           appBar: AppBar(
             title: const Text("교직원 연락처"),
             backgroundColor: Colors.transparent,
@@ -124,37 +126,33 @@ class _StaffContactsScreenState extends State<StaffContactsScreen> {
               themeColor: color,
               isDark: isDark,
             ),
-            iconTheme: const IconThemeData(color: Colors.white),
+            iconTheme: IconThemeData(color: onBrand),
           ),
           body: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: TextField(
-                  onChanged: (v) => setState(() => _query = v),
-                  decoration: InputDecoration(
-                    hintText: "학과·부서·직위로 검색",
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: Theme.of(context).cardColor,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
+              KnueSearchBar(
+                query: _query,
+                hintText: "학과·부서·직위로 검색",
+                onChanged: (v) => setState(() => _query = v),
+                accentColor: color,
+                isDark: isDark,
               ),
-              _buildScopeToggle(color, isDark),
+              KnueSegmentedControl<ContactScope>(
+                items: [
+                  for (final s in ContactScope.values) (value: s, label: s.label),
+                ],
+                selected: _scope,
+                onChanged: (s) => setState(() => _scope = s),
+                accentColor: color,
+                isDark: isDark,
+              ),
               Expanded(
                 child: groups.isEmpty
-                    ? Center(
-                        child: Text(
-                          "검색 결과가 없습니다",
-                          style: TextStyle(
-                            color: isDark ? Colors.white38 : Colors.black38,
-                          ),
-                        ),
+                    ? KnueEmptyState(
+                        icon: Icons.person_search_rounded,
+                        title: "검색 결과가 없습니다",
+                        subtitle: "다른 학과나 부서명으로 검색해 보세요",
+                        isDark: isDark,
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
@@ -171,62 +169,6 @@ class _StaffContactsScreenState extends State<StaffContactsScreen> {
           ),
         );
       },
-    );
-  }
-
-  /// 전체 / 행정 / 과 사무실 전환. 과 사무실 번호만 훑어보고 싶을 때가 많아
-  /// 검색어를 지우지 않고도 범위를 좁힐 수 있게 했다.
-  Widget _buildScopeToggle(Color color, bool isDark) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFEFEFF4),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: ContactScope.values.map((scope) {
-          final active = scope == _scope;
-          return Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _scope = scope),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                decoration: BoxDecoration(
-                  color: active
-                      ? (isDark ? const Color(0xFF3A3A3C) : Colors.white)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: active
-                      ? [
-                          BoxShadow(
-                            color: Colors.black
-                                .withValues(alpha: isDark ? 0.3 : 0.06),
-                            blurRadius: 6,
-                            offset: const Offset(0, 1),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Center(
-                  child: Text(
-                    scope.label,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                      color: active
-                          ? color
-                          : (isDark ? Colors.white54 : Colors.black54),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
     );
   }
 

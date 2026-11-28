@@ -16,6 +16,8 @@ class HomeHeroTile extends StatelessWidget {
   final Widget body;
   final Widget? extra;
   final KnueWeatherInfo? weather;
+  final Color foregroundColor;
+  final List<Shadow> textShadows;
 
   const HomeHeroTile({
     super.key,
@@ -27,22 +29,33 @@ class HomeHeroTile extends StatelessWidget {
     required this.body,
     this.extra,
     this.weather,
+    this.foregroundColor = Colors.white,
+    this.textShadows = const [],
   });
 
   @override
   Widget build(BuildContext context) {
     final semanticLabel = chip.isEmpty ? '$title, $footer' : '$title, $chip, $footer';
+    final isDarkInk = foregroundColor != Colors.white;
+    final shadows = textShadows.isNotEmpty
+        ? textShadows
+        : (isDarkInk ? const <Shadow>[] : KnueTokens.headerTextShadow);
     return AnimatedScaleButton(
-      onTap: onTap,
+      onTap: () {
+        KnueHaptics.selection();
+        onTap();
+      },
       scaleFactor: 0.96,
       semanticLabel: semanticLabel,
       child: GlassContainer(
-        opacity: 0.12,
+        opacity: isDarkInk ? 0.24 : 0.12,
         blur: 12,
         borderRadius: BorderRadius.circular(16),
         padding: const EdgeInsets.all(12),
         border: Border.all(
-          color: KnueWeatherAtmosphere.tileBorderColor(weather),
+          color: isDarkInk
+              ? foregroundColor.withValues(alpha: 0.16)
+              : KnueWeatherAtmosphere.tileBorderColor(weather),
           width: 1.0,
         ),
         child: Column(
@@ -51,7 +64,7 @@ class HomeHeroTile extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(icon, size: 17, color: Colors.white),
+                Icon(icon, size: 17, color: foregroundColor),
                 if (chip.isNotEmpty)
                   Flexible(
                     child: Container(
@@ -61,7 +74,7 @@ class HomeHeroTile extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
+                        color: foregroundColor.withValues(alpha: isDarkInk ? 0.10 : 0.14),
                         borderRadius: BorderRadius.circular(5),
                       ),
                       child: Text(
@@ -71,7 +84,7 @@ class HomeHeroTile extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: foregroundColor.withValues(alpha: 0.92),
                         ),
                       ),
                     ),
@@ -87,8 +100,8 @@ class HomeHeroTile extends StatelessWidget {
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 letterSpacing: -0.2,
-                color: Colors.white,
-                shadows: KnueTokens.headerTextShadow,
+                color: foregroundColor,
+                shadows: shadows,
               ),
             ),
             const SizedBox(height: 5),
@@ -110,14 +123,14 @@ class HomeHeroTile extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.85),
+                      color: foregroundColor.withValues(alpha: 0.85),
                     ),
                   ),
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
                   size: 13,
-                  color: Colors.white.withValues(alpha: 0.85),
+                  color: foregroundColor.withValues(alpha: 0.85),
                 ),
               ],
             ),

@@ -1,7 +1,10 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard;
 
 import 'housing_iso.dart';
 import 'housing_view3d.dart';
@@ -103,6 +106,14 @@ class _HousingView3DScreenState extends State<HousingView3DScreen> {
   double _lastScale = 1;
   double _lastRotation = 0;
 
+  /// 한 손가락/마우스 왼쪽 드래그 기본 동작: false=이동(팬), true=회전·기울이기(오빗).
+  /// 웹·데스크톱이나 한 손 조작에서도 3D 회전·기울이기를 쉽게 쓸 수 있게 한다.
+  bool _orbitDragMode = false;
+
+  /// 우클릭·휠클릭으로 드래그 중인지(데스크톱/웹 오빗 조작).
+  bool _secondaryDragging = false;
+  Offset _lastSecondaryPos = Offset.zero;
+
   @override
   void initState() {
     super.initState();
@@ -136,16 +147,24 @@ class _HousingView3DScreenState extends State<HousingView3DScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     if (widget.renderGround && _groundDark != isDark) {
       _groundDark = isDark;
-      _bakeGround(isDark);
+      // 라우트 전환 직후 첫 프레임이 먼저 그려진 뒤 바닥 텍스처를 굽는다(버벅임 방지).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _groundDark == isDark) {
+          _bakeGround(isDark);
+        }
+      });
     }
   }
 
   Future<void> _bakeGround(bool isDark) async {
     try {
+      // 웹(CanvasKit)은 2048px 초과 오프스크린 텍스처가 느리거나 실패할 수 있어
+      // 1.0 ppm(1780×1660)으로 안전하고 빠르게 굽는다.
       final image = await renderView3Ground(
         base: widget.base,
         osmRoads: widget.osmRoads,
         isDark: isDark,
+        ppm: kIsWeb ? 1.0 : kView3GroundPpm,
       );
       if (!mounted || _groundDark != isDark) {
         image.dispose();
@@ -185,15 +204,21 @@ class _HousingView3DScreenState extends State<HousingView3DScreen> {
     _camera.value = _orbitCamera();
   }
 
-  // ── 제스처 ──
+  // ── 제스처 (터치 + 마우스 휠·우클릭·트랙패드 핀치 모두 지원) ──
 
   void _onScaleStart(ScaleStartDetails d) {
     _lastScale = 1;
     _lastRotation = 0;
   }
 
+  void _orbitBy(Offset delta) {
+    _azimuth += delta.dx * 0.0065;
+    _tilt = (_tilt + delta.dy * 0.0055).clamp(12 * math.pi / 180, 88 * math.pi / 180);
+    _sync();
+  }
+
   void _onScaleUpdate(ScaleUpdateDetails d, Size size) {
-    if (_sceneOrNull == null) return;
+    if (_sceneOrNull == null || _secondaryDragging) return;
     final cam = _camera.value;
     if (d.pointerCount >= 2) {
       // 비틀면 돌고, 벌리면 다가가고, 두 손가락을 위아래로 밀면 기운다.
@@ -205,20 +230,72 @@ class _HousingView3DScreenState extends State<HousingView3DScreen> {
       }
       _tilt = (_tilt + d.focalPointDelta.dy * 0.25 * math.pi / 180)
           .clamp(12 * math.pi / 180, 88 * math.pi / 180);
-    } else {
-      // 한 손가락: 땅을 잡고 끄는 것처럼 옮긴다.
-      final focal = (size.height / 2) / math.tan(30 * math.pi / 180);
-      final mpp = _distance / focal;
-      final along = d.focalPointDelta.dy * mpp / math.max(math.sin(_tilt), 0.35);
-      _target = _clampToWorld(
-        _target - cam.rightH * (d.focalPointDelta.dx * mpp) + cam.forwardH * along,
-      );
+      _sync();
+      return;
     }
+
+    // Shift/Alt 키를 누른 채 끌거나 [회전] 모드가 켜져 있으면 한 손가락/좌클릭으로도 회전·기울이기.
+    final kb = HardwareKeyboard.instance;
+    final orbitActive = _orbitDragMode || kb.isShiftPressed || kb.isAltPressed;
+    if (orbitActive) {
+      _orbitBy(d.focalPointDelta);
+      return;
+    }
+
+    // 기본 한 손가락/좌클릭 드래그: 땅을 잡고 끄는 것처럼 이동.
+    final focal = (size.height / 2) / math.tan(30 * math.pi / 180);
+    final mpp = _distance / focal;
+    final along = d.focalPointDelta.dy * mpp / math.max(math.sin(_tilt), 0.35);
+    _target = _clampToWorld(
+      _target - cam.rightH * (d.focalPointDelta.dx * mpp) + cam.forwardH * along,
+    );
     _sync();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (_sceneOrNull == null) return;
+    if (event is PointerScrollEvent) {
+      // 마우스 휠 / 트랙패드 스크롤로 부드럽게 확대·축소
+      final dy = event.scrollDelta.dy;
+      if (dy.abs() < 0.01) return;
+      final factor = math.exp(dy * 0.0018).clamp(0.75, 1.35);
+      _zoomBy(factor);
+    } else if (event is PointerScaleEvent) {
+      if (event.scale > 0) {
+        _zoomBy((1 / event.scale).clamp(0.75, 1.35));
+      }
+    }
+  }
+
+  void _onPointerDown(PointerDownEvent e) {
+    // 마우스 우클릭 또는 휠클릭 드래그 → 3D 회전·기울이기
+    final isSecondary = (e.buttons & kSecondaryMouseButton) != 0 ||
+        (e.buttons & kMiddleMouseButton) != 0;
+    if (isSecondary) {
+      _secondaryDragging = true;
+      _lastSecondaryPos = e.localPosition;
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (!_secondaryDragging || _sceneOrNull == null) return;
+    final delta = e.localPosition - _lastSecondaryPos;
+    _lastSecondaryPos = e.localPosition;
+    _orbitBy(delta);
+  }
+
+  void _onPointerUp(PointerEvent _) {
+    _secondaryDragging = false;
   }
 
   void _zoomBy(double factor) {
     _distance = (_distance * factor).clamp(40.0, 2600.0);
+    _sync();
+  }
+
+  void _tiltBy(double deltaDeg) {
+    _tilt = (_tilt + deltaDeg * math.pi / 180)
+        .clamp(12 * math.pi / 180, 88 * math.pi / 180);
     _sync();
   }
 
@@ -246,22 +323,30 @@ class _HousingView3DScreenState extends State<HousingView3DScreen> {
             child: LayoutBuilder(
               builder: (context, c) {
                 final size = Size(c.maxWidth, c.maxHeight);
-                return GestureDetector(
+                return Listener(
                   behavior: HitTestBehavior.opaque,
-                  onScaleStart: _onScaleStart,
-                  onScaleUpdate: (d) => _onScaleUpdate(d, size),
-                  child: scene == null
-                      ? const Center(child: CircularProgressIndicator())
-                      : RepaintBoundary(
-                    child: CustomPaint(
-                      size: size,
-                      painter: View3Painter(
-                        scene: scene,
-                        camera: _camera,
-                        ground: _ground,
-                        isDark: isDark,
-                      ),
-                    ),
+                  onPointerSignal: _onPointerSignal,
+                  onPointerDown: _onPointerDown,
+                  onPointerMove: _onPointerMove,
+                  onPointerUp: _onPointerUp,
+                  onPointerCancel: _onPointerUp,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onScaleStart: _onScaleStart,
+                    onScaleUpdate: (d) => _onScaleUpdate(d, size),
+                    child: scene == null
+                        ? const Center(child: CircularProgressIndicator())
+                        : RepaintBoundary(
+                            child: CustomPaint(
+                              size: size,
+                              painter: View3Painter(
+                                scene: scene,
+                                camera: _camera,
+                                ground: _ground,
+                                isDark: isDark,
+                              ),
+                            ),
+                          ),
                   ),
                 );
               },
@@ -269,68 +354,104 @@ class _HousingView3DScreenState extends State<HousingView3DScreen> {
           ),
 
           // 닫기 · 나침반
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _roundButton(
-                    icon: Icons.close_rounded,
-                    tooltip: '지도로 돌아가기',
-                    bg: chip,
-                    fg: fg,
-                    onTap: () => Navigator.of(context).maybePop(),
-                  ),
-                  const Spacer(),
-                  ValueListenableBuilder<View3Camera>(
-                    valueListenable: _camera,
-                    builder: (_, cam, _) => _roundButton(
-                      tooltip: '북쪽 보기',
-                      bg: chip,
-                      fg: fg,
-                      onTap: _faceNorth,
-                      child: Transform.rotate(
-                        angle: -cam.yaw,
-                        child: const Icon(
-                          Icons.navigation_rounded,
-                          size: 20,
-                          color: Color(0xFFFF3B30),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 확대·축소
           Positioned(
-              right: 12,
-              bottom: 96,
-              child: SafeArea(
-                child: Column(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _roundButton(
-                      icon: Icons.add_rounded,
-                      tooltip: '확대',
+                      icon: Icons.close_rounded,
+                      tooltip: '지도로 돌아가기',
                       bg: chip,
                       fg: fg,
-                      onTap: () => _zoomBy(0.75),
+                      onTap: () => Navigator.of(context).maybePop(),
                     ),
-                    const SizedBox(height: 8),
-                    _roundButton(
-                      icon: Icons.remove_rounded,
-                      tooltip: '축소',
-                      bg: chip,
-                      fg: fg,
-                      onTap: () => _zoomBy(1.33),
+                    const Spacer(),
+                    ValueListenableBuilder<View3Camera>(
+                      valueListenable: _camera,
+                      builder: (_, cam, _) => _roundButton(
+                        tooltip: '북쪽 보기',
+                        bg: chip,
+                        fg: fg,
+                        onTap: _faceNorth,
+                        child: Transform.rotate(
+                          angle: -cam.yaw,
+                          child: const Icon(
+                            Icons.navigation_rounded,
+                            size: 20,
+                            color: Color(0xFFFF3B30),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
+          ),
+
+          // 우측 조작 HUD (이동/회전 전환 · 기울기 · 확대/축소)
+          // mainAxisSize.min이 빠지면 Positioned 안에서 화면 전체 높이로 늘어나
+          // 버튼이 화면 위로 밀려나고 나침반 클릭까지 가로막는다.
+          Positioned(
+            right: 12,
+            bottom: 84,
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _roundButton(
+                    icon: _orbitDragMode
+                        ? Icons.threed_rotation_rounded
+                        : Icons.pan_tool_alt_rounded,
+                    tooltip: _orbitDragMode ? '이동 모드로 전환' : '회전·기울기 모드로 전환',
+                    bg: _orbitDragMode ? const Color(0xFF007AFF) : chip,
+                    fg: _orbitDragMode ? Colors.white : fg,
+                    onTap: () => setState(() => _orbitDragMode = !_orbitDragMode),
+                  ),
+                  const SizedBox(height: 8),
+                  _roundButton(
+                    icon: Icons.keyboard_arrow_up_rounded,
+                    tooltip: '시야 높이기',
+                    bg: chip,
+                    fg: fg,
+                    onTap: () => _tiltBy(10),
+                  ),
+                  const SizedBox(height: 6),
+                  _roundButton(
+                    icon: Icons.keyboard_arrow_down_rounded,
+                    tooltip: '시야 낮추기',
+                    bg: chip,
+                    fg: fg,
+                    onTap: () => _tiltBy(-10),
+                  ),
+                  const SizedBox(height: 10),
+                  _roundButton(
+                    icon: Icons.add_rounded,
+                    tooltip: '확대',
+                    bg: chip,
+                    fg: fg,
+                    onTap: () => _zoomBy(0.75),
+                  ),
+                  const SizedBox(height: 6),
+                  _roundButton(
+                    icon: Icons.remove_rounded,
+                    tooltip: '축소',
+                    bg: chip,
+                    fg: fg,
+                    onTap: () => _zoomBy(1.33),
+                  ),
+                ],
+              ),
+            ),
+          ),
 
           // 조작 안내
           Positioned(
@@ -338,17 +459,24 @@ class _HousingView3DScreenState extends State<HousingView3DScreen> {
             right: 16,
             bottom: 24,
             child: SafeArea(
+              top: false,
               child: Center(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: chip.withValues(alpha: 0.8),
+                    color: chip.withValues(alpha: 0.86),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    '한 손가락: 이동 · 두 손가락: 회전·확대·기울이기',
+                    kIsWeb
+                        ? (_orbitDragMode
+                            ? '드래그: 3D 회전·기울이기 · 휠: 확대/축소'
+                            : '드래그: 이동 · Shift+드래그/우클릭: 회전·기울이기 · 휠: 확대/축소')
+                        : (_orbitDragMode
+                            ? '한 손가락: 3D 회전·기울이기 · 두 손가락: 확대/축소'
+                            : '한 손가락: 이동 · 두 손가락: 회전·확대·기울이기'),
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11.5, color: fg.withValues(alpha: 0.8)),
+                    style: TextStyle(fontSize: 11.5, color: fg.withValues(alpha: 0.85)),
                   ),
                 ),
               ),

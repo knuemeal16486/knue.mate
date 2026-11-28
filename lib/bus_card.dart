@@ -168,24 +168,10 @@ class BusCard extends StatelessWidget {
       child: AnimatedScaleButton(
         onTap: () => _showRouteDetail(context),
         scaleFactor: 0.96,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+        child: KnueCard(
+          isDark: isDark,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -214,27 +200,29 @@ class BusCard extends StatelessWidget {
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
                               fontSize: 15,
+                              fontFeatures: KnueTokens.tabularFigures,
                             ),
                           ),
                         ),
                         if (arrivals.length > 1)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 2,
+                              horizontal: 6,
+                              vertical: 2.5,
                             ),
                             decoration: BoxDecoration(
                               color: isDark
                                   ? Colors.white10
                                   : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(5),
                             ),
                             child: Text(
                               "${arrivals.length}대 운행",
                               style: TextStyle(
-                                color: isDark ? Colors.white54 : Colors.grey[600],
-                                fontSize: 9,
+                                color: KnueTokens.caption(isDark),
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w600,
+                                fontFeatures: KnueTokens.tabularFigures,
                               ),
                             ),
                           ),

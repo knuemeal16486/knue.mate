@@ -40,4 +40,28 @@ void main() {
       expect(needsAppUpdate(currentBuild: 'abc', requiredBuild: 104), isFalse);
     });
   });
+
+  group('선택 업데이트 및 변경사항(releaseNotes)', () {
+    test('필수 빌드 미만이면 forced, 권장 빌드 미만이면 optional, 최신이면 none', () {
+      final data = {
+        'androidBuild': 110,
+        'recommendedAndroidBuild': 115,
+        'releaseNotes': '• 공지 북마크 추가\n• UI/UX 개선',
+      };
+      expect(
+        resolveUpdateKind(currentBuild: '109', data: data, isIOS: false),
+        AppUpdateKind.forced,
+      );
+      expect(
+        resolveUpdateKind(currentBuild: '113', data: data, isIOS: false),
+        AppUpdateKind.optional,
+      );
+      expect(
+        resolveUpdateKind(currentBuild: '115', data: data, isIOS: false),
+        AppUpdateKind.none,
+      );
+      expect(releaseNotesFor(data), '• 공지 북마크 추가\n• UI/UX 개선');
+      expect(releaseNotesFor({'releaseNotes': '   '}), isNull);
+    });
+  });
 }

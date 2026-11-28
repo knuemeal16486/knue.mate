@@ -11,6 +11,7 @@ import 'root_screen.dart';
 import 'ui_utils.dart';
 import 'meal_rating.dart';
 import 'native_ad_card.dart';
+import 'features/meal/cafeteria_info_sheet.dart';
 
 // [개편] 식단 탭 전용 페이지 (기존 MealMainScreen)
 // [복원] 식단 탭 전용 페이지 (기존 스타일 복구)
@@ -68,12 +69,16 @@ Widget _buildMealModeSegment({
 }) {
   if (onSwitchTab == null) return const SizedBox.shrink();
   final primaryColor = themeColor.value;
+  final onBrand = KnueTokens.onAccent(primaryColor);
+  final activeText = KnueTokens.accentForeground(primaryColor, false);
   return Container(
     height: 32,
     decoration: BoxDecoration(
-      color: Colors.black.withValues(alpha: 0.18),
+      color: onBrand == Colors.white
+          ? Colors.black.withValues(alpha: 0.18)
+          : Colors.black.withValues(alpha: 0.10),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      border: Border.all(color: onBrand.withValues(alpha: 0.22)),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -83,7 +88,10 @@ Widget _buildMealModeSegment({
           selected: selectedIndex == 0,
           label: "오늘 식단 보기",
           child: GestureDetector(
-            onTap: () => onSwitchTab(0),
+            onTap: () {
+              KnueHaptics.selection();
+              onSwitchTab(0);
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -96,7 +104,7 @@ Widget _buildMealModeSegment({
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: selectedIndex == 0 ? FontWeight.w800 : FontWeight.w600,
-                  color: selectedIndex == 0 ? primaryColor : Colors.white.withValues(alpha: 0.85),
+                  color: selectedIndex == 0 ? activeText : onBrand.withValues(alpha: 0.85),
                 ),
               ),
             ),
@@ -107,7 +115,10 @@ Widget _buildMealModeSegment({
           selected: selectedIndex == 1,
           label: "월간 식단 보기",
           child: GestureDetector(
-            onTap: () => onSwitchTab(1),
+            onTap: () {
+              KnueHaptics.selection();
+              onSwitchTab(1);
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -120,7 +131,7 @@ Widget _buildMealModeSegment({
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: selectedIndex == 1 ? FontWeight.w800 : FontWeight.w600,
-                  color: selectedIndex == 1 ? primaryColor : Colors.white.withValues(alpha: 0.85),
+                  color: selectedIndex == 1 ? activeText : onBrand.withValues(alpha: 0.85),
                 ),
               ),
             ),
@@ -155,11 +166,6 @@ class _TodayMealPageState extends State<TodayMealPage>
   /// 읽기 전엔 true로 둬서 점이 잠깐 깜빡이지 않게 한다.
   bool _staffInfoSeen = true;
 
-  /// 식단 카드 아래 광고. 처음 열 때 한 번 살짝 내려 이것까지 보이게 한다
-  /// ([_revealAdOnce]) — 광고를 맨 위에 두지 않는 대신(사용자 결정, 2026-11-12).
-  final GlobalKey _mealAdKey = GlobalKey();
-  bool _adRevealed = false;
-  bool _userScrolled = false;
   Map<String, List<String>> _meals = {
     "breakfast": [],
     "lunch": [],
@@ -217,7 +223,6 @@ class _TodayMealPageState extends State<TodayMealPage>
       if (myReq != _reqId) return;
       _applyMealsFromBackend(res);
       if (mounted) setState(() => _loading = false);
-      _revealAdOnce();
     } catch (e) {
       if (mounted && myReq == _reqId) {
         setState(() {
@@ -225,32 +230,8 @@ class _TodayMealPageState extends State<TodayMealPage>
           _loading = false;
           _meals = {"breakfast": [], "lunch": [], "dinner": []};
         });
-        _revealAdOnce();
       }
     }
-  }
-
-  /// 처음 식단을 불러온 뒤 한 번, 식단 카드 아래 광고까지 보이도록 살짝 내린다.
-  /// 이미 보이면(큰 화면) 움직이지 않고, 그새 사용자가 스크롤했으면 건드리지
-  /// 않는다. 날짜·식당을 바꿀 땐 다시 하지 않는다.
-  void _revealAdOnce() {
-    if (_adRevealed) return;
-    _adRevealed = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Future.delayed(const Duration(milliseconds: 350));
-      if (!mounted || _userScrolled) return;
-      final ctx = _mealAdKey.currentContext;
-      if (ctx == null || !ctx.mounted) return;
-      final reduceMotion = MediaQuery.maybeDisableAnimationsOf(ctx) ?? false;
-      await Scrollable.ensureVisible(
-        ctx,
-        alignment: 1.0,
-        // 아래로 벗어나 있을 때만 움직인다.
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-        duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 550),
-        curve: Curves.easeOutCubic,
-      );
-    });
   }
 
   void _applyMealsFromBackend(dynamic decoded) {
@@ -377,18 +358,17 @@ class _TodayMealPageState extends State<TodayMealPage>
     super.build(context); // AutomaticKeepAliveClientMixin 필수 호출
     final isToday = DateUtils.isSameDay(_date, DateTime.now());
     final primaryColor = Theme.of(context).primaryColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onBrand = KnueTokens.onAccent(primaryColor);
+    final accentFg = KnueTokens.accentForeground(primaryColor, isDark);
 
     return Scaffold(
-      body: NotificationListener<UserScrollNotification>(
-        onNotification: (_) {
-          _userScrolled = true;
-          return false;
-        },
-        child: NestedScrollView(
+      backgroundColor: KnueTokens.bg(isDark),
+      body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             SliverAppBar(
-              expandedHeight: 240,
+              expandedHeight: 214,
               pinned: true,
               backgroundColor: primaryColor,
               elevation: 0,
@@ -396,23 +376,26 @@ class _TodayMealPageState extends State<TodayMealPage>
               centerTitle: false,
               shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(30),
+                  bottom: Radius.circular(28),
                 ),
               ),
               leading: null, // 햄버거 메뉴 제거
               title: Row(
                 children: [
-                  const Text(
+                  Text(
                     "청람밥상",
                     style: TextStyle(
-                      color: Colors.white,
+                      color: onBrand,
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
+                      shadows: KnueTokens.headerShadows(primaryColor),
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 2),
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () {
+                      KnueHaptics.selection();
                       // 교직원 식당 안내를 열면 빨간 점을 끈다.
                       if (_source == MealSource.b) _markStaffInfoSeen();
                       _showCafeteriaInfo(context);
@@ -423,14 +406,14 @@ class _TodayMealPageState extends State<TodayMealPage>
                           : '식당 운영 정보',
                       button: true,
                       child: Padding(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(10),
                         child: Stack(
                           clipBehavior: Clip.none,
                           children: [
                             Icon(
                               Icons.info_outline,
-                              color: Colors.white.withValues(alpha: 0.8),
-                              size: 18,
+                              color: onBrand.withValues(alpha: 0.85),
+                              size: 19,
                             ),
                             // 아이폰 앱 아이콘의 새 소식 점처럼.
                             if (showStaffMenuInfoDot(_source, seen: _staffInfoSeen))
@@ -459,7 +442,7 @@ class _TodayMealPageState extends State<TodayMealPage>
                     _alarmOn
                         ? Icons.notifications_active
                         : Icons.notifications_none,
-                    color: Colors.white,
+                    color: onBrand,
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -468,15 +451,15 @@ class _TodayMealPageState extends State<TodayMealPage>
                 background: Container(
                   decoration: BoxDecoration(
                     borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(30),
+                      bottom: Radius.circular(28),
                     ),
                     gradient: KnuePearl.headerGradient(
                       primaryColor,
-                      Theme.of(context).brightness == Brightness.dark,
+                      isDark,
                     ),
                     border: Border(
                       bottom: BorderSide(
-                        color: Theme.of(context).brightness == Brightness.dark
+                        color: isDark
                             ? Colors.white.withValues(alpha: 0.15)
                             : Colors.black.withValues(alpha: 0.08),
                         width: 0.8,
@@ -485,18 +468,18 @@ class _TodayMealPageState extends State<TodayMealPage>
                   ),
                   child: Padding(
                     padding: EdgeInsets.only(
-                      top: MediaQuery.of(context).padding.top + 60,
+                      top: MediaQuery.of(context).padding.top + 54,
                     ),
                     child: Column(
                       children: [
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(16),
+                              color: Colors.black.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                             child: Row(
                               children: [
@@ -506,13 +489,28 @@ class _TodayMealPageState extends State<TodayMealPage>
                             ),
                           ),
                         ),
-                        const SizedBox(height: 15),
+                        const SizedBox(height: 10),
                         MealDateSwitcher(
                           date: _date,
                           isToday: isToday,
-                          onPrev: _loading ? null : () => _changeDate(-1),
-                          onNext: _loading ? null : () => _changeDate(1),
-                          onToday: _loading ? null : _goToday,
+                          onPrev: _loading
+                              ? null
+                              : () {
+                                  KnueHaptics.selection();
+                                  _changeDate(-1);
+                                },
+                          onNext: _loading
+                              ? null
+                              : () {
+                                  KnueHaptics.selection();
+                                  _changeDate(1);
+                                },
+                          onToday: _loading
+                              ? null
+                              : () {
+                                  KnueHaptics.selection();
+                                  _goToday();
+                                },
                           primaryColor: primaryColor,
                         ),
                       ],
@@ -546,36 +544,30 @@ class _TodayMealPageState extends State<TodayMealPage>
 
                   return Container(
                     width: double.infinity,
-                    margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [primaryColor, primaryColor.withValues(alpha: 0.8)],
+                        colors: [primaryColor, primaryColor.withValues(alpha: 0.85)],
                       ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primaryColor.withValues(alpha: 0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: KnueTokens.cardShadow(isDark),
                     ),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.campaign_rounded,
-                          color: Colors.white,
-                          size: 28,
+                          color: onBrand,
+                          size: 24,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             content,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: onBrand,
                               fontWeight: FontWeight.bold,
-                              fontSize: 15,
+                              fontSize: 14,
                             ),
                           ),
                         ),
@@ -584,63 +576,97 @@ class _TodayMealPageState extends State<TodayMealPage>
                   );
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               _MealTabs(
                 selected: _selected,
                 source: _source,
-                onSelect: (t) => setState(() => _selected = t),
+                onSelect: (t) {
+                  KnueHaptics.selection();
+                  setState(() => _selected = t);
+                },
               ),
               const SizedBox(height: kMealSectionGap),
               if (_loading)
                 // 스피너 대신 카드 형태를 미리 그려 로딩→표시 전환에 덜컹임이 없게.
-                _MealCardSkeleton(
-                  isDark: Theme.of(context).brightness == Brightness.dark,
-                )
+                _MealCardSkeleton(isDark: isDark)
               else if (_error != null)
                 _ErrorCard(message: _error!)
               else
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  // 날짜·식당을 바꿀 때 내용이 살짝 밀려 들어오게 — 전환이 있었다는
-                  // 것만 느껴질 정도의 12px.
-                  transitionBuilder: (child, anim) => FadeTransition(
-                    opacity: anim,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.035),
-                        end: Offset.zero,
-                      ).animate(anim),
-                      child: child,
+                GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragEnd: (details) {
+                    final v = details.primaryVelocity ?? 0;
+                    if (v.abs() < 320 || _loading) return;
+                    KnueHaptics.selection();
+                    _changeDate(v < 0 ? 1 : -1);
+                  },
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    // 날짜·식당을 바꿀 때 내용이 살짝 밀려 들어오게 — 전환이 있었다는
+                    // 것만 느껴질 정도의 12px.
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.035),
+                          end: Offset.zero,
+                        ).animate(anim),
+                        child: child,
+                      ),
+                    ),
+                    child: _MealDetailCard(
+                      key: ValueKey("$_date-$_selected-$_source"),
+                      status: statusFor(_selected, DateTime.now(), _date, source: _source),
+                      type: _selected,
+                      source: _source,
+                      items: _meals[_selected.stdKey] ?? [],
+                      isToday: isToday,
+                      date: _date,
                     ),
                   ),
-                  child: _MealDetailCard(
-                    key: ValueKey("$_date-$_selected-$_source"),
-                    status: statusFor(_selected, DateTime.now(), _date, source: _source),
-                    type: _selected,
-                    source: _source,
-                    items: _meals[_selected.stdKey] ?? [],
-                    isToday: isToday,
-                    date: _date,
+                ),
+              if (_source == MealSource.b)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        KnueHaptics.selection();
+                        _markStaffInfoSeen();
+                        _showCafeteriaInfo(context);
+                      },
+                      icon: Icon(Icons.restaurant_rounded, size: 16, color: accentFg),
+                      label: Text(
+                        "선택식 상시 메뉴 · 가격 보기",
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: accentFg,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: KnueTokens.hairline(isDark)),
+                        backgroundColor: KnueTokens.surface(isDark),
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              // 광고는 식단 카드 아래 — 가장 자주 보는 탭이라 맨 위 광고는 지저분해
-              // 보였다(사용자 결정, 2026-11-12. 0309885에서 위로 올렸던 것을 되돌림).
-              const SizedBox(height: 16),
-              KeyedSubtree(
-                key: _mealAdKey,
-                // 아래 12는 자동으로 내려갈 때 광고가 화면 끝에 딱 붙지 않게 하는 여유.
-                child: const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
-                  child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
-                ),
+              const SizedBox(height: 12),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: KnueNativeAdCard(isCompact: true, placement: 'meal'),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
             ],
           ),
         ),
-      ),
       ),
     );
   }
@@ -671,245 +697,7 @@ class _TodayMealPageState extends State<TodayMealPage>
   }
 
   void _showCafeteriaInfo(BuildContext context) {
-    // a = 사도교육원 식당(관리동 1층, 의무입사생 무료), b = 교직원 식당(학생회관 1층 느티헌).
-    final isSado = _source == MealSource.a;
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Theme.of(context).cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.storefront_rounded,
-                  size: 40,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                "식당 운영 정보",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildInfoRow(
-                        Icons.place,
-                        "위치",
-                        isSado ? "관리동 1층" : "학생회관 1층",
-                      ),
-                      const SizedBox(height: 12),
-                      _buildInfoRow(
-                        Icons.attach_money,
-                        "가격",
-                        isSado ? "의무입사생 무료" : "6,000원 (느티헌)",
-                      ),
-                      const SizedBox(height: 12),
-                      _buildInfoRow(
-                        Icons.access_time,
-                        "운영",
-                        isSado ? "연중무휴" : "주말/공휴일 휴무",
-                      ),
-                      if (!isSado) ...[
-                        const SizedBox(height: 24),
-                        const SizedBox(
-                          width: double.infinity,
-                          child: Text(
-                            "선택식 메뉴",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ...[
-                          {
-                            "category": "🍲 한식 & 찌개",
-                            "items": [
-                              {"name": "느티헌 교원백반", "price": "6,000"},
-                              {"name": "매화헌 교원백반", "price": "6,000"},
-                              {"name": "촌돼지김치찌개", "price": "6,500"},
-                            ],
-                          },
-                          {
-                            "category": "🍜 라면",
-                            "items": [
-                              {"name": "해장라면+공기밥", "price": "5,000"},
-                              {"name": "떡만두라면+공기밥", "price": "5,200"},
-                              {"name": "치즈라면+공기밥", "price": "5,200"},
-                              {"name": "부대라면+공기밥", "price": "5,500"},
-                            ],
-                          },
-                          {
-                            "category": "🍛 돈까스 & 알밥",
-                            "items": [
-                              {"name": "등심돈까스", "price": "6,000"},
-                              {"name": "등심돈까스+알밥", "price": "6,500"},
-                              {"name": "치즈돈까스", "price": "6,500"},
-                              {"name": "치즈돈까스+알밥", "price": "7,000"},
-                              {"name": "고구마치즈돈까스", "price": "6,500"},
-                              {"name": "고구마치즈돈까스+알밥", "price": "7,000"},
-                              {"name": "치킨까스", "price": "6,000"},
-                              {"name": "치킨까스+알밥", "price": "6,500"},
-                            ],
-                          },
-                        ].map((group) {
-                          final category = group["category"] as String;
-                          final items =
-                              group["items"] as List<Map<String, String>>;
-                          final bool isDark =
-                              Theme.of(context).brightness == Brightness.dark;
-
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  category,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).primaryColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.grey[900]
-                                        : Colors.grey[50],
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: isDark
-                                          ? Colors.grey[800]!
-                                          : Colors.grey[200]!,
-                                    ),
-                                  ),
-                                  child: Column(
-                                    children: items.map((menu) {
-                                      final isLast = items.last == menu;
-                                      return Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 14,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          border: isLast
-                                              ? null
-                                              : Border(
-                                                  bottom: BorderSide(
-                                                    color: isDark
-                                                        ? Colors.grey[800]!
-                                                        : Colors.grey[200]!,
-                                                  ),
-                                                ),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                menu["name"]!,
-                                                style: const TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                            Text(
-                                              "${menu["price"]}원",
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w900,
-                                                color: isDark
-                                                    ? Colors.grey[300]
-                                                    : Colors.grey[700],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    "닫기",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String label, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 20, color: Colors.grey),
-        const SizedBox(width: 12),
-        Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.grey,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-        ),
-      ],
-    );
+    showCafeteriaInfoSheet(context, _source);
   }
 }
 

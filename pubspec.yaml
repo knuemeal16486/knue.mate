@@ -34,7 +34,6 @@ dependencies:
   # [중요] 아래 두 줄이 'flutter:' 와 세로 줄이 딱 맞아야 합니다!
   cupertino_icons: ^1.0.2
   google_generative_ai: ^0.4.7
-  googleapis: ^11.3.0
   flutter_local_notifications: ^21.0.0
   timezone: ^0.11.0
   home_widget: ^0.8.1
@@ -46,7 +45,6 @@ dependencies:
   flutter_dotenv: ^6.0.0
   html: ^0.15.4
   url_launcher: ^6.2.0
-  webview_flutter: ^4.10.0
   google_fonts: ^6.2.1
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
@@ -58,7 +56,6 @@ dependencies:
   workmanager: ^0.9.0+3
   table_calendar: ^3.1.3
   cp949_codec: ^1.0.2
-  euc: ^1.0.6+8
   firebase_storage: ^13.0.0
   image_picker: ^1.1.2
   google_mobile_ads: 9.0.0
@@ -110,9 +107,13 @@ flutter:
 
   # 주석(#)을 지우고 아래와 같이 정확한 간격으로 맞춰주세요.
   assets:
+    # ⚠️ 릴리즈 빌드에서는 --dart-define(BUS_API_KEY, GEMINI_API_KEY, CALORIE_API_URL)
+    # 주입으로 전환한 뒤 아래 .env 애셋을 제거하면 키 노출을 완전히 차단할 수 있습니다.
     - .env
     - assets/buildings/knue_buildings.json
-    - assets/icons/knue_icon.png
+    # knue_icon.png(2MB, 2048px)는 런처 아이콘 생성용으로만 두고, 런타임 로딩 화면엔
+    # 512px 경량본(knue_icon_light.png)만 번들링해 앱 용량을 ~1.9MB 절감한다.
+    - assets/icons/knue_icon_light.png
     - assets/icons/knue_icon_dark.png   # 다크 모드 로딩 화면(tool/make_splash_images.py)
     # knuesquare.png(7MB)는 여기 등록만 돼 있고 코드에서 한 번도 안 쓴다.
     # 등록돼 있는 것만으로 모든 사용자 APK에 그대로 들어가므로 뺀다.

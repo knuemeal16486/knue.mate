@@ -81,7 +81,9 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
         );
         final grouped = groupLegalTips(tips);
 
+        final onBrand = KnueTokens.onAccent(color);
         return Scaffold(
+          backgroundColor: KnueTokens.bg(isDark),
           appBar: AppBar(
             title: const Text("법률상식"),
             backgroundColor: Colors.transparent,
@@ -89,29 +91,27 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
               themeColor: color,
               isDark: isDark,
             ),
-            iconTheme: const IconThemeData(color: Colors.white),
+            iconTheme: IconThemeData(color: onBrand),
           ),
           body: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: TextField(
-                  onChanged: (v) => setState(() => _query = v),
-                  decoration: InputDecoration(
-                    hintText: "궁금한 걸 검색해 보세요",
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: Theme.of(context).cardColor,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
+              KnueSearchBar(
+                query: _query,
+                hintText: "궁금한 걸 검색해 보세요",
+                onChanged: (v) => setState(() => _query = v),
+                accentColor: color,
+                isDark: isDark,
               ),
-              _buildTopicTabs(color, isDark),
-              _buildGroupChips(groups, ink, isDark),
+              KnueSegmentedControl<LegalTopic>(
+                items: [
+                  for (final t in LegalTopic.values) (value: t, label: t.label),
+                ],
+                selected: _topic,
+                onChanged: _selectTopic,
+                accentColor: color,
+                isDark: isDark,
+              ),
+              _buildGroupChips(groups, KnueTokens.accentForeground(ink, isDark), isDark),
               Expanded(
                 child: ListView(
                   // 주제나 묶음을 바꾸면 맨 위에서 다시 시작한다.
@@ -142,66 +142,6 @@ class _LegalTipsScreenState extends State<LegalTipsScreen> {
           ),
         );
       },
-    );
-  }
-
-  /// 주제 전환. 교직원 연락처의 전체/행정/과 사무실 전환과 같은 분할 탭이다.
-  Widget _buildTopicTabs(Color color, bool isDark) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFEFEFF4),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: LegalTopic.values.map((topic) {
-          final active = topic == _topic;
-          return Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _selectTopic(topic),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
-                decoration: BoxDecoration(
-                  color: active
-                      ? (isDark ? const Color(0xFF3A3A3C) : Colors.white)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: active
-                      ? [
-                          BoxShadow(
-                            color: Colors.black
-                                .withValues(alpha: isDark ? 0.3 : 0.06),
-                            blurRadius: 6,
-                            offset: const Offset(0, 1),
-                          ),
-                        ]
-                      : null,
-                ),
-                // "학원강사(과외)"가 좁은 폰에서 칸을 넘지 않게 줄인다.
-                child: Center(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      topic.label,
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                        color: active
-                            ? color
-                            : (isDark ? Colors.white54 : Colors.black54),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
     );
   }
 

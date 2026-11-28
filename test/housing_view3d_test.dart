@@ -327,12 +327,43 @@ void main() {
     // 도로가 OSM 데이터라 출처 표기가 있어야 한다(ODbL).
     expect(find.text('도로 © OpenStreetMap 기여자'), findsWidgets);
 
-    // 끌어서 옮기고 돌려도 예외가 없다.
+    // 끌어서 옮기고 버튼·회전 모드로 돌려도 화면 밖으로 밀리지 않고 정상 반응한다.
+    View3Camera currentCam() => tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .map((c) => c.painter)
+        .whereType<View3Painter>()
+        .first
+        .camera
+        .value;
+
+    final beforeDrag = currentCam();
     await tester.drag(find.byType(HousingView3DScreen), const Offset(80, 40));
     await tester.pump();
+    expect(currentCam().x, isNot(closeTo(beforeDrag.x, 0.1)));
+
+    // 확대·축소·시야 기울기·북쪽 보기 버튼이 모두 화면 안에 있어 정상 탭된다.
+    final beforeZoom = currentCam();
     await tester.tap(find.byTooltip('확대'));
+    await tester.pump();
+    expect(currentCam().z, lessThan(beforeZoom.z), reason: '확대 시 카메라가 가까워진다');
+
+    await tester.tap(find.byTooltip('시야 낮추기'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('시야 높이기'));
+    await tester.pump();
+
+    // 회전·기울기 모드 전환 후 드래그하면 시야각(yaw/pitch)이 바뀐다.
+    await tester.tap(find.byTooltip('회전·기울기 모드로 전환'));
+    await tester.pump();
+    final beforeOrbit = currentCam();
+    await tester.drag(find.byType(HousingView3DScreen), const Offset(90, -40));
+    await tester.pump();
+    expect(currentCam().yaw, isNot(closeTo(beforeOrbit.yaw, 0.05)));
+    expect(currentCam().pitch, isNot(closeTo(beforeOrbit.pitch, 0.02)));
+
     await tester.tap(find.byTooltip('북쪽 보기'));
     await tester.pump();
+    expect(currentCam().yaw, closeTo(0, 1e-6));
     tester.takeException(); // 대체 글꼴 경고
   });
 }

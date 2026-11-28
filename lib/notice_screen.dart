@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'constants.dart';
+import 'features/notice/notice_bookmark_service.dart';
 import 'keyword_alert_service.dart';
 import 'notice_feed.dart';
 import 'notice_model.dart';
@@ -85,6 +86,7 @@ class _NoticeScreenState extends State<NoticeScreen>
   void initState() {
     super.initState();
     _load();
+    NoticeBookmarkService.load();
     // 홈 화면·백그라운드 작업이 캐시를 새로 채우면 화면도 따라 바뀌도록 구독.
     NoticeCache.revision.addListener(_onCacheUpdated);
     // 홈 화면·백그라운드가 받은 수집 목록(마지막 수집 시각)도 바로 반영한다.
@@ -328,9 +330,18 @@ class _NoticeScreenState extends State<NoticeScreen>
     final uri = Uri.tryParse(notice.link);
     if (uri == null) return;
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // 인앱 브라우저(SFSafariViewController / Chrome Custom Tabs)로 열어
+      // 공지를 읽고 뒤로가기로 앱에 매끄럽게 복귀할 수 있게 한다.
+      final launched = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (!launched) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
     } catch (_) {
-      // 실행 실패는 조용히 무시 (외부 브라우저 부재 등)
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        // 실행 실패는 조용히 무시 (외부 브라우저 부재 등)
+      }
     }
   }
 
@@ -350,7 +361,9 @@ class _NoticeScreenState extends State<NoticeScreen>
       valueListenable: themeColor,
       builder: (context, color, child) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final onBrand = KnueTokens.onAccent(color);
         return Scaffold(
+          backgroundColor: KnueTokens.bg(isDark),
           appBar: AppBar(
             title: const Text("청람공지"),
             backgroundColor: Colors.transparent,
@@ -358,15 +371,34 @@ class _NoticeScreenState extends State<NoticeScreen>
               themeColor: color,
               isDark: isDark,
             ),
-            iconTheme: const IconThemeData(color: Colors.white),
+            iconTheme: IconThemeData(color: onBrand),
             actions: [
+              ValueListenableBuilder<List<Notice>>(
+                valueListenable: NoticeBookmarkService.bookmarks,
+                builder: (context, saved, _) => IconButton(
+                  onPressed: () => _showBookmarksSheet(context),
+                  tooltip: "저장한 공지",
+                  icon: Badge(
+                    isLabelVisible: saved.isNotEmpty,
+                    label: Text('${saved.length}'),
+                    child: Icon(
+                      saved.isNotEmpty
+                          ? Icons.bookmarks_rounded
+                          : Icons.bookmarks_outlined,
+                    ),
+                  ),
+                ),
+              ),
               IconButton(
                 onPressed: () => _showKeywordSheet(context, color),
                 icon: const Icon(Icons.notifications_outlined),
                 tooltip: "키워드 관리",
               ),
               IconButton(
-                onPressed: () => _load(force: true),
+                onPressed: () {
+                  KnueHaptics.light();
+                  _load(force: true);
+                },
                 icon: const Icon(Icons.refresh),
                 tooltip: "새로고침",
               ),
@@ -374,10 +406,12 @@ class _NoticeScreenState extends State<NoticeScreen>
             bottom: TabBar(
               controller: _mainTabController,
               tabs: _mainTabNames.map((name) => Tab(text: name)).toList(),
-              indicatorColor: Colors.white,
-              indicatorWeight: 3,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
+              indicatorColor: onBrand,
+              indicatorWeight: 2.5,
+              indicatorSize: TabBarIndicatorSize.label,
+              dividerColor: Colors.transparent,
+              labelColor: onBrand,
+              unselectedLabelColor: onBrand.withValues(alpha: 0.65),
               labelStyle: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -386,7 +420,23 @@ class _NoticeScreenState extends State<NoticeScreen>
           ),
           body: Column(
             children: [
-              _buildSearchField(color, isDark),
+              KnueSearchBar(
+                controller: _searchCtrl,
+                query: _searchQuery,
+                hintText: _selectedCategory == null
+                    ? "전체 공지에서 제목 검색"
+                    : "$_selectedCategory에서 제목 검색",
+                onChanged: _onSearchChanged,
+                onClear: () {
+                  setState(() {
+                    _searchQuery = "";
+                    _recomputeDerived();
+                  });
+                },
+                accentColor: color,
+                isDark: isDark,
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+              ),
               _buildSubGroupChips(color, isDark),
               _buildBoardChips(color),
               if (_failedBoard) _buildFailureBanner(isDark),
@@ -407,12 +457,13 @@ class _NoticeScreenState extends State<NoticeScreen>
   /// 여기서 고르면 그 아래 게시판 칩 줄이 그 범위로 좁혀진다.
   Widget _buildSubGroupChips(Color color, bool isDark) {
     final subGroups = _currentSubGroups.keys.toList();
+    final accentFg = KnueTokens.accentForeground(color, isDark);
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.4);
     return SizedBox(
-      // 게시판 칩 줄에서 겪은 것과 같은 이유로 여유를 넉넉히 둔다.
-      height: 38,
+      height: 36 * textScale,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
         itemCount: subGroups.length + 1, // +1 = "전체"
         itemBuilder: (context, index) {
           final label = index == 0 ? "전체" : subGroups[index - 1];
@@ -423,6 +474,7 @@ class _NoticeScreenState extends State<NoticeScreen>
             padding: const EdgeInsets.only(right: 6),
             child: GestureDetector(
               onTap: () {
+                KnueHaptics.selection();
                 setState(() {
                   _selectedSubGroup = index == 0 ? null : label;
                   // 하위 탭을 바꿨는데 지금 고른 게시판이 그 범위 밖이면 비운다.
@@ -436,12 +488,12 @@ class _NoticeScreenState extends State<NoticeScreen>
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+                  horizontal: 11,
+                  vertical: 5,
                 ),
                 decoration: BoxDecoration(
                   color: selected
-                      ? color.withValues(alpha: isDark ? 0.28 : 0.12)
+                      ? accentFg.withValues(alpha: isDark ? 0.22 : 0.12)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -451,9 +503,7 @@ class _NoticeScreenState extends State<NoticeScreen>
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-                    color: selected
-                        ? color
-                        : (isDark ? Colors.white54 : Colors.black54),
+                    color: selected ? accentFg : KnueTokens.caption(isDark),
                   ),
                 ),
               ),
@@ -578,81 +628,22 @@ class _NoticeScreenState extends State<NoticeScreen>
     );
   }
 
-  /// 제목 검색창. 선택된 게시판 범위 안에서만 걸러내며, 이미 받아온 목록을
-  /// 로컬에서 필터링하므로 재크롤링 없이 즉시 반영된다.
-  Widget _buildSearchField(Color color, bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: TextField(
-        controller: _searchCtrl,
-        onChanged: _onSearchChanged,
-        textInputAction: TextInputAction.search,
-        style: const TextStyle(fontSize: 14),
-        decoration: InputDecoration(
-          hintText: _selectedCategory == null
-              ? "전체 공지에서 제목 검색"
-              : "$_selectedCategory에서 제목 검색",
-          hintStyle: TextStyle(
-            fontSize: 13,
-            color: isDark ? Colors.white38 : Colors.black38,
-          ),
-          prefixIcon: const Icon(Icons.search, size: 20),
-          suffixIcon: _searchQuery.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
-                  tooltip: "검색어 지우기",
-                  onPressed: () {
-                    _searchCtrl.clear();
-                    setState(() {
-                      _searchQuery = "";
-                      _recomputeDerived();
-                    });
-                  },
-                ),
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-          filled: true,
-          fillColor: Theme.of(context).cardColor,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
-            ),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: color),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildBoardChips(Color color) {
     return ValueListenableBuilder<List<String>>(
       valueListenable: PreferencesService.favoriteBoards,
       builder: (context, favBoards, child) {
         // 즐겨찾기(고정) 게시판을 먼저 배치. 지금 큰 탭(+하위 탭) 범위로 좁혀서 보여준다.
         final entries = _boardEntriesFor(favBoards);
+        final textScale =
+            MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.4);
 
         return SizedBox(
-          // 44였을 때 칩 안쪽 글씨(특히 굵게 표시되는 선택 상태의 한글)가
-          // 위아래로 살짝 잘려 보였다 — ListView 자체 패딩(세로 6+6) +
-          // 칩 패딩(세로 8+8)을 빼면 글자에 남는 높이가 16px뿐이라
-          // 13px 굵은 한글 한 줄에는 빠듯했다. 여유를 더 줬다.
-          height: 50,
+          height: 48 * textScale,
           // ListView.builder — 게시판이 많을 수 있어 전부 미리 만들면 화면에
           // 들어오지도 않는 칩까지 매번 생성된다. 보이는 것만 만들게 바꿨다.
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             itemCount: entries.length + 1, // +1 = "전체"
             itemBuilder: (context, index) {
               if (index == 0) {
@@ -661,6 +652,7 @@ class _NoticeScreenState extends State<NoticeScreen>
                   selected: _selectedCategory == null,
                   color: color,
                   onTap: () {
+                    KnueHaptics.selection();
                     setState(() {
                       _selectedCategory = null;
                       _recomputeDerived();
@@ -675,6 +667,7 @@ class _NoticeScreenState extends State<NoticeScreen>
                 selected: _selectedCategory == category,
                 color: color,
                 onTap: () {
+                  KnueHaptics.selection();
                   setState(() {
                     _selectedCategory = category;
                     _recomputeDerived();
@@ -682,7 +675,10 @@ class _NoticeScreenState extends State<NoticeScreen>
                   _load(); // 고른 게시판을 받는다
                 },
                 isFavorite: favBoards.contains(category),
-                onStarTap: () => _toggleFavoriteBoard(category),
+                onStarTap: () {
+                  KnueHaptics.light();
+                  _toggleFavoriteBoard(category);
+                },
               );
             },
           ),
@@ -699,17 +695,23 @@ class _NoticeScreenState extends State<NoticeScreen>
     bool? isFavorite,
     VoidCallback? onStarTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onBrand = KnueTokens.onAccent(color);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 3.5),
       child: GestureDetector(
         onTap: onTap,
+        onLongPress: onStarTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: EdgeInsets.only(
+            left: onStarTap != null ? 4 : 12,
+            right: 12,
+          ),
           decoration: BoxDecoration(
-            color: selected ? color : Theme.of(context).cardColor,
+            color: selected ? color : KnueTokens.surface(isDark),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: selected ? color : Colors.grey.withValues(alpha: 0.4),
+              color: selected ? color : KnueTokens.hairline(isDark),
             ),
           ),
           child: Row(
@@ -717,22 +719,32 @@ class _NoticeScreenState extends State<NoticeScreen>
             children: [
               if (onStarTap != null)
                 GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: onStarTap,
-                  child: Icon(
-                    isFavorite == true ? Icons.star : Icons.star_border,
-                    size: 16,
-                    color: selected
-                        ? Colors.white
-                        : (isFavorite == true ? Colors.amber : Colors.grey),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 6,
+                    ),
+                    child: Icon(
+                      isFavorite == true ? Icons.star_rounded : Icons.star_border_rounded,
+                      size: 16,
+                      color: selected
+                          ? onBrand
+                          : (isFavorite == true
+                              ? KnueTokens.warm(isDark)
+                              : KnueTokens.caption(isDark)),
+                    ),
                   ),
                 ),
-              if (onStarTap != null) const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
-                  color: selected ? Colors.white : null,
+                  color: selected
+                      ? onBrand
+                      : (isDark ? Colors.white : const Color(0xFF1C1C1E)),
                   fontSize: 13,
-                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
             ],
@@ -747,7 +759,31 @@ class _NoticeScreenState extends State<NoticeScreen>
     // (처음 여는 학과는 그 자리에서 받으므로 "표시할 공지가 없습니다"가 먼저
     //  뜨면 안 된다.)
     if (_loading && _filtered.isEmpty && _searchQuery.trim().isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: 5,
+        itemBuilder: (_, _) => KnueCard(
+          isDark: isDark,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  KnueSkeleton(width: 64, height: 18, radius: 6, isDark: isDark),
+                  KnueSkeleton(width: 72, height: 12, radius: 4, isDark: isDark),
+                ],
+              ),
+              const SizedBox(height: 10),
+              KnueSkeleton(width: double.infinity, height: 15, radius: 5, isDark: isDark),
+              const SizedBox(height: 6),
+              KnueSkeleton(width: 180, height: 14, radius: 5, isDark: isDark),
+            ],
+          ),
+        ),
+      );
     }
     final list = _filtered;
     if (list.isEmpty) {
@@ -757,10 +793,19 @@ class _NoticeScreenState extends State<NoticeScreen>
         onRefresh: () => _load(force: true),
         child: ListView(
           children: [
-            const SizedBox(height: 120),
+            const SizedBox(height: 80),
             Center(
               child: linkUrl == null
-                  ? Text(searching ? "검색 결과가 없습니다" : "표시할 공지가 없습니다")
+                  ? KnueEmptyState(
+                      icon: searching
+                          ? Icons.search_off_rounded
+                          : Icons.campaign_outlined,
+                      title: searching ? "검색 결과가 없습니다" : "표시할 공지가 없습니다",
+                      subtitle: searching
+                          ? "다른 키워드로 다시 검색해 보세요"
+                          : "아래로 당겨서 새 공지를 불러올 수 있어요",
+                      isDark: isDark,
+                    )
                   : _buildExternalBoardNotice(linkUrl, color),
             ),
           ],
@@ -783,97 +828,124 @@ class _NoticeScreenState extends State<NoticeScreen>
     // 주요 게시판은 손으로 지정된 색, 학과 게시판은 이름 해시라 게시판이
     // 늘어나도 손볼 필요가 없다(KnueTokens.categoryColor).
     final color = KnueTokens.categoryColor(notice.category, isDark);
-    return GestureDetector(
-      onTap: () => _openNotice(notice),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return KnueCard(
+      isDark: isDark,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(KnueTokens.radiusCard),
+          onTap: () => _openNotice(notice),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 날짜는 고정 폭으로 먼저 자리를 잡고, 배지 묶음이 남는 폭을
-                // 가져간다. 예전에는 배지가 Flexible 없이 Spacer와 함께 있어
-                // "지구과학교육과" 같은 긴 이름에서 Row가 넘치고 글씨가 잘렸다.
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            notice.category,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                Row(
+                  children: [
+                    // 날짜는 고정 폭으로 먼저 자리를 잡고, 배지 묶음이 남는 폭을
+                    // 가져간다. 예전에는 배지가 Flexible 없이 Spacer와 함께 있어
+                    // "지구과학교육과" 같은 긴 이름에서 Row가 넘치고 글씨가 잘렸다.
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                notice.category,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                          if (notice.isNew) ...[
+                            const SizedBox(width: 6),
+                            KnueStatusChip(
+                              label: "NEW",
+                              isDark: isDark,
+                              warm: true,
+                            ),
+                          ],
+                        ],
                       ),
-                      if (notice.isNew) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text(
-                            "NEW",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      notice.date,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: KnueTokens.caption(isDark),
+                        fontFeatures: KnueTokens.tabularFigures,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    ValueListenableBuilder<List<Notice>>(
+                      valueListenable: NoticeBookmarkService.bookmarks,
+                      builder: (context, _, _) {
+                        final saved = NoticeBookmarkService.isBookmarked(notice);
+                        return Semantics(
+                          button: true,
+                          label: saved ? '북마크 해제' : '공지 북마크 저장',
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () async {
+                              KnueHaptics.light();
+                              final added =
+                                  await NoticeBookmarkService.toggle(notice);
+                              if (!context.mounted) return;
+                              showToast(
+                                context,
+                                added
+                                    ? '공지를 북마크에 저장했어요'
+                                    : '북마크에서 제거했어요',
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Icon(
+                                saved
+                                    ? Icons.bookmark_rounded
+                                    : Icons.bookmark_border_rounded,
+                                size: 19,
+                                color: saved
+                                    ? KnueTokens.warm(isDark)
+                                    : KnueTokens.caption(isDark),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ],
-                  ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(height: 8),
                 Text(
-                  notice.date,
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.white54 : Colors.black45,
-                    fontFeatures: KnueTokens.tabularFigures,
+                  notice.title,
+                  // 공지 제목은 길다. 2줄에서 자르면 핵심이 잘려나가는 경우가 많아
+                  // 3줄까지 허용하고 줄간격을 넓혔다.
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14.5,
+                    height: 1.4,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              notice.title,
-              // 공지 제목은 길다. 2줄에서 자르면 핵심이 잘려나가는 경우가 많아
-              // 3줄까지 허용하고 줄간격을 넓혔다.
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-                height: 1.4,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -916,6 +988,161 @@ class _NoticeScreenState extends State<NoticeScreen>
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (sheetContext) => KeywordSheet(color: color),
+    );
+  }
+
+  void _showBookmarksSheet(BuildContext context) {
+    KnueHaptics.selection();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => NoticeBookmarksSheet(onOpen: _openNotice),
+    );
+  }
+}
+
+/// 저장한 공지(북마크) 목록 바텀시트.
+class NoticeBookmarksSheet extends StatelessWidget {
+  final ValueChanged<Notice> onOpen;
+  const NoticeBookmarksSheet({super.key, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.72,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: ValueListenableBuilder<List<Notice>>(
+            valueListenable: NoticeBookmarkService.bookmarks,
+            builder: (context, items, _) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '저장한 공지 (${items.length})',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('닫기'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  if (items.isEmpty)
+                    KnueEmptyState(
+                      icon: Icons.bookmark_border_rounded,
+                      title: '저장한 공지가 없어요',
+                      subtitle: '중요한 공지의 북마크 아이콘을 눌러 스크랩해 보세요',
+                      isDark: isDark,
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: items.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final notice = items[index];
+                          final catColor = KnueTokens.categoryColor(
+                            notice.category,
+                            isDark,
+                          );
+                          return KnueCard(
+                            isDark: isDark,
+                            child: ListTile(
+                              onTap: () {
+                                Navigator.pop(context);
+                                onOpen(notice);
+                              },
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 6,
+                              ),
+                              title: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 7,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: catColor.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          notice.category,
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: catColor,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        notice.date,
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: KnueTokens.caption(isDark),
+                                          fontFeatures:
+                                              KnueTokens.tabularFigures,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    notice.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              trailing: IconButton(
+                                tooltip: '북마크 해제',
+                                icon: Icon(
+                                  Icons.bookmark_remove_outlined,
+                                  color: KnueTokens.caption(isDark),
+                                ),
+                                onPressed: () {
+                                  KnueHaptics.light();
+                                  NoticeBookmarkService.remove(notice);
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1027,13 +1254,20 @@ class KeywordSheetState extends State<KeywordSheet> {
                 spacing: 8,
                 runSpacing: 8,
                 children: _keywords
-                    .map((kw) => Chip(
-                          label: Text(kw),
-                          onDeleted: () => _removeKeyword(kw),
-                          backgroundColor: widget.color.withValues(alpha: 0.12),
-                          labelStyle: TextStyle(color: widget.color),
-                          deleteIconColor: widget.color,
-                        ))
+                    .map((kw) {
+                      final chipFg =
+                          KnueTokens.accentForeground(widget.color, isDark);
+                      return Chip(
+                        label: Text(kw),
+                        onDeleted: () => _removeKeyword(kw),
+                        backgroundColor: chipFg.withValues(alpha: 0.12),
+                        labelStyle: TextStyle(
+                          color: chipFg,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        deleteIconColor: chipFg,
+                      );
+                    })
                     .toList(),
               ),
             const SizedBox(height: 16),
@@ -1059,7 +1293,7 @@ class KeywordSheetState extends State<KeywordSheet> {
                   onPressed: _addKeyword,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: widget.color,
-                    foregroundColor: Colors.white,
+                    foregroundColor: KnueTokens.onAccent(widget.color),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 14),
                   ),
