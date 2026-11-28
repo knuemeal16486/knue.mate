@@ -125,38 +125,9 @@ void main() async {
   };
 
   try {
-    runApp(
-      MaterialApp(
-        debugShowCheckedModeBanner: false,
-        // 부팅 화면도 앱 폰트로 — 테마 없이 띄우면 이 짧은 순간만 기본
-        // 글씨체로 나와서 첫인상이 어긋난다.
-        theme: ThemeData(
-          useMaterial3: true,
-          textTheme: GoogleFonts.notoSansKrTextTheme(
-            ThemeData(brightness: Brightness.light).textTheme,
-          ),
-        ),
-        builder: _buildLoadingScreen,
-        home: const Scaffold(backgroundColor: Colors.white),
-      ),
-    );
-
-    // 앱이 로딩 화면에 갇히지 않도록 보장하는 안전 진입 장치 (Watchdog Guard)
-    bool hasLaunched = false;
-    void launchAppSafely() {
-      if (!hasLaunched) {
-        hasLaunched = true;
-        runApp(const MyApp());
-      }
-    }
-
-    // 어떤 외부 요인(네트워크 단절, 플러그인 멈춤 등)으로도 3.5초 이상 멈추지 않도록 강제 진입 보장
-    final bootWatchdog = Timer(const Duration(milliseconds: 3500), () {
-      debugPrint("앱 부팅 안전 타이머(Watchdog) 발동: 메인 화면으로 즉시 전환합니다.");
-      launchAppSafely();
-    });
-
-    // 1. 필수 로컬 데이터 먼저 로드 (로컬 디스크/애셋 I/O는 수십 ms 내에 완료)
+    // 1. 필수 로컬 데이터만 빠르게 로드(수십 ms)한 뒤 즉시 MyApp으로 진입한다.
+    //    네트워크/Firebase/AdMob/권한 요청은 홈 화면 진입을 막지 않도록
+    //    백그라운드로 옮겨 콜드 스타트 체감 시간(TTI)을 대폭 단축한다.
     try {
       await Future.wait([
         initializeDateFormatting('ko_KR', null).catchError((e) {
@@ -181,9 +152,9 @@ void main() async {
           debugPrint("NoticeFeedSettings warning: $e");
         }),
       ]).timeout(
-        const Duration(seconds: 2),
+        const Duration(milliseconds: 900),
         onTimeout: () {
-          debugPrint("로컬 데이터 로드 타임아웃(2초 초과) - 계속 진행");
+          debugPrint("로컬 데이터 로드 타임아웃(900ms 초과) - 즉시 메인 화면 진입");
           return [];
         },
       );
@@ -191,115 +162,83 @@ void main() async {
       debugPrint("로컬 데이터 로드 예외: $e");
     }
 
-    // 2. Firebase 초기화 (타임아웃 보호)
-    try {
-      await _initializeFirebase().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {
-          debugPrint("Firebase 초기화 2초 타임아웃 - 계속 진행");
-        },
-      );
-    } catch (e) {
-      debugPrint("Firebase 초기화 예외: $e");
-    }
+    runApp(const MyApp());
 
-    // 공용 설정(종료 팝업·공지 수집 파일) 최신값은 백그라운드에서 갱신.
-    // Firebase가 준비된 뒤에 불러야 한다 — 전엔 초기화 앞에서 불러서 늘
-    // 아무것도 안 하고 끝났다(Firebase.apps가 비어 있으면 바로 돌아간다).
-    unawaited(ExitPromoSettings.refresh());
-    unawaited(NoticeFeedSettings.refresh());
-    // 사용 통계(탭 조회 수). 개발 빌드는 세지 않는다.
-    unawaited(AppAnalytics.initialize());
-
-    // 3. 네이티브 플러그인 초기화 (ATT, AdMob, HomeWidget, Notification)
-    try {
-      _initializeBackgroundTasks();
-      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-        await Future.wait([
-          _initializeHomeWidget().timeout(
-            const Duration(milliseconds: 1200),
-            onTimeout: () => debugPrint("HomeWidget init 타임아웃"),
-          ),
-          NotificationService().init().timeout(
-            const Duration(milliseconds: 1200),
-            onTimeout: () => debugPrint("NotificationService init 타임아웃"),
-          ),
-          () async {
-            try {
-              await AttService.requestIfNeeded().timeout(
-                const Duration(milliseconds: 1500),
-                onTimeout: () => debugPrint("AttService request 타임아웃"),
-              );
-              await AdService.initialize().timeout(
-                const Duration(milliseconds: 1500),
-                onTimeout: () => debugPrint("AdService init 타임아웃"),
-              );
-              InterstitialAdService.preload();
-            } catch (e) {
-              debugPrint("AdService 초기화 에러: $e");
-            }
-          }(),
-        ]).timeout(
-          const Duration(seconds: 2),
-          onTimeout: () {
-            debugPrint("플러그인 초기화 2초 타임아웃 - 계속 진행");
-            return [];
-          },
-        );
-      }
-    } catch (e) {
-      debugPrint("플러그인 초기화 에러: $e");
-    }
-
-    // 4. Workmanager 및 알림 스케줄링은 앱 진입을 막지 않도록 백그라운드로 실행
-    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-      unawaited(() async {
-        try {
-          await Workmanager().initialize(callbackDispatcher);
-          await Workmanager().registerPeriodicTask(
-            "meal_widget_update_task",
-            "widget_update",
-            frequency: const Duration(minutes: 15),
-            constraints: Constraints(networkType: NetworkType.connected),
-          );
-          await KeywordAlertService.syncRegistration();
-          await ClubEventAlertService.syncRegistration();
-        } catch (e) {
-          debugPrint("Workmanager 설정 에러: $e");
-        }
-      }());
-    }
-
-    bootWatchdog.cancel();
-    launchAppSafely();
+    // 2. Firebase·네이티브 플러그인·백그라운드 작업은 첫 프레임 이후 비동기 초기화
+    unawaited(_initializeServicesInBackground());
   } catch (e, stackTrace) {
     debugPrint("Native/Fatal Init Error: $e\n$stackTrace");
     runApp(StartupErrorApp(e, stackTrace));
   }
 }
 
-Widget _buildLoadingScreen(BuildContext context, Widget? child) {
-  // 네이티브 스플래시와 이어지게 기기 다크 모드를 따른다(색은 pubspec의
-  // flutter_native_splash와 같다). 예전엔 늘 흰 바탕에 흰 네모 로고였다.
-  final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-  return Scaffold(
-    backgroundColor: dark ? const Color(0xFF0D0D0F) : Colors.white,
-    body: Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // 원본이 2048×2048이라 그냥 그리면 100×100으로 보여주면서도
-          // 디코드는 원본 크기로 한다 — 한 장에 램 16MB. cacheWidth를 주면
-          // 디코드 단계에서 줄여 받는다(화면 배율을 고려해 넉넉히 300).
-          Image.asset(dark ? 'assets/icons/knue_icon_dark.png' : 'assets/icons/knue_icon.png', width: 100, height: 100, cacheWidth: 300, cacheHeight: 300, errorBuilder: (c, e, s) => const Icon(Icons.school, size: 80, color: Colors.blue)),
-          const SizedBox(height: 24),
-          const CircularProgressIndicator(strokeWidth: 3),
-          const SizedBox(height: 16),
-          const Text("캠퍼스 데이터를 불러오는 중...", style: TextStyle(color: Colors.grey)),
-        ],
-      ),
-    ),
-  );
+/// 첫 화면 진입을 막지 않고 Firebase·위젯·알림·광고·Workmanager를 순차/병렬 초기화한다.
+Future<void> _initializeServicesInBackground() async {
+  try {
+    await _initializeFirebase().timeout(
+      const Duration(seconds: 4),
+      onTimeout: () {
+        debugPrint("Firebase 초기화 타임아웃 - 계속 진행");
+      },
+    );
+  } catch (e) {
+    debugPrint("Firebase 초기화 예외: $e");
+  }
+
+  // 공용 설정(종료 팝업·공지 수집 파일) 최신값 및 사용 통계는 Firebase 준비 뒤 갱신.
+  unawaited(ExitPromoSettings.refresh());
+  unawaited(NoticeFeedSettings.refresh());
+  unawaited(AppAnalytics.initialize());
+  _initializeBackgroundTasks();
+
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    unawaited(
+      Future.wait([
+        _initializeHomeWidget().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => debugPrint("HomeWidget init 타임아웃"),
+        ),
+        NotificationService().init().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => debugPrint("NotificationService init 타임아웃"),
+        ),
+        () async {
+          try {
+            await AttService.requestIfNeeded().timeout(
+              const Duration(seconds: 2),
+              onTimeout: () => debugPrint("AttService request 타임아웃"),
+            );
+            await AdService.initialize().timeout(
+              const Duration(seconds: 3),
+              onTimeout: () => debugPrint("AdService init 타임아웃"),
+            );
+            InterstitialAdService.preload();
+          } catch (e) {
+            debugPrint("AdService 초기화 에러: $e");
+          }
+        }(),
+      ]).catchError((Object e) {
+        debugPrint("플러그인 초기화 에러: $e");
+        return <void>[];
+      }),
+    );
+
+    unawaited(() async {
+      try {
+        await Workmanager().initialize(callbackDispatcher);
+        await Workmanager().registerPeriodicTask(
+          "meal_widget_update_task",
+          "widget_update",
+          frequency: const Duration(minutes: 15),
+          constraints: Constraints(networkType: NetworkType.connected),
+        );
+        await KeywordAlertService.syncRegistration();
+        await ClubEventAlertService.syncRegistration();
+      } catch (e) {
+        debugPrint("Workmanager 설정 에러: $e");
+      }
+    }());
+  }
 }
 
 Future<void> _initializeFirebase() async {
@@ -343,17 +282,18 @@ Future<void> _setupFirebaseMessaging() async {
     final messaging = FirebaseMessaging.instance;
     NotificationSettings settings;
     try {
-      settings = await messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      ).timeout(const Duration(seconds: 2));
+      // 첫 부팅 직후 맥락 없는 OS 권한 팝업을 띄우지 않도록, 현재 권한 상태만
+      // 먼저 조회한다(권한 요청은 사용자가 알림을 켤 때 맥락에 맞게 수행).
+      settings = await messaging
+          .getNotificationSettings()
+          .timeout(const Duration(seconds: 2));
     } catch (e) {
-      debugPrint("Firebase Messaging requestPermission error: $e");
+      debugPrint("Firebase Messaging getNotificationSettings error: $e");
       return;
     }
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+    if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional) {
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         try {
           final apnsToken = await messaging.getAPNSToken().timeout(

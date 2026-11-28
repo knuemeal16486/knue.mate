@@ -78,40 +78,50 @@ Widget _buildMealModeSegment({
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GestureDetector(
-          onTap: () => onSwitchTab(0),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: selectedIndex == 0 ? Colors.white : Colors.transparent,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Text(
-              "오늘",
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: selectedIndex == 0 ? FontWeight.w800 : FontWeight.w600,
-                color: selectedIndex == 0 ? primaryColor : Colors.white.withValues(alpha: 0.85),
+        Semantics(
+          button: true,
+          selected: selectedIndex == 0,
+          label: "오늘 식단 보기",
+          child: GestureDetector(
+            onTap: () => onSwitchTab(0),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: selectedIndex == 0 ? Colors.white : Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                "오늘",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: selectedIndex == 0 ? FontWeight.w800 : FontWeight.w600,
+                  color: selectedIndex == 0 ? primaryColor : Colors.white.withValues(alpha: 0.85),
+                ),
               ),
             ),
           ),
         ),
-        GestureDetector(
-          onTap: () => onSwitchTab(1),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: selectedIndex == 1 ? Colors.white : Colors.transparent,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Text(
-              "월간",
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: selectedIndex == 1 ? FontWeight.w800 : FontWeight.w600,
-                color: selectedIndex == 1 ? primaryColor : Colors.white.withValues(alpha: 0.85),
+        Semantics(
+          button: true,
+          selected: selectedIndex == 1,
+          label: "월간 식단 보기",
+          child: GestureDetector(
+            onTap: () => onSwitchTab(1),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: selectedIndex == 1 ? Colors.white : Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                "월간",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: selectedIndex == 1 ? FontWeight.w800 : FontWeight.w600,
+                  color: selectedIndex == 1 ? primaryColor : Colors.white.withValues(alpha: 0.85),
+                ),
               ),
             ),
           ),

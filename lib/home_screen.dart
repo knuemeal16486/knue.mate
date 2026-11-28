@@ -28,6 +28,7 @@ import 'schedule_model.dart';
 import 'staff_contacts_screen.dart';
 import 'native_ad_card.dart';
 import 'ui_utils.dart';
+import 'features/home/home_hero_tile.dart';
 
 /// 홈 대시보드 (Apple Inset Grouped & Settings Aesthetic)
 /// 애플 설정(Settings) 및 iOS 기본 앱 특유의 절제된 심플함,
@@ -759,45 +760,58 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 16),
                 // 오늘의 브리핑 — 식단/버스 요약을 반투명 타일로 헤더 안에 담는다.
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: _buildHeroTile(
-                          icon: Icons.restaurant_menu_rounded,
-                          title: "오늘의 식단",
-                          chip:
-                              "${_nextMealType.label} · ${_currentMealSource.shortLabel}",
-                          footer: "식단 상세",
-                          extra: _buildHeroMealRating(),
-                          onTap: () =>
-                              RootNavigationScreen.switchTab(AppTab.meal),
-                          body: _buildHeroMealBody(),
-                        ),
+                // IntrinsicHeight(2패스 레이아웃) 대신 텍스트 스케일에 맞춘
+                // 단일 패스 높이를 써서 스크롤 프레임 드롭과 글꼴 확대 오버플로를 방지한다.
+                Builder(
+                  builder: (context) {
+                    final textScale = MediaQuery.textScalerOf(context)
+                        .scale(1.0)
+                        .clamp(1.0, 1.45);
+                    final tileHeight = 152.0 * textScale;
+                    return SizedBox(
+                      height: tileHeight,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: HomeHeroTile(
+                              icon: Icons.restaurant_menu_rounded,
+                              title: "오늘의 식단",
+                              chip:
+                                  "${_nextMealType.label} · ${_currentMealSource.shortLabel}",
+                              footer: "식단 상세",
+                              extra: _buildHeroMealRating(),
+                              weather: _weather,
+                              onTap: () =>
+                                  RootNavigationScreen.switchTab(AppTab.meal),
+                              body: _buildHeroMealBody(),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: HomeHeroTile(
+                              icon: Icons.directions_bus_rounded,
+                              title: "다음 버스",
+                              // 실시간일 땐 남은 시간이 "어느 정류장 기준"인지가
+                              // 제일 중요하다(탑연삼거리 경유 노선은 교원대가 아니라
+                              // 탑연삼거리 도착 시간이다). 시간표 모드에선 노선의
+                              // 경유지 설명(가경동·성안길 등)을 그대로 쓴다.
+                              chip: _busRoute == null
+                                  ? ""
+                                  : _busRealtime
+                                  ? (_busIsDirect ? "교원대 기준" : "탑연삼거리 기준")
+                                  : (BusRouteData.routeLabels[_busRoute] ?? ""),
+                              footer: "실시간 위치",
+                              weather: _weather,
+                              onTap: () =>
+                                  RootNavigationScreen.switchTab(AppTab.bus),
+                              body: _buildHeroBusBody(),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildHeroTile(
-                          icon: Icons.directions_bus_rounded,
-                          title: "다음 버스",
-                          // 실시간일 땐 남은 시간이 "어느 정류장 기준"인지가
-                          // 제일 중요하다(탑연삼거리 경유 노선은 교원대가 아니라
-                          // 탑연삼거리 도착 시간이다). 시간표 모드에선 노선의
-                          // 경유지 설명(가경동·성안길 등)을 그대로 쓴다.
-                          chip: _busRoute == null
-                              ? ""
-                              : _busRealtime
-                              ? (_busIsDirect ? "교원대 기준" : "탑연삼거리 기준")
-                              : (BusRouteData.routeLabels[_busRoute] ?? ""),
-                          footer: "실시간 위치",
-                          onTap: () =>
-                              RootNavigationScreen.switchTab(AppTab.bus),
-                          body: _buildHeroBusBody(),
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -811,96 +825,6 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 밝게 만들기 때문에, 헤더 본문보다 오히려 대비가 불리하다 — 같은 그림자를
   /// 타일 글씨에도 깐다.
   List<Shadow> get _heroShadow => KnueTokens.headerTextShadow;
-
-  /// 히어로 안의 반투명 브리핑 타일 한 장. 흰 텍스트 + 유리 질감.
-  Widget _buildHeroTile({
-    required IconData icon,
-    required String title,
-    required String chip,
-    required String footer,
-    required VoidCallback onTap,
-    required Widget body,
-
-    /// 하단 링크 줄 위에 덧붙일 한 줄(식단 타일의 별점 등).
-    Widget? extra,
-  }) {
-    return AnimatedScaleButton(
-      onTap: onTap,
-      scaleFactor: 0.96,
-      child: GlassContainer(
-        opacity: 0.12,
-        blur: 12,
-        borderRadius: BorderRadius.circular(16),
-        padding: const EdgeInsets.all(12),
-        border: Border.all(
-          color: KnueWeatherAtmosphere.tileBorderColor(_weather),
-          width: 1.0,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(icon, size: 17, color: Colors.white),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    chip,
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.2,
-                color: Colors.white,
-                shadows: _heroShadow,
-              ),
-            ),
-            const SizedBox(height: 5),
-            body,
-            const Spacer(),
-            if (extra != null) ...[const SizedBox(height: 6), extra],
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Text(
-                  footer,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.85),
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 13,
-                  color: Colors.white.withValues(alpha: 0.85),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   /// 식단 타일의 별점 줄. 평가가 하나도 없거나 불러오지 못했으면 아무것도
   /// 그리지 않는다 — "0.0점" 같은 표시가 오히려 오해를 부른다.

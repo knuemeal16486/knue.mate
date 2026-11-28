@@ -15,6 +15,7 @@ import 'ui_utils.dart';
 import 'native_ad_card.dart';
 import 'nearby_stop.dart';
 import 'nearby_stop_card.dart';
+import 'features/bus/bus_last_update_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BusAppScreen extends StatefulWidget {
@@ -52,7 +53,6 @@ class _BusAppScreenState extends State<BusAppScreen>
   bool _isRefreshing = false; // 백그라운드 갱신 중 표시용
   DateTime? _lastUpdateTime; // 마지막 데이터 갱신 시간
   Timer? _timer;
-  Timer? _tickTimer; // UI 갱신 시간 표시용
   StreamSubscription<DocumentSnapshot>? _busSub; // 실시간 구독 변수 추가
 
   String _selectedBus = "513";
@@ -115,10 +115,6 @@ class _BusAppScreenState extends State<BusAppScreen>
     // [개선] 초기 로딩을 백그라운드에서 수행하고 Firestore 리스너가 UI를 관리하도록 함
     _fetchBusData(isQuietRefetch: true);
     _startAutoRefresh();
-    // 1초마다 UI 갱신 (마지막 갱신 시간 표시용)
-    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _lastUpdateTime != null) setState(() {});
-    });
     _loadAlarms();
     _startRealtimeTracking();
     // 즐겨찾기(고정) 노선이 바뀌면 카드 정렬 순서도 바로 바뀌어야 한다 —
@@ -235,7 +231,6 @@ class _BusAppScreenState extends State<BusAppScreen>
     WidgetsBinding.instance.removeObserver(this);
     FavoriteService.favoritesNotifier.removeListener(_onFavoritesChanged);
     _timer?.cancel();
-    _tickTimer?.cancel();
     _busSub?.cancel();
     _tabController.dispose();
     _scrollController.dispose();
@@ -492,16 +487,6 @@ class _BusAppScreenState extends State<BusAppScreen>
     return "지금 운행 중인 버스가 없어요.\n잠시 후 다시 확인해 주세요.";
   }
 
-  // 마지막 갱신 시간 포맷
-  String _formatLastUpdate() {
-    if (_lastUpdateTime == null) return "";
-    final diff = DateTime.now().difference(_lastUpdateTime!);
-    if (diff.inSeconds < 5) return "방금 갱신";
-    if (diff.inSeconds < 60) return "${diff.inSeconds}초 전 갱신";
-    if (diff.inMinutes < 5) return "${diff.inMinutes}분 전 갱신";
-    return "${diff.inMinutes}분 전 (갱신 필요)";
-  }
-
   Widget _buildRealtimeContent(bool isDark) {
     // 1. 초기 로딩 중 → 스켈레톤 UI
     if (_isLoading) {
@@ -633,53 +618,13 @@ class _BusAppScreenState extends State<BusAppScreen>
           _nearbyCard(isDark),
 
 
-          // === 마지막 갱신 시간 + 갱신 중 표시 ===
+          // === 마지막 갱신 시간 + 갱신 중 표시 (1초 타이머를 별도 위젯으로 격리) ===
           if (_lastUpdateTime != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Row(
-                children: [
-                  if (_isRefreshing) ...[
-                    SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          isDark ? Colors.white24 : Colors.grey.shade400,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      "갱신 중...",
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? Colors.white38 : Colors.grey.shade500,
-                      ),
-                    ),
-                  ] else ...[
-                    // 살아있는 데이터라는 신호 — 맥동하는 앰버 점(보조색).
-                    KnueLiveDot(isDark: isDark),
-                    const SizedBox(width: 6),
-                    Text(
-                      "${_formatLastUpdate()} · 운행 중 $totalBuses대",
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontFeatures: KnueTokens.tabularFigures,
-                        color:
-                            _lastUpdateTime != null &&
-                                DateTime.now()
-                                        .difference(_lastUpdateTime!)
-                                        .inMinutes >=
-                                    3
-                            ? KnueTokens.warm(isDark)
-                            : (isDark ? Colors.white38 : Colors.grey.shade500),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+            BusLastUpdateBar(
+              lastUpdateTime: _lastUpdateTime!,
+              isRefreshing: _isRefreshing,
+              totalBuses: totalBuses,
+              isDark: isDark,
             ),
 
           // 가려는 쪽(청주 / 오송·조치원)으로 갈라서 보여 준다. 예전엔 "상행·

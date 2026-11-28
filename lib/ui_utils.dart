@@ -10,6 +10,7 @@ class AnimatedScaleButton extends StatefulWidget {
   final VoidCallback onTap;
   final double scaleFactor;
   final Duration duration;
+  final String? semanticLabel;
 
   const AnimatedScaleButton({
     super.key,
@@ -17,6 +18,7 @@ class AnimatedScaleButton extends StatefulWidget {
     required this.onTap,
     this.scaleFactor = 0.95,
     this.duration = const Duration(milliseconds: 150),
+    this.semanticLabel,
   });
 
   @override
@@ -58,18 +60,22 @@ class _AnimatedScaleButtonState extends State<AnimatedScaleButton>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: _onTapDown,
-      onTapUp: _onTapUp,
-      onTapCancel: _onTapCancel,
-      child: AnimatedBuilder(
-        animation: _scaleAnimation,
-        builder: (context, child) => Transform.scale(
-          scale: _scaleAnimation.value,
-          child: child,
+    return Semantics(
+      button: true,
+      label: widget.semanticLabel,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: _onTapDown,
+        onTapUp: _onTapUp,
+        onTapCancel: _onTapCancel,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
+          ),
+          child: widget.child,
         ),
-        child: widget.child,
       ),
     );
   }
@@ -908,34 +914,45 @@ class KnueSectionHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.1,
-              color: KnueTokens.captionDark, // 라이트/다크 공용 중간 그레이
+          Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.1,
+                color: KnueTokens.captionDark, // 라이트/다크 공용 중간 그레이
+              ),
             ),
           ),
           if (actionText != null && onAction != null)
-            GestureDetector(
-              onTap: onAction,
-              behavior: HitTestBehavior.opaque,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    actionText!,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.1,
-                      color: color,
-                    ),
+            Semantics(
+              button: true,
+              excludeSemantics: true,
+              label: '$title $actionText',
+              child: GestureDetector(
+                onTap: onAction,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        actionText!,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -0.1,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(Icons.chevron_right_rounded, size: 14, color: color),
+                    ],
                   ),
-                  const SizedBox(width: 2),
-                  Icon(Icons.chevron_right_rounded, size: 14, color: color),
-                ],
+                ),
               ),
             ),
         ],

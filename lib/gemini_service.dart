@@ -1,31 +1,62 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 
 class GeminiService {
-  // .env에서 키를 안전하게 가져오기
+  /// 빌드 타임 주입(--dart-define=GEMINI_MODEL=...)으로 교체 가능한 최신 경량 모델.
+  static const String _defaultModel = String.fromEnvironment(
+    'GEMINI_MODEL',
+    defaultValue: 'gemini-2.5-flash',
+  );
+
+  /// 백엔드 프록시 엔드포인트(선택). 설정 시 클라이언트 API 키 없이 서버 프록시를 통해 추산한다.
+  /// 예: --dart-define=CALORIE_API_URL=https://knue-meal-api.onrender.com/api/calories
+  static String get _proxyUrl {
+    const defined = String.fromEnvironment('CALORIE_API_URL');
+    if (defined.isNotEmpty) return defined;
+    if (dotenv.isInitialized) return dotenv.env['CALORIE_API_URL'] ?? '';
+    return '';
+  }
+
+  /// API 키 조회: 빌드 타임 주입(--dart-define=GEMINI_API_KEY=...)을 최우선으로 하고,
+  /// 미설정 시에만 로컬 개발용 .env를 폴백으로 사용한다.
   static String get apiKey {
-    final key = dotenv.env['GEMINI_API_KEY'];
+    const definedKey = String.fromEnvironment('GEMINI_API_KEY');
+    final key = definedKey.isNotEmpty
+        ? definedKey
+        : (dotenv.isInitialized ? dotenv.env['GEMINI_API_KEY'] : null);
     if (key == null || key.isEmpty) {
-      print("⚠️ GEMINI_API_KEY가 .env 파일에 설정되지 않았습니다.");
+      debugPrint("⚠️ GEMINI_API_KEY가 설정되지 않았습니다.");
       return "";
     }
     return key;
   }
 
-  // 모델 초기화
-  static GenerativeModel get _model => GenerativeModel(
-    model: 'gemini-1.5-flash',
-    apiKey: apiKey,
-    // [추가] 음식 이름에 의한 불필요한 필터링 방지
-    safetySettings: [
-      SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
-      SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
-      SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
-      SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
-    ],
-  );
+  static GenerativeModel? _cachedModel;
+  static String? _cachedKey;
+
+  // 모델 인스턴스 재사용 (매 호출마다 새로 생성하지 않음)
+  static GenerativeModel? _getModel() {
+    final key = apiKey;
+    if (key.isEmpty) return null;
+    if (_cachedModel != null && _cachedKey == key) return _cachedModel;
+    _cachedKey = key;
+    _cachedModel = GenerativeModel(
+      model: _defaultModel,
+      apiKey: key,
+      // [추가] 음식 이름에 의한 불필요한 필터링 방지
+      safetySettings: [
+        SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
+      ],
+    );
+    return _cachedModel;
+  }
 
   static FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
@@ -81,33 +112,64 @@ class GeminiService {
       debugPrint('gemini_service 칼로리 캐시 읽기 실패: $e');
     }
 
-    // 3. Gemini API 호출 (첫 번째 사용자만)
-    final prompt = _buildPrompt(validItems);
-    int retryCount = 0;
-    while (retryCount < 2) {
+    // 3. 백엔드 프록시가 설정되어 있으면 클라이언트 키 노출 없이 서버에서 추산
+    final proxyUrl = _proxyUrl;
+    if (proxyUrl.isNotEmpty) {
       try {
-        final content = [Content.text(prompt)];
-        final response = await _model.generateContent(content);
-        final rawText = response.text?.trim() ?? "";
-
-        if (rawText.isEmpty) { retryCount++; continue; }
-
-        final result = _normalizeCalorieResponse(rawText, validItems);
-
-        // 4. Firestore에 저장 (이후 사용자들은 여기서 읽음)
-        _firestore.collection('calorie_cache').doc(_docKey(cacheKey)).set({
-          'calories': result,
-          'menu': cacheKey,
-          'createdAt': FieldValue.serverTimestamp(),
-        }).catchError((_) {});
-
-        _cache[cacheKey] = result;
-        return result;
+        final res = await http
+            .post(
+              Uri.parse(proxyUrl),
+              headers: const {'Content-Type': 'application/json'},
+              body: jsonEncode({'items': validItems}),
+            )
+            .timeout(const Duration(seconds: 6));
+        if (res.statusCode == 200) {
+          final decoded = jsonDecode(res.body);
+          final raw = decoded is Map ? (decoded['calories']?.toString() ?? '') : '';
+          if (raw.isNotEmpty) {
+            final result = _normalizeCalorieResponse(raw, validItems);
+            _cache[cacheKey] = result;
+            return result;
+          }
+        }
       } catch (e) {
-        retryCount++;
-        print("Gemini API 오류 (시도 $retryCount): $e");
-        if (retryCount >= 2) break;
-        await Future.delayed(const Duration(milliseconds: 1000));
+        debugPrint('gemini_service 프록시 호출 실패, 폴백 진행: $e');
+      }
+    }
+
+    // 4. Gemini API 직접 호출 (첫 번째 사용자만, 키가 설정된 경우)
+    final model = _getModel();
+    if (model != null) {
+      final prompt = _buildPrompt(validItems);
+      int retryCount = 0;
+      while (retryCount < 2) {
+        try {
+          final content = [Content.text(prompt)];
+          final response = await model.generateContent(content);
+          final rawText = response.text?.trim() ?? "";
+
+          if (rawText.isEmpty) {
+            retryCount++;
+            continue;
+          }
+
+          final result = _normalizeCalorieResponse(rawText, validItems);
+
+          // 5. Firestore에 저장 (이후 사용자들은 여기서 읽음)
+          _firestore.collection('calorie_cache').doc(_docKey(cacheKey)).set({
+            'calories': result,
+            'menu': cacheKey,
+            'createdAt': FieldValue.serverTimestamp(),
+          }).catchError((_) {});
+
+          _cache[cacheKey] = result;
+          return result;
+        } catch (e) {
+          retryCount++;
+          debugPrint("Gemini API 오류 (시도 $retryCount): $e");
+          if (retryCount >= 2) break;
+          await Future.delayed(const Duration(milliseconds: 1000));
+        }
       }
     }
 

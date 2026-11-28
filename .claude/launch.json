@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "knue-mate-web",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd \"/Users/kaciaoz/Desktop/KNUE Mate/knue.mate\" && flutter run -d web-server --web-port=8123"],
+      "port": 8123
+    }
+  ]
+}
